@@ -1,13 +1,24 @@
 #include "pack.h"
 
-#include <algorithm>
+#include "options.h"
+
 #include <cstdint>
 #include <cstdio>
-#include <cstdlib>
 #include <filesystem>
-#include <fstream>
-#include <sstream>
 #include <system_error>
+#include <vector>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <spawn.h>
+#include <sys/wait.h>
+extern char** environ;
+#endif
 
 namespace fs = std::filesystem;
 
@@ -15,8 +26,6 @@ namespace loupe {
 
 namespace {
 
-constexpr const char SCENE_SUFFIX[] = ".scene.toml";
-constexpr const char STAMP_NAME[] = "stamp";
 constexpr uint64_t FNV_OFFSET = 14695981039346656037ull;
 constexpr uint64_t FNV_PRIME = 1099511628211ull;
 
@@ -29,28 +38,72 @@ uint64_t path_hash(const std::string& text) {
     return hash;
 }
 
-fs::file_time_type newest(const fs::path& folder, const char* extension, fs::file_time_type since) {
-    std::error_code error;
-    for (fs::recursive_directory_iterator it(folder, error), end; !error && it != end; it.increment(error)) {
-        if (it->is_regular_file(error) && (extension == nullptr || it->path().extension() == extension)) {
-            since = std::max(since, it->last_write_time(error));
+#if defined(_WIN32)
+// One argument as the C runtime splits a command line back into argv.
+std::string argv_quoted(const std::string& arg) {
+    std::string out = "\"";
+    size_t slashes = 0;
+    for (const char c : arg) {
+        if (c == '\\') {
+            slashes++;
+            continue;
         }
+        out.append(c == '"' ? 2 * slashes + 1 : slashes, '\\');
+        slashes = 0;
+        out += c;
     }
-    return since;
+    out.append(2 * slashes, '\\');
+    return out + "\"";
 }
+#endif
 
-// What the pack is made from: the scene's folder, autana's bake lock and the
-// Python of its tools, which build_pack.py imports.
-fs::file_time_type inputs_time(const fs::path& scene) {
-    const fs::path launcher = fs::path(LOUPE_AUTANA_DIR) / "launcher";
-    std::error_code error;
-    const fs::file_time_type lock = fs::last_write_time(launcher / "bakes.lock", error);
-    const fs::file_time_type time = newest(scene.parent_path(), nullptr, error ? fs::file_time_type::min() : lock);
-    return newest(launcher / "tools", ".py", time);
-}
-
-std::string quoted(const std::string& text) {
-    return "\"" + text + "\"";
+// Runs `args` with no shell between, its output into `log`; true when it exits 0.
+bool run_logged(const std::vector<std::string>& args, const fs::path& log) {
+#if defined(_WIN32)
+    std::string line;
+    for (const std::string& arg : args) {
+        line += (line.empty() ? "" : " ") + argv_quoted(arg);
+    }
+    SECURITY_ATTRIBUTES inherit = {sizeof inherit, nullptr, TRUE};
+    const HANDLE file = CreateFileA(log.string().c_str(), GENERIC_WRITE, FILE_SHARE_READ, &inherit, CREATE_ALWAYS,
+                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    STARTUPINFOA startup = {};
+    startup.cb = sizeof startup;
+    startup.dwFlags = STARTF_USESTDHANDLES;
+    startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    startup.hStdOutput = file;
+    startup.hStdError = file;
+    PROCESS_INFORMATION process = {};
+    DWORD status = 1;
+    if (CreateProcessA(args[0].c_str(), line.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &startup,
+                       &process)) {
+        WaitForSingleObject(process.hProcess, INFINITE);
+        GetExitCodeProcess(process.hProcess, &status);
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+    }
+    CloseHandle(file);
+    return status == 0;
+#else
+    std::vector<char*> argv;
+    for (const std::string& arg : args) {
+        argv.push_back(const_cast<char*>(arg.c_str()));
+    }
+    argv.push_back(nullptr);
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addopen(&actions, 1, log.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    posix_spawn_file_actions_adddup2(&actions, 1, 2);
+    pid_t pid = 0;
+    int status = 0;
+    const bool ok = posix_spawn(&pid, args[0].c_str(), &actions, nullptr, argv.data(), environ) == 0 &&
+                    waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    posix_spawn_file_actions_destroy(&actions);
+    return ok;
+#endif
 }
 
 }  // namespace
@@ -62,35 +115,19 @@ bool scene_pack(const std::string& scene_toml, std::string* pack_dir, std::strin
         *why = "no scene file: " + scene_toml;
         return false;
     }
-    const std::string name = scene.filename().string();
-    const std::string stem = name.substr(0, name.size() - (sizeof SCENE_SUFFIX - 1));
+    const std::string id = scene_id(scene_toml);
     char tag[17];
     std::snprintf(tag, sizeof tag, "%016llx", static_cast<unsigned long long>(path_hash(scene.generic_string())));
-    const fs::path folder = fs::path(LOUPE_PACK_CACHE) / (stem + "-" + tag);
+    const fs::path folder = fs::path(LOUPE_PACK_CACHE) / (id + "-" + tag);
     *pack_dir = folder.string();
 
     const fs::path script = fs::path(LOUPE_AUTANA_DIR) / "launcher" / "tools" / "r3d" / "build_pack.py";
-    std::string command = quoted(LOUPE_PYTHON) + " " + quoted(script.string()) + " -o " + quoted(folder.string()) +
-                          " " + quoted(scene.string());
-    const fs::path stamp = folder / STAMP_NAME;
-    std::ifstream stamp_in(stamp);
-    std::stringstream built;
-    built << stamp_in.rdbuf();
-    if (stamp_in && built.str() == command && fs::last_write_time(stamp, error) >= inputs_time(scene) && !error) {
-        return true;
-    }
-
+    const std::vector<std::string> args = {LOUPE_PYTHON, script.string(), "-o", folder.string(), scene.string()};
     fs::create_directories(folder, error);
-    std::fprintf(stderr, "loupe: building %s's pack\n", stem.c_str());
-    std::string run = command + " > " + quoted((folder / "build_pack.log").string()) + " 2>&1";
-#if defined(_WIN32)
-    run = "\"" + run + "\"";  // cmd.exe drops the outer pair of quotes
-#endif
-    if (std::system(run.c_str()) != 0) {
+    if (!run_logged(args, folder / "build_pack.log")) {
         *why = "build_pack.py failed; see " + (folder / "build_pack.log").string();
         return false;
     }
-    std::ofstream(stamp) << command;
     return true;
 }
 

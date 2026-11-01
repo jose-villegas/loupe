@@ -4,15 +4,11 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <optional>
 #include <string>
-#include <vector>
 
 #include "options.h"
-
-struct render_host_checkpoint;  // render_host.h
 
 namespace loupe {
 
@@ -24,7 +20,7 @@ struct Frame {
 
 class Frames {
 public:
-    // Play saves the state before frames 1, 1 + this, 1 + twice this...; a seek steps at most this many.
+    // With checkpoints kept, the state before frames 1, 1 + this, 1 + twice this... is saved.
     static constexpr int CHECKPOINT_EVERY = 30;
 
     // The scene provider on `options`' scene file, its pack built first.
@@ -33,29 +29,28 @@ public:
     Frames(const Frames&) = delete;
     Frames& operator=(const Frames&) = delete;
 
-    // Draws frame index(), `dt_ms` after the one before it.
-    void step(uint32_t dt_ms);
+    // The run's frame count and dt: the options', else the provider's defaults.
+    int count() const;
+    uint32_t dt_ms() const;
+    // Saves checkpoints from here on, so seek() can go back; a command-line run never does.
+    void keep_checkpoints();
+    // Draws frame index(), `dt_ms` after the one before it; false when a checkpoint could not be saved.
+    bool step(uint32_t dt_ms);
     // Leaves frame() at frame `index`, exactly as stepping straight there drew it.
-    // Back to frame 0 is false: autana cannot restore the state before the first frame.
+    // False back to a frame before the first checkpoint, or to frame 0, which autana
+    // cannot restore. A seek re-draws frames, so do not mix it with -o or --video.
     bool seek(int index);
     // How many frames are drawn; frame() is frame index() - 1.
-    int index() const { return index_; }
+    int index() const;
     Frame frame() const;
     std::optional<uint32_t> path_ms() const;
     // Writes what -o and --video ask for; false when the run failed.
     bool close();
 
 private:
-    Frames() = default;
-    void drop_checkpoints_after(int index);
-
-    std::vector<std::string> args_;
-    std::vector<char*> argv_;
-    uint32_t dt_ms_ = 0;  // a seek past the drawn frames steps at this
-    int index_ = 0;
-    std::vector<uint32_t> dts_;  // each drawn frame's dt, for replaying one
-    std::map<int, render_host_checkpoint*> checkpoints_;  // the state before drawing frame key
-    bool open_ = false;
+    struct State;
+    explicit Frames(std::unique_ptr<State> state);
+    std::unique_ptr<State> state_;
 };
 
 }  // namespace loupe

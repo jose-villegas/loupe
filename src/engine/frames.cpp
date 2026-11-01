@@ -1,17 +1,35 @@
 #include "engine/frames.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
-#include <filesystem>
+#include <map>
+#include <vector>
 
 #include "engine/autana.h"
 #include "pack.h"
 
 namespace loupe {
 
-namespace {
+struct Frames::State {
+    std::vector<std::string> args;
+    std::vector<char*> argv;
+    bool open = false;
+    bool keep = false;
+    int index = 0;
+    std::vector<uint32_t> dts;  // each drawn frame's dt, for replaying it
+    std::map<int, render_host_checkpoint_t*> checkpoints;  // the state before drawing frame key
 
-constexpr const char SCENE_SUFFIX[] = ".scene.toml";
+    // Frees the checkpoints after frame `index` and forgets the dts from it on.
+    void forget_after(int index) {
+        for (auto it = checkpoints.upper_bound(index); it != checkpoints.end(); it = checkpoints.erase(it)) {
+            render_host_checkpoint_free(it->second);
+        }
+        dts.resize(static_cast<size_t>(std::max(index, 0)));
+    }
+};
+
+namespace {
 
 bool set_asset_dir(const std::string& folder) {
 #if defined(_WIN32)
@@ -21,31 +39,32 @@ bool set_asset_dir(const std::string& folder) {
 #endif
 }
 
-// The scene provider's command line for `options`, as scene_viewer.sh passes it.
+// The scene provider's command line for `options`: only the flags given, as scene_viewer.sh passes them.
 std::vector<std::string> provider_args(const Options& options) {
-    const std::string name = std::filesystem::path(options.scene_toml).filename().string();
-    std::vector<std::string> args = {"loupe", "--scene", name.substr(0, name.size() - (sizeof SCENE_SUFFIX - 1))};
+    std::vector<std::string> args = {"loupe", "--scene", scene_id(options.scene_toml)};
+    const auto add = [&args](const char* flag, const std::string& value) {
+        if (!value.empty()) {
+            args.insert(args.end(), {flag, value});
+        }
+    };
     for (const std::string& object : options.objects) {
-        args.insert(args.end(), {"--object", object});
+        add("--object", object);
     }
-    if (!options.camera.empty()) {
-        args.insert(args.end(), {"--camera", options.camera});
-    }
-    args.insert(args.end(), {"--view", options.view, "--frames", std::to_string(options.frames), "--dt",
-                             std::to_string(options.dt_ms)});
+    add("--camera", options.camera);
+    add("--view", options.view);
+    add("--frames", options.frames ? std::to_string(*options.frames) : "");
+    add("--dt", options.dt_ms ? std::to_string(*options.dt_ms) : "");
     for (const std::string& set : options.sets) {
-        args.insert(args.end(), {"--set", set});
+        add("--set", set);
     }
-    if (!options.out_bmp.empty()) {
-        args.insert(args.end(), {"-o", options.out_bmp});
-    }
-    if (!options.out_video.empty()) {
-        args.insert(args.end(), {"--video", options.out_video});
-    }
+    add("-o", options.out_bmp);
+    add("--video", options.out_video);
     return args;
 }
 
 }  // namespace
+
+Frames::Frames(std::unique_ptr<State> state) : state_(std::move(state)) {}
 
 std::unique_ptr<Frames> Frames::open(const Options& options, std::string* why) {
     std::string pack;
@@ -56,60 +75,82 @@ std::unique_ptr<Frames> Frames::open(const Options& options, std::string* why) {
         *why = "cannot set " ASSET_STORE_DIR_ENV;
         return nullptr;
     }
-    std::unique_ptr<Frames> frames(new Frames());
-    frames->args_ = provider_args(options);
-    frames->dt_ms_ = options.dt_ms;
-    for (std::string& arg : frames->args_) {
-        frames->argv_.push_back(arg.data());
+    auto state = std::make_unique<State>();
+    state->args = provider_args(options);
+    for (std::string& arg : state->args) {
+        state->argv.push_back(arg.data());
     }
-    frames->argv_.push_back(nullptr);
+    state->argv.push_back(nullptr);
     int exit_code = 0;
-    if (!render_host_open(&scene_provider, static_cast<int>(frames->args_.size()), frames->argv_.data(),
-                          &exit_code)) {
+    if (!render_host_open(&scene_provider, static_cast<int>(state->args.size()), state->argv.data(), &exit_code)) {
         *why = "the scene did not open; autana said why above";
         return nullptr;
     }
-    frames->open_ = true;
-    return frames;
+    state->open = true;
+    return std::unique_ptr<Frames>(new Frames(std::move(state)));
 }
 
 Frames::~Frames() {
     (void)close();
 }
 
-void Frames::step(uint32_t dt_ms) {
-    if (index_ < static_cast<int>(dts_.size()) && dts_[index_] != dt_ms) {
-        drop_checkpoints_after(index_);
+int Frames::count() const {
+    return render_host_frame()->count;
+}
+
+uint32_t Frames::dt_ms() const {
+    return render_host_frame()->dt_ms;
+}
+
+void Frames::keep_checkpoints() {
+    state_->keep = true;
+}
+
+bool Frames::step(uint32_t dt_ms) {
+    State& s = *state_;
+    if (s.index < static_cast<int>(s.dts.size()) && s.dts[s.index] != dt_ms) {
+        s.forget_after(s.index);
     }
+    bool saved = true;
     // From frame 1: autana restores only state whose allocations the first frame made.
-    if (index_ % CHECKPOINT_EVERY == 1 && checkpoints_.count(index_) == 0) {
-        if (render_host_checkpoint_t* saved = render_host_save()) {
-            checkpoints_[index_] = saved;
+    if (s.keep && s.index % CHECKPOINT_EVERY == 1 && s.checkpoints.count(s.index) == 0) {
+        render_host_checkpoint_t* checkpoint = render_host_save();
+        saved = checkpoint != nullptr;
+        if (saved) {
+            s.checkpoints[s.index] = checkpoint;
+        } else {
+            std::fprintf(stderr, "loupe: no checkpoint before frame %d; seeks back past it will fail\n", s.index);
         }
     }
     const input_t input = {};
     render_host_step(dt_ms, &input);
-    if (index_ == static_cast<int>(dts_.size())) {
-        dts_.push_back(dt_ms);
+    if (s.index == static_cast<int>(s.dts.size())) {
+        s.dts.push_back(dt_ms);
     }
-    index_++;
+    s.index++;
+    return saved;
 }
 
 bool Frames::seek(int index) {
+    State& s = *state_;
     if (index < 0) {
         return false;
     }
-    if (index < index_) {
-        auto from = checkpoints_.upper_bound(index);
-        if (from == checkpoints_.begin() || !render_host_restore((--from)->second)) {
+    if (index < s.index - 1) {
+        auto from = s.checkpoints.upper_bound(index);
+        if (from == s.checkpoints.begin() || !render_host_restore((--from)->second)) {
             return false;
         }
-        index_ = from->first;
+        s.index = from->first;
     }
-    while (index_ <= index) {
-        step(index_ < static_cast<int>(dts_.size()) ? dts_[index_] : dt_ms_);
+    while (s.index <= index) {
+        step(s.index < static_cast<int>(s.dts.size()) ? s.dts[s.index] : dt_ms());
     }
     return true;
+}
+
+int Frames::index() const {
+    return state_->index;
 }
 
 Frame Frames::frame() const {
@@ -126,19 +167,12 @@ std::optional<uint32_t> Frames::path_ms() const {
 }
 
 bool Frames::close() {
-    if (!open_) {
+    if (!state_->open) {
         return true;
     }
-    drop_checkpoints_after(-1);
-    open_ = false;
+    state_->forget_after(-1);
+    state_->open = false;
     return render_host_close();
-}
-
-void Frames::drop_checkpoints_after(int index) {
-    for (auto it = checkpoints_.upper_bound(index); it != checkpoints_.end(); it = checkpoints_.erase(it)) {
-        render_host_checkpoint_free(it->second);
-    }
-    dts_.resize(static_cast<size_t>(std::max(index, 0)));
 }
 
 }  // namespace loupe
