@@ -20,11 +20,17 @@ struct Frames::State {
     size_t budget = 0; // the checkpoints' memory, at most
     int every = CHECKPOINT_EVERY;
     size_t kept_bytes = 0;
+    bool said_over = false;
     int index = 0;
     uint32_t dt_ms = 0;                                   // the run's, as it opened
     std::vector<uint32_t> dts;                            // each drawn frame's dt, for replaying it
     std::map<int, render_host_checkpoint_t*> checkpoints; // the state before drawing frame key
-    std::optional<int> view;                              // the picked view, set again after each restore
+
+    // Checkpoints sit before frames 1, 1 + every, 1 + twice every...
+    bool
+    on_grid(int frame) const {
+        return (frame - 1) % every == 0;
+    }
 
     std::map<int, render_host_checkpoint_t*>::iterator
     drop(std::map<int, render_host_checkpoint_t*>::iterator it) {
@@ -48,8 +54,13 @@ struct Frames::State {
         while (kept_bytes > budget && checkpoints.size() > 1) {
             every *= 2;
             for (auto it = checkpoints.begin(); it != checkpoints.end();) {
-                it = (it->first - 1) % every == 0 ? std::next(it) : drop(it);
+                it = on_grid(it->first) ? std::next(it) : drop(it);
             }
+        }
+        if (kept_bytes > budget && !said_over) {
+            said_over = true;
+            std::fprintf(stderr, "loupe: one checkpoint holds %zu bytes, over the %zu-byte budget\n", kept_bytes,
+                         budget);
         }
     }
 };
@@ -163,12 +174,8 @@ Frames::set_view(int view) {
     if (!has_views()) {
         return false;
     }
-    state_->view = view;
     render_context_set_debug_view(scene_provider.render_context(), view);
-    if (state_->index > 0) {
-        (void)replay(state_->index - 1, true);
-    }
-    return true;
+    return this->view() == view && redraw_shown();
 }
 
 bool
@@ -179,7 +186,7 @@ Frames::step(uint32_t dt_ms) {
     }
     bool saved = true;
     // From frame 1: autana restores only state whose allocations the first frame made.
-    if (s.keep && s.index % s.every == 1 && !s.checkpoints.contains(s.index)) {
+    if (s.keep && s.on_grid(s.index) && !s.checkpoints.contains(s.index)) {
         render_host_checkpoint_t* checkpoint = render_host_save();
         saved = checkpoint != nullptr;
         if (saved) {
@@ -201,32 +208,52 @@ Frames::step(uint32_t dt_ms) {
 
 bool
 Frames::seek(int index) {
-    return replay(index, false);
+    if (index < 0 || (index < state_->index - 1 && !restore_before(index))) {
+        return false;
+    }
+    step_to(index);
+    return true;
 }
 
 bool
-Frames::replay(int index, bool redraw) {
+Frames::restore_before(int index) {
     State& s = *state_;
-    if (index < 0) {
+    auto from = s.checkpoints.upper_bound(index);
+    if (from == s.checkpoints.begin()) {
         return false;
     }
-    if (index < s.index - 1 || (redraw && index == s.index - 1)) {
-        auto from = s.checkpoints.upper_bound(index);
-        if (from == s.checkpoints.begin()) {
-            return false;
-        }
-        --from;
-        if (!render_host_restore(from->second)) {
-            return false;
-        }
-        if (s.view) {
-            render_context_set_debug_view(scene_provider.render_context(), *s.view);
-        }
-        s.index = from->first;
+    --from;
+    // The checkpoint holds the view it was saved with; the view picked now stays.
+    const int picked = view();
+    if (!render_host_restore(from->second)) {
+        return false;
     }
+    if (has_views()) {
+        render_context_set_debug_view(scene_provider.render_context(), picked);
+    }
+    s.index = from->first;
+    return true;
+}
+
+void
+Frames::step_to(int index) {
+    State& s = *state_;
     while (s.index <= index) {
         step(s.index < std::ssize(s.dts) ? s.dts[s.index] : dt_ms());
     }
+}
+
+bool
+Frames::redraw_shown() {
+    const int shown = state_->index - 1;
+    // Nothing drawn yet, or no checkpoint before the shown frame: the next step draws under the view.
+    if (shown < 0 || state_->checkpoints.upper_bound(shown) == state_->checkpoints.begin()) {
+        return true;
+    }
+    if (!restore_before(shown)) {
+        return false;
+    }
+    step_to(shown);
     return true;
 }
 
@@ -246,10 +273,10 @@ Frames::frame() const {
 
 std::vector<DebugView>
 debug_views() {
-    std::vector<DebugView> views = {{.id = RENDER_DEBUG_VIEW_SHADED, .name = "shaded"}};
-    for (int id = RENDER_DEBUG_VIEW_SHADED + 1; id <= RENDER_DEBUG_VIEW_COUNT; id++) {
-        if (const render_debug_view_t* row = render_context_debug_view(id)) {
-            views.push_back({.id = id, .name = row->name});
+    std::vector<DebugView> views;
+    for (int id = RENDER_DEBUG_VIEW_SHADED; id <= RENDER_DEBUG_VIEW_COUNT; id++) {
+        if (const char* name = render_context_debug_view_name(id)) {
+            views.push_back({.id = id, .name = name});
         }
     }
     return views;

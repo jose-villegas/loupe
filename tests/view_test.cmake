@@ -1,5 +1,5 @@
 # Runs VIEW_TEST switched once, then straight for every view it names, and
-# fails unless each view's frame is the same bytes both ways.
+# fails unless each view's two frames are the same bytes both ways.
 file(REMOVE_RECURSE "${OUT}")
 file(MAKE_DIRECTORY "${OUT}")
 execute_process(COMMAND "${VIEW_TEST}" "${SCENE}" "${OUT}" switched RESULT_VARIABLE status)
@@ -12,10 +12,13 @@ foreach(view IN LISTS views)
     if(NOT status EQUAL 0)
         message(FATAL_ERROR "view_test straight ${view} exited with ${status}")
     endif()
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${OUT}/straight-${view}.bin" "${OUT}/switched-${view}.bin"
-                    RESULT_VARIABLE differ)
-    if(differ)
-        message(FATAL_ERROR "${view}: picked mid-run and sought back differs from drawn under it from the start: ${OUT}")
-    endif()
-    message(STATUS "same frame under ${view}")
+    # picked: the shown frame drawn again under the view; sought: an earlier one, restored and stepped.
+    foreach(frame picked sought)
+        execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${OUT}/straight-${view}-${frame}.bin"
+                                "${OUT}/switched-${view}-${frame}.bin" RESULT_VARIABLE differ)
+        if(differ)
+            message(FATAL_ERROR "${view}: the ${frame} frame differs from the one drawn under it from the start: ${OUT}")
+        endif()
+    endforeach()
+    message(STATUS "same frames under ${view}")
 endforeach()

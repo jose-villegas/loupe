@@ -2,13 +2,13 @@
 #include <cstdio>
 #include <limits>
 #include <map>
-#include <string>
 #include <vector>
 
-#include "engine/frames.hpp"
+#include "frames_fixture.hpp"
 
 namespace {
 
+constexpr const char TEST[] = "seek_test";
 constexpr int EVERY = loupe::Frames::CHECKPOINT_EVERY;
 // Past three checkpoints (before frames 1, 1 + EVERY, 1 + 2 * EVERY), so a seek back can start from each.
 constexpr int STRAIGHT_TO = 2 * EVERY + 10;
@@ -20,24 +20,12 @@ const int TARGETS[] = {EVERY + 14, EVERY + 1, EVERY, 5, 1, 2 * EVERY + 3, 2 * EV
 constexpr int RETIMED_FROM = EVERY + 5;
 constexpr int RETIMED_TO = EVERY + 12;
 
-std::vector<uint8_t>
-pixels(const loupe::Frames& frames) {
-    const loupe::Frame frame = frames.frame();
-    return std::vector<uint8_t>(frame.bgr.begin(), frame.bgr.end());
-}
-
-bool
-same(loupe::Frames& frames, int index, const std::vector<uint8_t>& expected, const char* what) {
-    const bool sought = frames.seek(index);
-    const bool ok = sought && pixels(frames) == expected;
-    std::fprintf(stderr, "seek_test: %s frame %d %s\n", what, index, ok ? "same" : sought ? "DIFFERS" : "NOT SOUGHT");
-    return ok;
-}
-
 } // namespace
 
 int
 main(int argc, char** argv) {
+    using loupe::test::pixels;
+    using loupe::test::same;
     if (argc != 3) {
         std::fprintf(stderr, "usage: seek_test SCENE.scene.toml out.bmp\n");
         return 2;
@@ -45,10 +33,8 @@ main(int argc, char** argv) {
     loupe::Options options;
     options.scene_toml = argv[1];
     options.out_bmp = argv[2];
-    std::string why;
-    std::unique_ptr<loupe::Frames> frames = loupe::Frames::open(options, &why);
+    std::unique_ptr<loupe::Frames> frames = loupe::test::open_or_report(TEST, options);
     if (frames == nullptr) {
-        std::fprintf(stderr, "seek_test: %s\n", why.c_str());
         return 1;
     }
     frames->keep_checkpoints(std::numeric_limits<size_t>::max());
@@ -60,7 +46,7 @@ main(int argc, char** argv) {
         straight[frames->index() - 1] = pixels(*frames);
     }
     for (const int target : TARGETS) {
-        ok &= same(*frames, target, straight[target], "straight");
+        ok &= same(TEST, *frames, target, straight[target], "straight");
     }
 
     const uint32_t retimed_dt = 2 * frames->dt_ms();
@@ -74,7 +60,7 @@ main(int argc, char** argv) {
         std::fprintf(stderr, "seek_test: the other dt drew the same frame, so it proves nothing\n");
         ok = false;
     }
-    ok &= same(*frames, RETIMED_FROM + 1, retimed[RETIMED_FROM + 1], "retimed");
-    ok &= same(*frames, RETIMED_TO, retimed[RETIMED_TO], "retimed");
+    ok &= same(TEST, *frames, RETIMED_FROM + 1, retimed[RETIMED_FROM + 1], "retimed");
+    ok &= same(TEST, *frames, RETIMED_TO, retimed[RETIMED_TO], "retimed");
     return frames->close() && ok ? 0 : 1;
 }
