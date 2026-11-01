@@ -21,7 +21,7 @@ constexpr int RETIMED_TO = EVERY + 12;
 
 std::vector<uint8_t> pixels(const loupe::Frames& frames) {
     const loupe::Frame frame = frames.frame();
-    return std::vector<uint8_t>(frame.pixels, frame.pixels + frame.bytes);
+    return std::vector<uint8_t>(frame.begin(), frame.end());
 }
 
 bool same(loupe::Frames& frames, int index, const std::vector<uint8_t>& expected, const char* what) {

@@ -2,10 +2,10 @@
 // exact seek. One Frames is open at a time: the loop is autana's one run.
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 
 #include "options.h"
@@ -13,10 +13,7 @@
 namespace loupe {
 
 // The last drawn frame, as the BMP body autana writes: bottom-up BGR rows.
-struct Frame {
-    const uint8_t* pixels;
-    size_t bytes;
-};
+using Frame = std::span<const uint8_t>;
 
 class Frames {
 public:

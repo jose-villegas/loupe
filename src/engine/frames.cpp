@@ -115,7 +115,7 @@ bool Frames::step(uint32_t dt_ms) {
     }
     bool saved = true;
     // From frame 1: autana restores only state whose allocations the first frame made.
-    if (s.keep && s.index % CHECKPOINT_EVERY == 1 && s.checkpoints.count(s.index) == 0) {
+    if (s.keep && s.index % CHECKPOINT_EVERY == 1 && !s.checkpoints.contains(s.index)) {
         render_host_checkpoint_t* checkpoint = render_host_save();
         saved = checkpoint != nullptr;
         if (saved) {
@@ -158,7 +158,7 @@ int Frames::index() const {
 Frame Frames::frame() const {
     size_t bytes = 0;
     const uint8_t* pixels = render_host_pixels(&bytes);
-    return {pixels, bytes};
+    return Frame(pixels, bytes);
 }
 
 std::optional<uint32_t> Frames::path_ms() const {
