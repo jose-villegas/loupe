@@ -5,15 +5,21 @@
 #include <cstdio>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "engine/frames.hpp"
 
 namespace loupe::test {
 
-// The run `options` asks for; null, said on stderr under `test`'s name, when it cannot open.
+// `scene_toml` under `view` (the provider's own when empty), writing its BMP to
+// `out_bmp`; null, said on stderr under `test`'s name, when it cannot open.
 inline std::unique_ptr<Frames>
-open_or_report(const char* test, const Options& options) {
+open_scene(const char* test, const char* scene_toml, std::string out_bmp, std::string view = {}) {
+    Options options;
+    options.scene_toml = scene_toml;
+    options.out_bmp = std::move(out_bmp);
+    options.view = std::move(view);
     std::string why;
     std::unique_ptr<Frames> frames = Frames::open(options, &why);
     if (frames == nullptr) {

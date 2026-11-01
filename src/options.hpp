@@ -25,5 +25,7 @@ bool parse_options(int argc, char** argv, Options* options, std::string* why);
 const char* usage();
 // The scene's id, its file name without .scene.toml, as autana's packs name it.
 std::string scene_id(const std::string& scene_toml);
+// A whole decimal number from `least` to `most`; false for anything else.
+bool parse_count(const std::string& text, long long least, long long most, long long* value);
 
 } // namespace loupe

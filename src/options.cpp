@@ -12,14 +12,6 @@ namespace {
 
 constexpr const char SCENE_SUFFIX[] = ".scene.toml";
 
-// A whole decimal number from `least` to `most`; false for anything else.
-bool
-parse_count(const std::string& text, long long least, long long most, long long* value) {
-    const char* last = text.data() + text.size();
-    const auto [end, error] = std::from_chars(text.data(), last, *value);
-    return error == std::errc() && end == last && *value >= least && *value <= most;
-}
-
 // Sets the option `flag` names to `value`; false with `why` set for an unknown
 // flag or a value it cannot take.
 bool
@@ -57,6 +49,13 @@ apply_flag(const std::string& flag, const std::string& value, Options* options, 
 }
 
 } // namespace
+
+bool
+parse_count(const std::string& text, long long least, long long most, long long* value) {
+    const char* last = text.data() + text.size();
+    const auto [end, error] = std::from_chars(text.data(), last, *value);
+    return error == std::errc() && end == last && *value >= least && *value <= most;
+}
 
 std::string
 scene_id(const std::string& scene_toml) {
