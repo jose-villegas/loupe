@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <format>
 #include <iterator>
+#include <optional>
 #include <system_error>
 
 namespace loupe {
@@ -23,27 +24,34 @@ struct CountFlag {
     void (*set)(Options* options, long long count);
 };
 
+// Sets the optional<T> `field` of the options to a count already in T's range.
+template <typename T, std::optional<T> Options::* field>
+void
+set_count(Options* options, long long count) {
+    options->*field = static_cast<T>(count);
+}
+
 const CountFlag COUNT_FLAGS[] = {
     {.name = "--frames",
      .least = 1,
      .most = INT_MAX,
      .is = "a whole number from 1",
-     .set = [](Options* options, long long count) { options->frames = static_cast<int>(count); }},
+     .set = set_count<int, &Options::frames>},
     {.name = "--dt",
      .least = 0,
      .most = UINT32_MAX,
      .is = "whole milliseconds",
-     .set = [](Options* options, long long count) { options->dt_ms = static_cast<uint32_t>(count); }},
+     .set = set_count<uint32_t, &Options::dt_ms>},
     {.name = "--checkpoint-mb",
      .least = 1,
      .most = LLONG_MAX / static_cast<long long>(MIB),
      .is = "whole megabytes from 1",
-     .set = [](Options* options, long long count) { options->checkpoint_mb = static_cast<size_t>(count); }},
+     .set = set_count<size_t, &Options::checkpoint_mb>},
     {.name = "--ticks",
      .least = 1,
      .most = INT_MAX,
      .is = "a whole number from 1",
-     .set = [](Options* options, long long count) { options->ticks = static_cast<int>(count); }},
+     .set = set_count<int, &Options::ticks>},
 };
 
 const CountFlag*
