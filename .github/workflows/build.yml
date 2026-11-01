@@ -36,10 +36,8 @@ jobs:
         include:
           - name: Linux
             runs-on: ubuntu-24.04
-            generator: Unix Makefiles
           - name: Windows (MinGW)
             runs-on: windows-2025
-            generator: MinGW Makefiles
     runs-on: ${{ matrix.runs-on }}
     timeout-minutes: 45
     defaults:
@@ -58,15 +56,11 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version-file: third_party/autana/.python-version
-      - name: Configure
-        run: cmake -S . -B build -G "${{ matrix.generator }}" -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
-      - name: Build
-        run: cmake --build build --parallel
-      - name: Test
-        run: ctest --test-dir build --output-on-failure --no-tests=error
-      - name: Sanitizer tools
+      - name: Build tools
         run: python -m pip install -r tools/ci/requirements.txt
-      # Also run before a push that changes C++ (README, Standards).
+      - name: Build and test
+        run: cmake --workflow --preset default
+      # Also run before a push that changes C++ or CMake (README, Standards).
       - name: Build and test under the sanitizers
         env:
           PUSH_TEST_GATE: "true"
@@ -77,6 +71,6 @@ jobs:
         with:
           name: renders-${{ matrix.runs-on }}
           path: |
-            build/tests/parity_*
-            build/packs/*/build_pack.log
+            build/*/tests/parity_*
+            build/*/packs/*/build_pack.log
           if-no-files-found: ignore

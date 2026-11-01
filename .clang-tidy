@@ -1,5 +1,5 @@
 # GENERATED FILE - do not edit.
-# python tools/gen/standards_config.py clang-tidy > .clang-tidy
+# python third_party/autana/scripts/cpp/style_configs.py clang-tidy > .clang-tidy
 
 Checks: >-
   -*,
@@ -19,6 +19,6 @@ Checks: >-
   readability-use-std-min-max,
   readability-function-cognitive-complexity
 WarningsAsErrors: '*'
-HeaderFilterRegex: '/src/'
+HeaderFilterRegex: '.*'
 CheckOptions:
   readability-function-cognitive-complexity.Threshold: 15

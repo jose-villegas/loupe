@@ -53,6 +53,8 @@ jobs:
           python -m pip install -r "$GATES/requirements.txt" -r tools/ci/requirements.txt
           npm ci --prefix "$GATES"
 
+      # A marked step is spelled out in full: the hooks run its command as
+      # written, without the shell that would expand $GATES.
       - name: Length beside code, and header height
         env:
           STAGED_TEXT_GATE: "true"

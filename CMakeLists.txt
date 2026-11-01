@@ -21,9 +21,13 @@ if(MINGW)
     add_link_options(-static)
 endif()
 
-include(cmake/standards.cmake)
-# SYSTEM: autana's headers answer to autana's warnings, not Loupe's.
+# autana's C++ rules: sanitizers (AUTANA_CPP_SANITIZE) before its subdirectory,
+# so they cover its C too; flags and clang-tidy (AUTANA_CPP_CLANG_TIDY) after it,
+# on Loupe's own C++. SYSTEM: autana's headers answer to autana's warnings.
+include("${AUTANA_DIR}/scripts/cpp/standards.cmake")
+autana_cpp_sanitize()
 add_subdirectory("${AUTANA_DIR}/launcher/tools/render" autana SYSTEM)
+autana_cpp_checks()
 
 # Everything but the command line. Autana's sources compile into this library
 # alone; its usage requirements stay private, and only src/engine/autana.hpp
@@ -36,14 +40,12 @@ add_library(loupe_core OBJECT
     src/pack.cpp)
 target_include_directories(loupe_core PUBLIC src)
 target_link_libraries(loupe_core PRIVATE autana::scene_provider)
-loupe_standards(loupe_core)
 target_compile_definitions(loupe_core PRIVATE
     "LOUPE_AUTANA_DIR=\"${AUTANA_DIR}\"" "LOUPE_PYTHON=\"${Python3_EXECUTABLE}\""
     "LOUPE_PACK_CACHE=\"${CMAKE_BINARY_DIR}/packs\"")
 
 add_executable(loupe src/main.cpp)
 target_link_libraries(loupe PRIVATE loupe_core)
-loupe_standards(loupe)
 
 include(CTest)
 if(BUILD_TESTING)
