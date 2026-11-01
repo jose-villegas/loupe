@@ -1,6 +1,5 @@
 // Seeking to frame N through a checkpoint draws the bytes stepping straight to N drew.
 #include <cstdio>
-#include <limits>
 
 #include "frames_fixture.hpp"
 
@@ -23,15 +22,11 @@ const int RETIMED[] = {RETIMED_FROM + 1, RETIMED_TO};
 
 int
 main(int argc, char** argv) {
-    if (argc != 3) {
-        std::fprintf(stderr, "usage: seek_test SCENE.scene.toml out.bmp\n");
-        return 2;
-    }
-    std::unique_ptr<loupe::Frames> frames = loupe::test::open_or_report(TEST, loupe::test::scene_args(argv));
+    std::unique_ptr<loupe::Frames> frames =
+        loupe::test::open_test(TEST, std::span(argv, static_cast<size_t>(argc)), 3, "SCENE.scene.toml out.bmp");
     if (frames == nullptr) {
         return 1;
     }
-    frames->keep_checkpoints(std::numeric_limits<size_t>::max());
 
     loupe::test::Straight straight;
     bool ok = loupe::test::step_straight(*frames, STRAIGHT_TO, {}, &straight);

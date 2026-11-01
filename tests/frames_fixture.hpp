@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <span>
@@ -30,13 +31,23 @@ open_or_report(const char* test, const Options& options) {
     return frames;
 }
 
-// The scene `argv[1]`, writing its BMP to `argv[2]`.
-inline Options
-scene_args(char** argv) {
+// For a test run as `TEST SCENE.scene.toml out.bmp ...` with `expected`
+// arguments: the scene, writing its BMP there, keeping every checkpoint. Null,
+// said on stderr with `usage`, for another count or a scene that does not open.
+inline std::unique_ptr<Frames>
+open_test(const char* test, std::span<char*> args, size_t expected, const char* usage) {
+    if (args.size() != expected) {
+        std::fprintf(stderr, "usage: %s %s\n", test, usage);
+        return nullptr;
+    }
     Options options;
-    options.scene_toml = argv[1];
-    options.out_bmp = argv[2];
-    return options;
+    options.scene_toml = args[1];
+    options.out_bmp = args[2];
+    std::unique_ptr<Frames> frames = open_or_report(test, options);
+    if (frames != nullptr) {
+        frames->keep_checkpoints(std::numeric_limits<size_t>::max());
+    }
+    return frames;
 }
 
 inline std::vector<uint8_t>
