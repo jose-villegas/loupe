@@ -36,13 +36,8 @@ main(int argc, char** argv) {
         return 2;
     }
     const std::string out = argv[2];
-    loupe::Options options;
-    options.scene_toml = argv[1];
-    options.out_bmp = out + "/" + mode + ".bmp";
-    if (mode == "straight") {
-        options.view = argv[4];
-    }
-    std::unique_ptr<loupe::Frames> frames = loupe::test::open_or_report("view_test", options);
+    std::unique_ptr<loupe::Frames> frames =
+        loupe::test::open_scene("view_test", argv[1], out + "/" + mode + ".bmp", mode == "straight" ? argv[4] : "");
     if (frames == nullptr) {
         return 1;
     }

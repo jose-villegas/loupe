@@ -1,12 +1,11 @@
 // Under a checkpoint budget the kept checkpoints stay within it, the interval
 // doubles per thinning, and a seek still draws the bytes stepping straight drew.
 #include <algorithm>
-#include <charconv>
+#include <climits>
 #include <cstdio>
 #include <iterator>
 #include <limits>
 #include <map>
-#include <string_view>
 #include <vector>
 
 #include "frames_fixture.hpp"
@@ -21,28 +20,22 @@ const int TARGETS[] = {STRAIGHT_TO - 1, 4 * EVERY + 2, 4 * EVERY, 2 * EVERY + 5,
 // How far a checkpoint's size may stray from the first's, in parts of it: past
 // this, a budget counted in first checkpoints would thin at other frames.
 constexpr size_t SIZE_SLACK_PARTS = 8;
-
-bool
-parse(std::string_view text, int* value) {
-    const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), *value);
-    return error == std::errc() && end == text.data() + text.size() && *value > 0;
-}
+// Past this, EVERY doubled that many times overflows an int.
+constexpr long long MAX_THINNINGS = 24;
 
 } // namespace
 
 int
 main(int argc, char** argv) {
     // Room for HALVES / 2 checkpoints, which by STRAIGHT_TO doubles the interval THINNINGS times.
-    int halves = 0;
-    int thinnings = 0;
-    if (argc != 5 || !parse(argv[3], &halves) || !parse(argv[4], &thinnings)) {
+    long long halves = 0;
+    long long thinnings = 0;
+    if (argc != 5 || !loupe::parse_count(argv[3], 1, INT_MAX, &halves)
+        || !loupe::parse_count(argv[4], 0, MAX_THINNINGS, &thinnings)) {
         std::fprintf(stderr, "usage: thinning_test SCENE.scene.toml out.bmp HALVES THINNINGS\n");
         return 2;
     }
-    loupe::Options options;
-    options.scene_toml = argv[1];
-    options.out_bmp = argv[2];
-    std::unique_ptr<loupe::Frames> frames = loupe::test::open_or_report(TEST, options);
+    std::unique_ptr<loupe::Frames> frames = loupe::test::open_scene(TEST, argv[1], argv[2]);
     if (frames == nullptr) {
         return 1;
     }
@@ -75,7 +68,7 @@ main(int argc, char** argv) {
             ok = false;
         }
     }
-    const int expected_every = EVERY << thinnings;
+    const int expected_every = EVERY << static_cast<int>(thinnings);
     if (frames->checkpoint_every() != expected_every) {
         std::fprintf(stderr, "%s: every %d, not %d\n", TEST, frames->checkpoint_every(), expected_every);
         ok = false;

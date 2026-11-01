@@ -30,10 +30,7 @@ main(int argc, char** argv) {
         std::fprintf(stderr, "usage: seek_test SCENE.scene.toml out.bmp\n");
         return 2;
     }
-    loupe::Options options;
-    options.scene_toml = argv[1];
-    options.out_bmp = argv[2];
-    std::unique_ptr<loupe::Frames> frames = loupe::test::open_or_report(TEST, options);
+    std::unique_ptr<loupe::Frames> frames = loupe::test::open_scene(TEST, argv[1], argv[2]);
     if (frames == nullptr) {
         return 1;
     }
