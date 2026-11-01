@@ -123,7 +123,10 @@ bool scene_pack(const std::string& scene_toml, std::string* pack_dir, std::strin
 
     const fs::path script = fs::path(LOUPE_AUTANA_DIR) / "launcher" / "tools" / "r3d" / "build_pack.py";
     const std::vector<std::string> args = {LOUPE_PYTHON, script.string(), "-o", folder.string(), scene.string()};
-    fs::create_directories(folder, error);
+    if (fs::create_directories(folder, error), error) {
+        *why = "cannot make " + folder.string() + ": " + error.message();
+        return false;
+    }
     if (!run_logged(args, folder / "build_pack.log")) {
         *why = "build_pack.py failed; see " + (folder / "build_pack.log").string();
         return false;

@@ -29,7 +29,7 @@ public:
     Frames(const Frames&) = delete;
     Frames& operator=(const Frames&) = delete;
 
-    // The run's frame count and dt: the options', else the provider's defaults.
+    // The run's frame count and dt as it opened: the options', else the provider's defaults.
     int count() const;
     uint32_t dt_ms() const;
     // Saves checkpoints from here on, so seek() can go back; a command-line run never does.

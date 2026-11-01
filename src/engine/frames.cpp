@@ -17,6 +17,7 @@ struct Frames::State {
     bool open = false;
     bool keep = false;
     int index = 0;
+    uint32_t dt_ms = 0;  // the run's, as it opened
     std::vector<uint32_t> dts;  // each drawn frame's dt, for replaying it
     std::map<int, render_host_checkpoint_t*> checkpoints;  // the state before drawing frame key
 
@@ -87,6 +88,7 @@ std::unique_ptr<Frames> Frames::open(const Options& options, std::string* why) {
         return nullptr;
     }
     state->open = true;
+    state->dt_ms = render_host_frame()->dt_ms;
     return std::unique_ptr<Frames>(new Frames(std::move(state)));
 }
 
@@ -99,7 +101,7 @@ int Frames::count() const {
 }
 
 uint32_t Frames::dt_ms() const {
-    return render_host_frame()->dt_ms;
+    return state_->dt_ms;
 }
 
 void Frames::keep_checkpoints() {
