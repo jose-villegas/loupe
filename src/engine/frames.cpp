@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <iterator>
 #include <map>
 #include <vector>
 
@@ -17,22 +18,24 @@ struct Frames::State {
     bool open = false;
     bool keep = false;
     int index = 0;
-    uint32_t dt_ms = 0;  // the run's, as it opened
-    std::vector<uint32_t> dts;  // each drawn frame's dt, for replaying it
-    std::map<int, render_host_checkpoint_t*> checkpoints;  // the state before drawing frame key
+    uint32_t dt_ms = 0;                                   // the run's, as it opened
+    std::vector<uint32_t> dts;                            // each drawn frame's dt, for replaying it
+    std::map<int, render_host_checkpoint_t*> checkpoints; // the state before drawing frame key
 
-    // Frees the checkpoints after frame `index` and forgets the dts from it on.
-    void forget_after(int index) {
-        for (auto it = checkpoints.upper_bound(index); it != checkpoints.end(); it = checkpoints.erase(it)) {
+    // Frees the checkpoints after frame `frame` and forgets the dts from it on.
+    void
+    forget_after(int frame) {
+        for (auto it = checkpoints.upper_bound(frame); it != checkpoints.end(); it = checkpoints.erase(it)) {
             render_host_checkpoint_free(it->second);
         }
-        dts.resize(static_cast<size_t>(std::max(index, 0)));
+        dts.resize(static_cast<size_t>(std::max(frame, 0)));
     }
 };
 
 namespace {
 
-bool set_asset_dir(const std::string& folder) {
+bool
+set_asset_dir(const std::string& folder) {
 #if defined(_WIN32)
     return _putenv_s(ASSET_STORE_DIR_ENV, folder.c_str()) == 0;
 #else
@@ -41,7 +44,8 @@ bool set_asset_dir(const std::string& folder) {
 }
 
 // The scene provider's command line for `options`: only the flags given, as scene_viewer.sh passes them.
-std::vector<std::string> provider_args(const Options& options) {
+std::vector<std::string>
+provider_args(const Options& options) {
     std::vector<std::string> args = {"loupe", "--scene", scene_id(options.scene_toml)};
     const auto add = [&args](const char* flag, const std::string& value) {
         if (!value.empty()) {
@@ -63,16 +67,17 @@ std::vector<std::string> provider_args(const Options& options) {
     return args;
 }
 
-}  // namespace
+} // namespace
 
 Frames::Frames(std::unique_ptr<State> state) : state_(std::move(state)) {}
 
-std::unique_ptr<Frames> Frames::open(const Options& options, std::string* why) {
-    std::string pack;
-    if (!scene_pack(options.scene_toml, &pack, why)) {
+std::unique_ptr<Frames>
+Frames::open(const Options& options, std::string* why) {
+    const std::optional<std::string> pack = scene_pack(options.scene_toml, why);
+    if (!pack) {
         return nullptr;
     }
-    if (!set_asset_dir(pack)) {
+    if (!set_asset_dir(*pack)) {
         *why = "cannot set " ASSET_STORE_DIR_ENV;
         return nullptr;
     }
@@ -92,25 +97,27 @@ std::unique_ptr<Frames> Frames::open(const Options& options, std::string* why) {
     return std::unique_ptr<Frames>(new Frames(std::move(state)));
 }
 
-Frames::~Frames() {
-    (void)close();
-}
+Frames::~Frames() { (void)close(); }
 
-int Frames::count() const {
+int
+Frames::count() const {
     return render_host_frame()->count;
 }
 
-uint32_t Frames::dt_ms() const {
+uint32_t
+Frames::dt_ms() const {
     return state_->dt_ms;
 }
 
-void Frames::keep_checkpoints() {
+void
+Frames::keep_checkpoints() {
     state_->keep = true;
 }
 
-bool Frames::step(uint32_t dt_ms) {
+bool
+Frames::step(uint32_t dt_ms) {
     State& s = *state_;
-    if (s.index < static_cast<int>(s.dts.size()) && s.dts[s.index] != dt_ms) {
+    if (s.index < std::ssize(s.dts) && s.dts[s.index] != dt_ms) {
         s.forget_after(s.index);
     }
     bool saved = true;
@@ -126,49 +133,58 @@ bool Frames::step(uint32_t dt_ms) {
     }
     const input_t input = {};
     render_host_step(dt_ms, &input);
-    if (s.index == static_cast<int>(s.dts.size())) {
+    if (s.index == std::ssize(s.dts)) {
         s.dts.push_back(dt_ms);
     }
     s.index++;
     return saved;
 }
 
-bool Frames::seek(int index) {
+bool
+Frames::seek(int index) {
     State& s = *state_;
     if (index < 0) {
         return false;
     }
     if (index < s.index - 1) {
         auto from = s.checkpoints.upper_bound(index);
-        if (from == s.checkpoints.begin() || !render_host_restore((--from)->second)) {
+        if (from == s.checkpoints.begin()) {
+            return false;
+        }
+        --from;
+        if (!render_host_restore(from->second)) {
             return false;
         }
         s.index = from->first;
     }
     while (s.index <= index) {
-        step(s.index < static_cast<int>(s.dts.size()) ? s.dts[s.index] : dt_ms());
+        step(s.index < std::ssize(s.dts) ? s.dts[s.index] : dt_ms());
     }
     return true;
 }
 
-int Frames::index() const {
+int
+Frames::index() const {
     return state_->index;
 }
 
-Frame Frames::frame() const {
+Frame
+Frames::frame() const {
     size_t bytes = 0;
     const uint8_t* pixels = render_host_pixels(&bytes);
     return Frame(pixels, bytes);
 }
 
-std::optional<uint32_t> Frames::path_ms() const {
+std::optional<uint32_t>
+Frames::path_ms() const {
     if (scene_provider.path_ms == nullptr) {
         return std::nullopt;
     }
     return scene_provider.path_ms();
 }
 
-bool Frames::close() {
+bool
+Frames::close() {
     if (!state_->open) {
         return true;
     }
@@ -177,4 +193,4 @@ bool Frames::close() {
     return render_host_close();
 }
 
-}  // namespace loupe
+} // namespace loupe

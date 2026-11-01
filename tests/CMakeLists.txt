@@ -19,5 +19,6 @@ parity(every_flag "--object|atrium|--camera|tour|--view|meshlets|--set|render.ba
 
 add_executable(seek_test seek_test.cpp)
 target_link_libraries(seek_test PRIVATE loupe_core)
+loupe_standards(seek_test)
 add_test(NAME seek COMMAND seek_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/seek.bmp")
 set_tests_properties(seek PROPERTIES RESOURCE_LOCK sponza)

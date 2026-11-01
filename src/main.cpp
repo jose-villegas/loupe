@@ -5,7 +5,8 @@
 #include "engine/frames.h"
 #include "options.h"
 
-int main(int argc, char** argv) {
+int
+main(int argc, char** argv) {
     loupe::Options options;
     std::string why;
     if (!loupe::parse_options(argc, argv, &options, &why)) {

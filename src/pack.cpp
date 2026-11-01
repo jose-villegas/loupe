@@ -30,7 +30,8 @@ constexpr uint64_t FNV_OFFSET = 14695981039346656037ull;
 constexpr uint64_t FNV_PRIME = 1099511628211ull;
 
 // One cache folder per scene file, wherever two scenes share a name.
-uint64_t path_hash(const std::string& text) {
+uint64_t
+path_hash(const std::string& text) {
     uint64_t hash = FNV_OFFSET;
     for (const unsigned char c : text) {
         hash = (hash ^ c) * FNV_PRIME;
@@ -40,7 +41,8 @@ uint64_t path_hash(const std::string& text) {
 
 #if defined(_WIN32)
 // One argument as the C runtime splits a command line back into argv.
-std::string argv_quoted(const std::string& arg) {
+std::string
+argv_quoted(const std::string& arg) {
     std::string out = "\"";
     size_t slashes = 0;
     for (const char c : arg) {
@@ -58,7 +60,8 @@ std::string argv_quoted(const std::string& arg) {
 #endif
 
 // Runs `args` with no shell between, its output into `log`; true when it exits 0.
-bool run_logged(const std::vector<std::string>& args, const fs::path& log) {
+bool
+run_logged(const std::vector<std::string>& args, const fs::path& log) {
 #if defined(_WIN32)
     std::string line;
     for (const std::string& arg : args) {
@@ -78,8 +81,7 @@ bool run_logged(const std::vector<std::string>& args, const fs::path& log) {
     startup.hStdError = file;
     PROCESS_INFORMATION process = {};
     DWORD status = 1;
-    if (CreateProcessA(args[0].c_str(), line.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &startup,
-                       &process)) {
+    if (CreateProcessA(args[0].c_str(), line.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &startup, &process)) {
         WaitForSingleObject(process.hProcess, INFINITE);
         GetExitCodeProcess(process.hProcess, &status);
         CloseHandle(process.hThread);
@@ -89,6 +91,7 @@ bool run_logged(const std::vector<std::string>& args, const fs::path& log) {
     return status == 0;
 #else
     std::vector<char*> argv;
+    argv.reserve(args.size() + 1);
     for (const std::string& arg : args) {
         argv.push_back(const_cast<char*>(arg.c_str()));
     }
@@ -99,39 +102,39 @@ bool run_logged(const std::vector<std::string>& args, const fs::path& log) {
     posix_spawn_file_actions_adddup2(&actions, 1, 2);
     pid_t pid = 0;
     int status = 0;
-    const bool ok = posix_spawn(&pid, args[0].c_str(), &actions, nullptr, argv.data(), environ) == 0 &&
-                    waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    const bool ok = posix_spawn(&pid, args[0].c_str(), &actions, nullptr, argv.data(), environ) == 0
+                    && waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
     posix_spawn_file_actions_destroy(&actions);
     return ok;
 #endif
 }
 
-}  // namespace
+} // namespace
 
-bool scene_pack(const std::string& scene_toml, std::string* pack_dir, std::string* why) {
+std::optional<std::string>
+scene_pack(const std::string& scene_toml, std::string* why) {
     std::error_code error;
     const fs::path scene = fs::canonical(scene_toml, error);
     if (error) {
         *why = "no scene file: " + scene_toml;
-        return false;
+        return std::nullopt;
     }
     const std::string id = scene_id(scene_toml);
     char tag[17];
     std::snprintf(tag, sizeof tag, "%016llx", static_cast<unsigned long long>(path_hash(scene.generic_string())));
     const fs::path folder = fs::path(LOUPE_PACK_CACHE) / (id + "-" + tag);
-    *pack_dir = folder.string();
 
     const fs::path script = fs::path(LOUPE_AUTANA_DIR) / "launcher" / "tools" / "r3d" / "build_pack.py";
     const std::vector<std::string> args = {LOUPE_PYTHON, script.string(), "-o", folder.string(), scene.string()};
     if (fs::create_directories(folder, error), error) {
         *why = "cannot make " + folder.string() + ": " + error.message();
-        return false;
+        return std::nullopt;
     }
     if (!run_logged(args, folder / "build_pack.log")) {
         *why = "build_pack.py failed; see " + (folder / "build_pack.log").string();
-        return false;
+        return std::nullopt;
     }
-    return true;
+    return folder.string();
 }
 
-}  // namespace loupe
+} // namespace loupe

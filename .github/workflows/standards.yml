@@ -1,0 +1,170 @@
+name: Standards
+
+# autana's own gates, run from the submodule on Loupe's tree: they check the
+# repository they run in. Steps marked STAGED_TEXT_GATE also run before each
+# commit through the hooks (README, Standards).
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  GATES: third_party/autana/scripts/gates
+
+jobs:
+  gates:
+    name: Gates (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            runs-on: ubuntu-24.04
+          - name: Windows
+            runs-on: windows-2025
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: true
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: third_party/autana/.python-version
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: third_party/autana/.node-version
+      - name: Gate dependencies
+        run: |
+          python -m pip install -r "$GATES/requirements.txt" -r tools/ci/requirements.txt
+          npm ci --prefix "$GATES"
+
+      - name: Length beside code, and header height
+        env:
+          STAGED_TEXT_GATE: "true"
+        run: >
+          python third_party/autana/scripts/gates/check_comment_length.py
+          --no-banners --limit 500 --header-limit 50 --top 0
+      - name: Every source file says what it is
+        env:
+          STAGED_TEXT_GATE: "true"
+        run: python third_party/autana/scripts/gates/check_file_headers.py
+      - name: No comment records where code moved
+        env:
+          STAGED_TEXT_GATE: "true"
+        run: python third_party/autana/scripts/gates/find_narrative_comments.py --tombstones
+      - name: Comments cite only names that exist
+        env:
+          STAGED_TEXT_GATE: "true"
+        run: python third_party/autana/scripts/gates/check_comment_symbols.py
+      - name: No tracker id, personal path, or misdirected include is tracked
+        env:
+          STAGED_TEXT_GATE: "true"
+        run: python third_party/autana/scripts/gates/check_style_audit.py
+      - name: Generated document blocks pass their check command
+        env:
+          STAGED_TEXT_GATE: "snapshot"
+        run: python third_party/autana/scripts/gates/check_doc_generated.py
+      - name: Documentation constants match source
+        env:
+          STAGED_TEXT_GATE: "snapshot"
+        run: python third_party/autana/scripts/gates/check_doc_constants.py
+
+      - name: Documents cite paths and names that exist
+        run: python "$GATES/check_doc_citations.py"
+      - name: Every document is reachable, and every anchor link resolves
+        run: python "$GATES/check_doc_index.py"
+      - name: Generated files match their generator
+        run: python "$GATES/check_generated_files.py"
+      - name: Self-hosted workflows reject untrusted events
+        run: python "$GATES/check_self_hosted_workflows.py"
+      - name: No new magic numbers or protocol strings
+        run: python "$GATES/check_magic_numbers.py" --base "origin/${{ github.base_ref || 'main' }}" --include-root src
+      - name: No new token clone pairs
+        run: python "$GATES/check_clones.py" --base "origin/${{ github.base_ref || 'main' }}"
+      - name: Every C++ file is formatted
+        run: |
+          "$GATES/check-format.sh" --which
+          "$GATES/format-file-list.sh" | xargs "$GATES/check-format.sh" --check
+      - name: Scripts with a shebang are executable, and parse
+        run: |
+          sh "$GATES/check-exec-bits.sh"
+          bash "$GATES/check-shell-scripts.sh"
+
+  documents:
+    name: Diagrams, formulas and Renovate config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      # renovate: datasource=npm depName=renovate
+      RENOVATE_VERSION: 44.151.5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: true
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: third_party/autana/.node-version
+      - name: Pinned mermaid-cli, mathjax and markdown-it
+        run: |
+          npm ci --prefix "$GATES/mermaid"
+          npm ci --prefix "$GATES"
+          # The runner has no unprivileged user namespace for Chrome's own sandbox.
+          echo '{"args": ["--no-sandbox"]}' > "$RUNNER_TEMP/puppeteer-config.json"
+      - name: Every Mermaid diagram renders
+        env:
+          CHECK_MERMAID_MMDC_ARGS: -p ${{ runner.temp }}/puppeteer-config.json
+        run: node "$GATES/check-mermaid.mjs"
+      - name: Every formula renders
+        run: node "$GATES/check-math.mjs"
+      - name: Validate .github/renovate.json5
+        run: npx --yes --package "renovate@$RENOVATE_VERSION" -- renovate-config-validator --strict .github/renovate.json5
+
+  pull-request:
+    name: Branch name and ticket
+    if: ${{ github.event_name == 'pull_request' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: true
+      - name: Branch name
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: '"$GATES/check-branch-name.sh" "$HEAD_REF"'
+      - name: The description names its ticket
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s\n' "$PR_BODY" | "$GATES/check-pr-ticket.sh"
+
+  tidy:
+    name: clang-tidy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          submodules: true
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: third_party/autana/.python-version
+      - run: python -m pip install -r tools/ci/requirements.txt
+      - name: Build and test with clang-tidy on every C++ file
+        run: cmake --workflow --preset tidy

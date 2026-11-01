@@ -1,0 +1,38 @@
+// Bump pull requests for every pin Loupe holds: autana (the submodule), the
+// GitHub Actions and the CI tools in tools/ci/requirements.txt. Validated by
+// .github/workflows/standards.yml.
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: ['config:recommended', 'helpers:pinGitHubActionDigests'],
+  timezone: 'Europe/Berlin',
+  schedule: ['before 6am on monday'],
+
+  // Branches and bodies pass autana's check-branch-name.sh and check-pr-ticket.sh.
+  branchPrefix: 'feature/',
+  branchNameStrict: true,
+  prFooter: 'Ticket: i5djy',
+  semanticCommits: 'disabled',
+  commitMessagePrefix: 'build:',
+  rangeStrategy: 'pin',
+
+  'git-submodules': {enabled: true},
+
+  customManagers: [
+    {
+      // An exact tool version a workflow installs, annotated on the line above it:
+      //   # renovate: datasource=npm depName=renovate
+      //   RENOVATE_VERSION: 44.151.5
+      customType: 'regex',
+      managerFilePatterns: ['/^\.github/workflows/[^/]+\.yml$/'],
+      matchStrings: ['# renovate: datasource=(?<datasource>\S+) depName=(?<depName>\S+)\s+\w+: (?<currentValue>\S+)'],
+    },
+  ],
+
+  packageRules: [
+    // A major is a migration with its own ticket, opened from the dependency dashboard.
+    {matchUpdateTypes: ['major'], dependencyDashboardApproval: true},
+    {matchManagers: ['git-submodules'], groupName: 'autana', groupSlug: 'autana'},
+    {matchManagers: ['github-actions'], groupName: 'GitHub Actions', groupSlug: 'github-actions'},
+    {matchManagers: ['pip_requirements'], groupName: 'CI tools', groupSlug: 'ci-tools'},
+  ],
+}

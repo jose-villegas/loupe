@@ -19,21 +19,24 @@ const int TARGETS[] = {EVERY + 14, EVERY + 1, EVERY, 5, 1, 2 * EVERY + 3, 2 * EV
 constexpr int RETIMED_FROM = EVERY + 5;
 constexpr int RETIMED_TO = EVERY + 12;
 
-std::vector<uint8_t> pixels(const loupe::Frames& frames) {
+std::vector<uint8_t>
+pixels(const loupe::Frames& frames) {
     const loupe::Frame frame = frames.frame();
     return std::vector<uint8_t>(frame.begin(), frame.end());
 }
 
-bool same(loupe::Frames& frames, int index, const std::vector<uint8_t>& expected, const char* what) {
+bool
+same(loupe::Frames& frames, int index, const std::vector<uint8_t>& expected, const char* what) {
     const bool sought = frames.seek(index);
     const bool ok = sought && pixels(frames) == expected;
     std::fprintf(stderr, "seek_test: %s frame %d %s\n", what, index, ok ? "same" : sought ? "DIFFERS" : "NOT SOUGHT");
     return ok;
 }
 
-}  // namespace
+} // namespace
 
-int main(int argc, char** argv) {
+int
+main(int argc, char** argv) {
     if (argc != 3) {
         std::fprintf(stderr, "usage: seek_test SCENE.scene.toml out.bmp\n");
         return 2;

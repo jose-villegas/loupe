@@ -1,0 +1,24 @@
+# GENERATED FILE - do not edit.
+# python tools/gen/standards_config.py clang-tidy > .clang-tidy
+
+Checks: >-
+  -*,
+  bugprone-*,
+  performance-*,
+  modernize-use-designated-initializers,
+  modernize-use-ranges,
+  modernize-use-std-numbers,
+  modernize-use-starts-ends-with,
+  modernize-use-integer-sign-comparison,
+  modernize-use-constraints,
+  cppcoreguidelines-owning-memory,
+  cppcoreguidelines-pro-type-member-init,
+  cppcoreguidelines-special-member-functions,
+  cppcoreguidelines-avoid-capturing-lambda-coroutines,
+  misc-const-correctness,
+  readability-use-std-min-max,
+  readability-function-cognitive-complexity
+WarningsAsErrors: '*'
+HeaderFilterRegex: '/src/'
+CheckOptions:
+  readability-function-cognitive-complexity.Threshold: 15
