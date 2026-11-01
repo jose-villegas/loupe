@@ -53,6 +53,8 @@ The preset's test step (`ctest --preset default`) runs:
 |---|---|
 | `parity_*` | `loupe` writes the same bytes as autana's scene viewer for the same arguments |
 | `seek` | a seek back through a checkpoint draws the bytes stepping straight there drew |
+| `thinning_*` | under a checkpoint budget the checkpoints stay within it, their interval doubles, and seeks still draw the straight bytes |
+| `view_switch` | a debug view picked mid-run, and kept through a seek back, draws what it drew when picked from the start |
 | `include_gate` | only `src/engine/autana.hpp` includes autana's headers |
 
 CI runs them on Linux and Windows at the pinned autana on every pull request,
