@@ -17,18 +17,40 @@ struct Frames::State {
     std::vector<char*> argv;
     bool open = false;
     bool keep = false;
+    size_t budget = 0; // the checkpoints' memory, at most
+    int every = CHECKPOINT_EVERY;
+    size_t kept_bytes = 0;
     int index = 0;
     uint32_t dt_ms = 0;                                   // the run's, as it opened
     std::vector<uint32_t> dts;                            // each drawn frame's dt, for replaying it
     std::map<int, render_host_checkpoint_t*> checkpoints; // the state before drawing frame key
+    std::optional<int> view;                              // the picked view, set again after each restore
+
+    std::map<int, render_host_checkpoint_t*>::iterator
+    drop(std::map<int, render_host_checkpoint_t*>::iterator it) {
+        kept_bytes -= render_host_checkpoint_bytes(it->second);
+        render_host_checkpoint_free(it->second);
+        return checkpoints.erase(it);
+    }
 
     // Frees the checkpoints after frame `frame` and forgets the dts from it on.
     void
     forget_after(int frame) {
-        for (auto it = checkpoints.upper_bound(frame); it != checkpoints.end(); it = checkpoints.erase(it)) {
-            render_host_checkpoint_free(it->second);
+        for (auto it = checkpoints.upper_bound(frame); it != checkpoints.end();) {
+            it = drop(it);
         }
         dts.resize(static_cast<size_t>(std::max(frame, 0)));
+    }
+
+    // Past the budget, keeps every other checkpoint, so the interval doubles and coverage stays even.
+    void
+    thin() {
+        while (kept_bytes > budget && checkpoints.size() > 1) {
+            every *= 2;
+            for (auto it = checkpoints.begin(); it != checkpoints.end();) {
+                it = (it->first - 1) % every == 0 ? std::next(it) : drop(it);
+            }
+        }
     }
 };
 
@@ -110,8 +132,43 @@ Frames::dt_ms() const {
 }
 
 void
-Frames::keep_checkpoints() {
+Frames::keep_checkpoints(size_t budget_bytes) {
     state_->keep = true;
+    state_->budget = budget_bytes;
+    state_->thin();
+}
+
+int
+Frames::checkpoint_every() const {
+    return state_->every;
+}
+
+size_t
+Frames::checkpoint_bytes() const {
+    return state_->kept_bytes;
+}
+
+bool
+Frames::has_views() const {
+    return scene_provider.render_context != nullptr;
+}
+
+int
+Frames::view() const {
+    return has_views() ? scene_provider.render_context()->debug_view : RENDER_DEBUG_VIEW_SHADED;
+}
+
+bool
+Frames::set_view(int view) {
+    if (!has_views()) {
+        return false;
+    }
+    state_->view = view;
+    render_context_set_debug_view(scene_provider.render_context(), view);
+    if (state_->index > 0) {
+        (void)replay(state_->index - 1, true);
+    }
+    return true;
 }
 
 bool
@@ -122,11 +179,13 @@ Frames::step(uint32_t dt_ms) {
     }
     bool saved = true;
     // From frame 1: autana restores only state whose allocations the first frame made.
-    if (s.keep && s.index % CHECKPOINT_EVERY == 1 && !s.checkpoints.contains(s.index)) {
+    if (s.keep && s.index % s.every == 1 && !s.checkpoints.contains(s.index)) {
         render_host_checkpoint_t* checkpoint = render_host_save();
         saved = checkpoint != nullptr;
         if (saved) {
             s.checkpoints[s.index] = checkpoint;
+            s.kept_bytes += render_host_checkpoint_bytes(checkpoint);
+            s.thin();
         } else {
             std::fprintf(stderr, "loupe: no checkpoint before frame %d; seeks back past it will fail\n", s.index);
         }
@@ -142,11 +201,16 @@ Frames::step(uint32_t dt_ms) {
 
 bool
 Frames::seek(int index) {
+    return replay(index, false);
+}
+
+bool
+Frames::replay(int index, bool redraw) {
     State& s = *state_;
     if (index < 0) {
         return false;
     }
-    if (index < s.index - 1) {
+    if (index < s.index - 1 || (redraw && index == s.index - 1)) {
         auto from = s.checkpoints.upper_bound(index);
         if (from == s.checkpoints.begin()) {
             return false;
@@ -154,6 +218,9 @@ Frames::seek(int index) {
         --from;
         if (!render_host_restore(from->second)) {
             return false;
+        }
+        if (s.view) {
+            render_context_set_debug_view(scene_provider.render_context(), *s.view);
         }
         s.index = from->first;
     }
@@ -170,9 +237,22 @@ Frames::index() const {
 
 Frame
 Frames::frame() const {
-    size_t bytes = 0;
-    const uint8_t* pixels = render_host_pixels(&bytes);
-    return Frame(pixels, bytes);
+    const render_host_image_t image = render_host_image();
+    return {.bgr = std::span(image.bgr, image.stride * static_cast<size_t>(image.height)),
+            .width = image.width,
+            .height = image.height,
+            .stride = image.stride};
+}
+
+std::vector<DebugView>
+debug_views() {
+    std::vector<DebugView> views = {{.id = RENDER_DEBUG_VIEW_SHADED, .name = "shaded"}};
+    for (int id = RENDER_DEBUG_VIEW_SHADED + 1; id <= RENDER_DEBUG_VIEW_COUNT; id++) {
+        if (const render_debug_view_t* row = render_context_debug_view(id)) {
+            views.push_back({.id = id, .name = row->name});
+        }
+    }
+    return views;
 }
 
 std::optional<uint32_t>
