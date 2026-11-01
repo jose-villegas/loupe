@@ -7,22 +7,15 @@
 
 namespace loupe::window {
 
-namespace {
-
-// autana restores no state before frame 1 (autana-r73cu), so seeks start there.
-constexpr int FIRST_SEEKABLE = 1;
-
-} // namespace
-
 void
 draw_timeline(const Frames& frames, Timeline& timeline) {
     const int shown = frames.index() - 1;
-    const int last = std::max(frames.count() - 1, FIRST_SEEKABLE);
+    const int last = std::max(frames.count() - 1, Frames::FIRST_SEEKABLE);
     if (ImGui::Button(timeline.playing ? "Pause" : "Play")) {
         timeline.playing = !timeline.playing;
     }
     ImGui::SameLine();
-    ImGui::BeginDisabled(shown <= FIRST_SEEKABLE);
+    ImGui::BeginDisabled(shown <= Frames::FIRST_SEEKABLE);
     if (ImGui::ArrowButton("back", ImGuiDir_Left)) {
         timeline.seek_to = shown - 1;
     }
@@ -36,7 +29,7 @@ draw_timeline(const Frames& frames, Timeline& timeline) {
     ImGui::SameLine();
     int picked = shown;
     ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::SliderInt("##frame", &picked, FIRST_SEEKABLE, last, "frame %d")) {
+    if (ImGui::SliderInt("##frame", &picked, Frames::FIRST_SEEKABLE, last, "frame %d")) {
         timeline.seek_to = picked;
     }
 }
@@ -60,9 +53,6 @@ draw_view_picker(const std::vector<DebugView>& views, int* view) {
 
 void
 draw_frame(const FrameTexture& texture) {
-    if (texture.empty()) {
-        return;
-    }
     const ImVec2 room = ImGui::GetContentRegionAvail();
     const int zoom =
         std::max(1, std::min(static_cast<int>(room.x) / texture.width(), static_cast<int>(room.y) / texture.height()));

@@ -20,8 +20,9 @@ flowchart LR
 
 You need GCC (MinGW-w64 on Windows), CMake 3.25 or newer and the Python
 autana's pack tool runs on (`third_party/autana/scripts/lib/python-min-version`).
-On Linux, also the packages in `tools/ci/linux-packages.txt`. The window draws
-through Vulkan, loaded when it opens, so the build needs no Vulkan SDK.
+On Linux, also the packages in `tools/ci/linux-packages.txt`, which
+`tools/ci/install-linux-packages.sh` installs. The window draws through Vulkan,
+loaded when it opens, so the build needs no Vulkan SDK.
 
 ```bash
 git clone --recurse-submodules https://github.com/jose-villegas/loupe
@@ -75,7 +76,7 @@ The preset's test step (`ctest --preset default`) runs:
 | `seek` | a seek back through a checkpoint draws the bytes stepping straight there drew |
 | `thinning_*` | under a checkpoint budget the checkpoints stay within it, their interval doubles, and seeks still draw the straight bytes |
 | `view_switch` | a debug view picked mid-run, and kept through a seek back, draws what it drew when picked from the start |
-| `window_smoke` | the window opens and draws 10 ticks offscreen on Mesa's lavapipe; skipped where lavapipe is missing |
+| `window_smoke` | the window opens and draws 10 ticks offscreen on Mesa's lavapipe under the Khronos validation layer, with no validation error; skipped where either is missing |
 | `include_gate` | only `src/engine/autana.hpp` includes autana's headers |
 
 CI runs them on Linux and Windows at the pinned autana on every pull request,

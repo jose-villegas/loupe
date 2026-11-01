@@ -1,8 +1,6 @@
 // The engine's frame as one texture ImGui draws: a user texture the Vulkan
-// backend creates and uploads like its own font atlas.
+// backend creates, uploads and frees like its own font atlas.
 #pragma once
-
-#include <memory>
 
 #include "engine/frames.hpp"
 #include "imgui.h"
@@ -12,27 +10,18 @@ namespace loupe::window {
 
 class FrameTexture {
   public:
-    explicit FrameTexture(Gpu& gpu);
-    ~FrameTexture();
-    FrameTexture(const FrameTexture&) = delete;
-    FrameTexture& operator=(const FrameTexture&) = delete;
-    FrameTexture(FrameTexture&&) = delete;
-    FrameTexture& operator=(FrameTexture&&) = delete;
+    // At `first`'s size, which is the run's: autana fixes it when the run opens.
+    FrameTexture(Gpu& gpu, const Frame& first);
 
     // Takes `frame` for the next ImGui frame: BGR rows bottom-up become RGBA rows
-    // top-down, so it draws unflipped. A new size makes a new texture.
+    // top-down, so it draws unflipped.
     void upload(const Frame& frame);
-    // Nothing to draw before the first upload.
-    bool empty() const;
     ImTextureRef ref() const;
     int width() const;
     int height() const;
 
   private:
-    // Frees the texture, on the GPU and in ImGui's lists.
-    void release();
-    Gpu& gpu_;
-    std::unique_ptr<ImTextureData> texture_;
+    ImTextureData& texture_;
 };
 
 } // namespace loupe::window

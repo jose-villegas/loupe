@@ -9,7 +9,7 @@
 
 namespace loupe {
 
-constexpr size_t MIB = size_t{1024} * 1024;
+constexpr size_t MIB = size_t{1} << 20;
 // The window's checkpoint budget when --checkpoint-mb is left out.
 constexpr size_t DEFAULT_CHECKPOINT_MB = 1024;
 
@@ -23,10 +23,11 @@ struct Options {
     std::optional<uint32_t> dt_ms;    // --dt
     std::vector<std::string> sets;    // --set owner.name=value, repeatable
     std::string out_bmp, out_video;   // -o, --video
-    // Loupe's own, for the window: the checkpoints' memory budget, and how many
-    // ticks it runs before it closes itself (scripted runs; until closed by default).
-    size_t checkpoint_mb = DEFAULT_CHECKPOINT_MB; // --checkpoint-mb
-    std::optional<int> ticks;                     // --ticks
+    // Loupe's own, for the window only: the checkpoints' memory budget
+    // (DEFAULT_CHECKPOINT_MB), and how many ticks it runs before it closes itself
+    // (scripted runs; until closed by default).
+    std::optional<size_t> checkpoint_mb; // --checkpoint-mb
+    std::optional<int> ticks;            // --ticks
 };
 
 // False with `why` set for a command line it cannot run.

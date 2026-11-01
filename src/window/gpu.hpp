@@ -22,8 +22,9 @@ class Gpu {
     bool begin_frame();
     // Draws the ImGui frame and presents it.
     void end_frame();
-    // Frees `texture`'s GPU image now, after the frames that sample it finish.
-    void destroy_texture(ImTextureData* texture);
+    // A width x height RGBA texture ImGui can draw, uploaded by ImGui's Vulkan
+    // backend and freed with the Gpu; ImTextureDataQueueUpload() sends changes.
+    ImTextureData& add_texture(int width, int height);
 
   private:
     struct State;

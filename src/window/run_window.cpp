@@ -15,29 +15,32 @@ namespace loupe {
 
 namespace {
 
-// Applies what the panels asked for this tick; true when the frame on screen changed.
-// A failed step or seek clears `ok`.
+// Applies one of what the panels asked for this tick, a picked view first; true
+// when the frame on screen changed. A failure clears `ok`, and a failed step stops play.
 bool
 apply(Frames& frames, window::Timeline& timeline, const int* picked_view, bool* ok) {
-    bool changed = false;
     if (picked_view != nullptr) {
         // Draws the shown frame again under the view, playing or not.
-        frames.set_view(*picked_view);
-        changed = true;
+        *ok &= frames.set_view(*picked_view);
+        return true;
     }
     if (timeline.seek_to) {
         *ok &= frames.seek(*timeline.seek_to);
         timeline.seek_to.reset();
         return true;
     }
-    if (timeline.playing) {
-        if (frames.index() < frames.count()) {
-            *ok &= frames.step(frames.dt_ms());
-            return true;
-        }
+    if (!timeline.playing) {
+        return false;
+    }
+    if (frames.index() >= frames.count()) {
+        timeline.playing = false; // the run's last frame
+        return false;
+    }
+    if (!frames.step(frames.dt_ms())) {
+        *ok = false;
         timeline.playing = false;
     }
-    return changed;
+    return true;
 }
 
 } // namespace
@@ -51,10 +54,13 @@ run_window(Frames& frames, const Options& options) {
         std::fprintf(stderr, "loupe: %s\n", why.c_str());
         return false;
     }
-    frames.keep_checkpoints(options.checkpoint_mb * MIB);
-    bool ok = frames.step(frames.dt_ms());
-    window::FrameTexture texture(*gpu);
-    texture.upload(frames.frame());
+    frames.keep_checkpoints(options.checkpoint_mb.value_or(DEFAULT_CHECKPOINT_MB) * MIB);
+    // Opens on the first frame a seek reaches, so every control works from the start.
+    bool ok = true;
+    while (frames.index() <= Frames::FIRST_SEEKABLE) {
+        ok &= frames.step(frames.dt_ms());
+    }
+    window::FrameTexture texture(*gpu, frames.frame());
     window::Timeline timeline;
     const std::vector<DebugView> views = frames.has_views() ? debug_views() : std::vector<DebugView>{};
     for (int tick = 0; (!options.ticks || tick < *options.ticks) && gpu->begin_frame(); tick++) {

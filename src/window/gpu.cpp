@@ -16,6 +16,7 @@
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_vulkan.h"
+#include "imgui_internal.h"
 
 namespace loupe::window {
 
@@ -25,8 +26,8 @@ constexpr int WINDOW_WIDTH = 1280;
 constexpr int WINDOW_HEIGHT = 800;
 // Double-buffered: FIFO presents at the display's refresh.
 constexpr uint32_t MIN_IMAGE_COUNT = 2;
-// Sampled images: imgui's font atlas and the engine's frame, with room for a resize.
-constexpr uint32_t DESCRIPTOR_POOL_SIZE = 2 * IMGUI_IMPL_VULKAN_MINIMUM_SAMPLED_IMAGE_POOL_SIZE;
+// Sampled images: imgui's font atlas, and one per added texture (the engine's frame).
+constexpr uint32_t DESCRIPTOR_POOL_SIZE = IMGUI_IMPL_VULKAN_MINIMUM_SAMPLED_IMAGE_POOL_SIZE + 1;
 // How long a minimized window sleeps between looks at its events.
 constexpr int MINIMIZED_WAIT_MS = 10;
 // The app logo, assets/loupe.png, as CMake built it in.
@@ -65,12 +66,17 @@ struct Gpu::State {
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     ImGui_ImplVulkanH_Window swapchain;
     bool rebuild = false;
-    bool imgui = false;
+    // What of ImGui is up, for ~Gpu to take down.
+    bool imgui_context = false;
+    bool imgui_sdl = false;
+    bool imgui_vulkan = false;
+    // Freed after ImGui's Vulkan backend has freed their images.
+    std::vector<std::unique_ptr<ImTextureData>> textures;
 
     bool open_instance(std::string* why);
     bool open_device(std::string* why);
     bool open_swapchain(std::string* why);
-    void open_imgui();
+    bool open_imgui(std::string* why);
 
     // The semaphores of the frame being drawn.
     const ImGui_ImplVulkanH_FrameSemaphores&
@@ -84,9 +90,14 @@ struct Gpu::State {
 
 bool
 Gpu::State::open_instance(std::string* why) {
-    volkInitializeCustom(reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr()));
+    const SDL_FunctionPointer loader = SDL_Vulkan_GetVkGetInstanceProcAddr();
     uint32_t count = 0;
     const char* const* extensions = SDL_Vulkan_GetInstanceExtensions(&count);
+    if (loader == nullptr || extensions == nullptr) {
+        *why = std::format("no Vulkan loader: {}", SDL_GetError());
+        return false;
+    }
+    volkInitializeCustom(reinterpret_cast<PFN_vkGetInstanceProcAddr>(loader));
     VkApplicationInfo app = {};
     app.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
     app.pApplicationName = "loupe";
@@ -159,21 +170,30 @@ Gpu::State::open_swapchain(std::string* why) {
     SDL_GetWindowSizeInPixels(window, &width, &height);
     ImGui_ImplVulkanH_CreateOrResizeWindow(instance, physical, device, &swapchain, queue_family, nullptr, width, height,
                                            MIN_IMAGE_COUNT, 0);
+    // Before ImGui's Vulkan backend is up, its helpers say nothing of a failure.
+    if (swapchain.Swapchain == VK_NULL_HANDLE || swapchain.RenderPass == VK_NULL_HANDLE) {
+        *why = "no Vulkan swapchain for the window";
+        return false;
+    }
     return true;
 }
 
-void
-Gpu::State::open_imgui() {
+bool
+Gpu::State::open_imgui(std::string* why) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
-    imgui = true;
+    imgui_context = true;
     // No imgui.ini beside wherever Loupe was started.
     ImGui::GetIO().IniFilename = nullptr;
     ImGui::StyleColorsDark();
     const float scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
     ImGui::GetStyle().ScaleAllSizes(scale);
     ImGui::GetStyle().FontScaleDpi = scale;
-    ImGui_ImplSDL3_InitForVulkan(window);
+    imgui_sdl = ImGui_ImplSDL3_InitForVulkan(window);
+    if (!imgui_sdl) {
+        *why = "ImGui's SDL3 backend did not start";
+        return false;
+    }
     ImGui_ImplVulkan_InitInfo info = {};
     info.ApiVersion = VK_API_VERSION_1_1;
     info.Instance = instance;
@@ -187,7 +207,11 @@ Gpu::State::open_imgui() {
     info.PipelineInfoMain.RenderPass = swapchain.RenderPass;
     info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
     info.CheckVkResultFn = check;
-    ImGui_ImplVulkan_Init(&info);
+    imgui_vulkan = ImGui_ImplVulkan_Init(&info);
+    if (!imgui_vulkan) {
+        *why = "ImGui's Vulkan backend did not start";
+    }
+    return imgui_vulkan;
 }
 
 void
@@ -272,10 +296,9 @@ Gpu::open(const char* title, std::string* why) {
         return nullptr;
     }
     set_icon(s.window);
-    if (!s.open_instance(why) || !s.open_device(why) || !s.open_swapchain(why)) {
+    if (!s.open_instance(why) || !s.open_device(why) || !s.open_swapchain(why) || !s.open_imgui(why)) {
         return nullptr;
     }
-    s.open_imgui();
     return gpu;
 }
 
@@ -286,11 +309,16 @@ Gpu::~Gpu() {
     if (s.device != VK_NULL_HANDLE) {
         check(vkDeviceWaitIdle(s.device));
     }
-    if (s.imgui) {
+    if (s.imgui_vulkan) {
         ImGui_ImplVulkan_Shutdown();
+    }
+    if (s.imgui_sdl) {
         ImGui_ImplSDL3_Shutdown();
+    }
+    if (s.imgui_context) {
         ImGui::DestroyContext();
     }
+    s.textures.clear();
     if (s.swapchain.Swapchain != VK_NULL_HANDLE) {
         ImGui_ImplVulkanH_DestroyWindow(s.instance, s.device, &s.swapchain, nullptr);
     }
@@ -351,16 +379,13 @@ Gpu::end_frame() {
     }
 }
 
-void
-Gpu::destroy_texture(ImTextureData* texture) {
-    if (texture->TexID == ImTextureID_Invalid) {
-        return; // never reached the GPU
-    }
-    check(vkDeviceWaitIdle(state_->device));
-    // Past the frames in flight, the backend destroys a texture it is asked to at once.
-    texture->SetStatus(ImTextureStatus_WantDestroy);
-    texture->UnusedFrames = static_cast<int>(state_->swapchain.ImageCount);
-    ImGui_ImplVulkan_UpdateTexture(texture);
+ImTextureData&
+Gpu::add_texture(int width, int height) {
+    auto& texture = state_->textures.emplace_back(std::make_unique<ImTextureData>());
+    texture->Create(ImTextureFormat_RGBA32, width, height);
+    // The backend creates it at the next frame's end and frees it at shutdown.
+    ImGui::RegisterUserTexture(texture.get());
+    return *texture;
 }
 
 } // namespace loupe::window

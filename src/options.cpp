@@ -52,6 +52,17 @@ find_count_flag(const std::string& flag) {
     return found == std::end(COUNT_FLAGS) ? nullptr : found;
 }
 
+// False with `why` set when the window's own flags come with -o or --video, which open no window.
+bool
+window_flags_fit(const Options& options, std::string* why) {
+    const bool windowed = options.out_bmp.empty() && options.out_video.empty();
+    if (!windowed && (options.checkpoint_mb || options.ticks)) {
+        *why = "--checkpoint-mb and --ticks are for the window, not for -o or --video";
+        return false;
+    }
+    return true;
+}
+
 // Sets the option `flag` names to `value`; false with `why` set for an unknown
 // flag or a value it cannot take.
 bool
@@ -129,7 +140,7 @@ parse_options(int argc, char** argv, Options* options, std::string* why) {
             options->scene_toml.empty() ? "needs a scene file" : "expected a .scene.toml file: " + options->scene_toml;
         return false;
     }
-    return true;
+    return window_flags_fit(*options, why);
 }
 
 } // namespace loupe

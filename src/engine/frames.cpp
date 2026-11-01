@@ -26,10 +26,10 @@ struct Frames::State {
     std::vector<uint32_t> dts;                            // each drawn frame's dt, for replaying it
     std::map<int, render_host_checkpoint_t*> checkpoints; // the state before drawing frame key
 
-    // Checkpoints sit before frames 1, 1 + every, 1 + twice every...
+    // Checkpoints sit before frames FIRST_SEEKABLE, FIRST_SEEKABLE + every...
     bool
     on_grid(int frame) const {
-        return (frame - 1) % every == 0;
+        return (frame - Frames::FIRST_SEEKABLE) % every == 0;
     }
 
     std::map<int, render_host_checkpoint_t*>::iterator

@@ -6,15 +6,19 @@
 	path = third_party/SDL
 	url = https://github.com/libsdl-org/SDL.git
 	shallow = true
+	branch = release-3.4.18
 [submodule "third_party/Vulkan-Headers"]
 	path = third_party/Vulkan-Headers
 	url = https://github.com/KhronosGroup/Vulkan-Headers.git
 	shallow = true
+	branch = vulkan-sdk-1.4.363.0
 [submodule "third_party/volk"]
 	path = third_party/volk
 	url = https://github.com/zeux/volk.git
 	shallow = true
+	branch = vulkan-sdk-1.4.363.0
 [submodule "third_party/imgui"]
 	path = third_party/imgui
 	url = https://github.com/ocornut/imgui.git
 	shallow = true
+	branch = v1.93.0

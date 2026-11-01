@@ -1,5 +1,6 @@
-// Bump pull requests for every pin Loupe holds: autana (the submodule), the
-// GitHub Actions and the CI tools in tools/ci/requirements.txt. Validated by
+// Bump pull requests for every pin Loupe holds: the submodules (autana, and
+// the window's SDL3, Vulkan-Headers, volk and Dear ImGui), the GitHub Actions
+// and the CI tools in tools/ci/requirements.txt. Validated by
 // .github/workflows/standards.yml.
 {
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
@@ -31,7 +32,31 @@
   packageRules: [
     // A major is a migration with its own ticket, opened from the dependency dashboard.
     {matchUpdateTypes: ['major'], dependencyDashboardApproval: true},
-    {matchManagers: ['git-submodules'], groupName: 'autana', groupSlug: 'autana'},
+    // autana follows its main; the window's libraries follow the release tag
+    // .gitmodules names as their branch, each library its own group.
+    {matchManagers: ['git-submodules'], matchDepNames: ['third_party/autana'], groupName: 'autana', groupSlug: 'autana'},
+    {
+      matchManagers: ['git-submodules'],
+      matchDepNames: ['third_party/SDL'],
+      versioning: 'regex:^release-(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$',
+      groupName: 'SDL3',
+      groupSlug: 'sdl3',
+    },
+    {
+      matchManagers: ['git-submodules'],
+      matchDepNames: ['third_party/imgui'],
+      versioning: 'regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$',
+      groupName: 'Dear ImGui',
+      groupSlug: 'imgui',
+    },
+    {
+      // volk is generated from the headers of the same SDK release, so they move together.
+      matchManagers: ['git-submodules'],
+      matchDepNames: ['third_party/Vulkan-Headers', 'third_party/volk'],
+      versioning: 'regex:^vulkan-sdk-(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)\\.(?<build>\\d+)$',
+      groupName: 'Vulkan SDK',
+      groupSlug: 'vulkan-sdk',
+    },
     {matchManagers: ['github-actions'], groupName: 'GitHub Actions', groupSlug: 'github-actions'},
     {matchManagers: ['pip_requirements'], groupName: 'CI tools', groupSlug: 'ci-tools'},
   ],
