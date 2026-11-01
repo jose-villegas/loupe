@@ -47,6 +47,10 @@ apply(Frames& frames, window::Timeline& timeline, const int* picked_view, bool* 
 
 bool
 run_window(Frames& frames, const Options& options) {
+    if (frames.count() <= Frames::FIRST_SEEKABLE) {
+        std::fprintf(stderr, "loupe: the window needs a run of more than %d frames\n", Frames::FIRST_SEEKABLE);
+        return false;
+    }
     std::string why;
     const std::string title = std::format("loupe: {}", scene_id(options.scene_toml));
     const std::unique_ptr<window::Gpu> gpu = window::Gpu::open(title.c_str(), &why);
