@@ -1,0 +1,4 @@
+[submodule "third_party/autana"]
+	path = third_party/autana
+	url = https://github.com/jose-villegas/autana.git
+	shallow = true

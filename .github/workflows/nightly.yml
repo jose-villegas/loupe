@@ -1,0 +1,47 @@
+name: Nightly against autana main
+
+# The build and tests against autana's main instead of the pin, so a change
+# there that breaks Loupe shows the next morning. One issue stays open while
+# it fails and closes when it is green again; nothing else notifies.
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      autana-ref: main
+
+  issue:
+    needs: build
+    if: ${{ always() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TITLE: Loupe fails against autana main
+      RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      RESULT: ${{ needs.build.result }}
+    steps:
+      - name: Open, keep or close the issue
+        run: |
+          open=$(gh issue list --state open --limit 100 --json number,title \
+            --jq "map(select(.title == \"$TITLE\"))[0].number // empty")
+          if [ "$RESULT" = success ]; then
+            [ -z "$open" ] || gh issue close "$open" --comment "Green again: $RUN"
+          elif [ "$RESULT" = failure ]; then
+            if [ -z "$open" ]; then
+              gh issue create --title "$TITLE" --body "The nightly build against autana's main failed: $RUN"
+            else
+              gh issue comment "$open" --body "Still failing: $RUN"
+            fi
+          fi
