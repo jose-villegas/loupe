@@ -16,7 +16,7 @@ namespace loupe {
 using Frame = std::span<const uint8_t>;
 
 class Frames {
-public:
+  public:
     // With checkpoints kept, the state before frames 1, 1 + this, 1 + twice this... is saved.
     static constexpr int CHECKPOINT_EVERY = 30;
 
@@ -25,6 +25,8 @@ public:
     ~Frames();
     Frames(const Frames&) = delete;
     Frames& operator=(const Frames&) = delete;
+    Frames(Frames&&) = delete;
+    Frames& operator=(Frames&&) = delete;
 
     // The run's frame count and dt as it opened: the options', else the provider's defaults.
     int count() const;
@@ -44,10 +46,10 @@ public:
     // Writes what -o and --video ask for; false when the run failed.
     bool close();
 
-private:
+  private:
     struct State;
     explicit Frames(std::unique_ptr<State> state);
     std::unique_ptr<State> state_;
 };
 
-}  // namespace loupe
+} // namespace loupe

@@ -1,0 +1,74 @@
+# GENERATED FILE - do not edit.
+# python tools/gen/standards_config.py clang-format > .clang-format
+
+# The C format for this repository, as deviations from clang-format's LLVM
+# style. Anything absent here is that style's default, so this file lists
+# only what was actually decided - see docs/c-style/README.md for the prose
+# and scripts/gates/format-file-list.sh for which files it applies to.
+#
+# One clang-format major version and no other: the esp-clang release
+# launcher/idf-pin.json pins. Major versions disagree about C on this tree,
+# and a file of deviations leans on one version's defaults, so the pin is
+# what makes it reproducible: scripts/gates/check-format.sh enforces it and
+# .github/workflows/format.yml installs it.
+#
+# No `Language:` key, deliberately: clang-format handles C and C++ under one
+# Cpp language, and every option below is one that C uses.
+---
+BasedOnStyle: LLVM
+
+# Four spaces, 120 columns, and `case` indented inside its switch.
+IndentWidth: 4
+ColumnLimit: 120
+IndentCaseLabels: true
+
+# `static int` on its own line above the function name, pointers bound to
+# the type (`gfx_color_t* fb`), and control-statement bodies always braced -
+# clang-format adds the braces rather than reporting them.
+BreakAfterReturnType: AllDefinitions
+PointerAlignment: Left
+InsertBraces: true
+
+# Function attributes spelled as macros, so the return type still breaks
+# above the name.
+AttributeMacros: [CODE_ENTRY_OFFSET]
+
+# A wrapped expression breaks before the operator, so the operator starts
+# the continuation line and says what the line is doing.
+BreakBeforeBinaryOperators: NonAssignment
+
+# `{}` may stay on one line but a block with statements in it may not; a
+# one-line `case` may.
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: true
+
+# Blank line between definitions, and never reflow a comment: the comments
+# here are wrapped by hand around what they say, and re-filling them would
+# rewrite that.
+SeparateDefinitionBlocks: Always
+ReflowComments: false
+
+# Align a run of #defines, and a run of bitfields, through blank lines and
+# comments - both are usually tables, and a table reads down its columns.
+# Declarations are not: `None` here also has to spell out that alignment
+# stays off, because clang-format's shorthand for it is not its default.
+AlignConsecutiveMacros:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+AlignConsecutiveBitFields:
+  Enabled: true
+  AcrossEmptyLines: true
+  AcrossComments: true
+AlignConsecutiveDeclarations: None
+
+# System headers before project headers, sorted within each block. Blocks
+# themselves are preserved (the LLVM default), which is what keeps a file's
+# own header in its own block above the rest.
+IncludeCategories:
+  - Regex: "^<(.*)>"
+    Priority: 0
+  - Regex: '^"(.*)"'
+    Priority: 1
+  - Regex: "(.*)"
+    Priority: 2
