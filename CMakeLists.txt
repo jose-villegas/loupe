@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21...3.31)
+cmake_minimum_required(VERSION 3.25...3.31)
 project(loupe LANGUAGES C CXX)
 
 set(AUTANA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/autana" CACHE PATH
@@ -11,6 +11,8 @@ find_package(Python3 ${python_min} REQUIRED COMPONENTS Interpreter)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Loupe has no modules; the scan adds gcc-only flags clang-tidy refuses.
+set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -19,10 +21,16 @@ if(MINGW)
     add_link_options(-static)
 endif()
 
-add_subdirectory("${AUTANA_DIR}/launcher/tools/render" autana)
+# autana's C++ rules: sanitizers (AUTANA_CPP_SANITIZE) before its subdirectory,
+# so they cover its C too; flags and clang-tidy (AUTANA_CPP_CLANG_TIDY) after it,
+# on Loupe's own C++. SYSTEM: autana's headers answer to autana's warnings.
+include("${AUTANA_DIR}/scripts/cpp/standards.cmake")
+autana_cpp_sanitize()
+add_subdirectory("${AUTANA_DIR}/launcher/tools/render" autana SYSTEM)
+autana_cpp_checks()
 
 # Everything but the command line. Autana's sources compile into this library
-# alone; its usage requirements stay private, and only src/engine/autana.h
+# alone; its usage requirements stay private, and only src/engine/autana.hpp
 # includes autana's headers (tests/include_gate.cmake). Objects, not an
 # archive: an archive would keep render_host.c's weak stand-ins and drop the
 # scene manager's real definitions.

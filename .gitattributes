@@ -1,0 +1,3 @@
+# Every text file is stored and checked out with LF, on every platform: the
+# gates compare generated files and formatting byte for byte.
+* text=auto eol=lf
