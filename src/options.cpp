@@ -12,10 +12,6 @@ namespace {
 
 constexpr const char SCENE_SUFFIX[] = ".scene.toml";
 
-bool ends_with(const std::string& text, const std::string& suffix) {
-    return text.size() >= suffix.size() && text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0;
-}
-
 // A whole decimal number from `least` to `most`; false for anything else.
 bool parse_count(const std::string& text, long long least, long long most, long long* value) {
     char* end = nullptr;
@@ -82,7 +78,7 @@ bool parse_options(int argc, char** argv, Options* options, std::string* why) {
             return false;
         }
     }
-    if (!ends_with(options->scene_toml, SCENE_SUFFIX)) {
+    if (!options->scene_toml.ends_with(SCENE_SUFFIX)) {
         *why = options->scene_toml.empty() ? "needs a scene file" : "expected a .scene.toml file: " + options->scene_toml;
         return false;
     }
