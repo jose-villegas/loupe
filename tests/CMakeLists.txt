@@ -21,3 +21,20 @@ add_executable(seek_test seek_test.cpp)
 target_link_libraries(seek_test PRIVATE loupe_core)
 add_test(NAME seek COMMAND seek_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/seek.bmp")
 set_tests_properties(seek PROPERTIES RESOURCE_LOCK sponza)
+
+add_executable(thinning_test thinning_test.cpp)
+target_link_libraries(thinning_test PRIVATE loupe_core)
+# Budgets of 1.5, 3.5 and 4.5 checkpoints: by the test's last frame they thin three, two and one times.
+foreach(budget IN ITEMS "3;3" "7;2" "9;1")
+    list(GET budget 0 halves)
+    list(GET budget 1 thinnings)
+    add_test(NAME thinning_${halves} COMMAND thinning_test "${sponza}"
+             "${CMAKE_CURRENT_BINARY_DIR}/thinning_${halves}.bmp" ${halves} ${thinnings})
+    set_tests_properties(thinning_${halves} PROPERTIES RESOURCE_LOCK sponza)
+endforeach()
+
+add_executable(view_test view_test.cpp)
+target_link_libraries(view_test PRIVATE loupe_core)
+add_test(NAME view_switch COMMAND "${CMAKE_COMMAND}" "-DVIEW_TEST=$<TARGET_FILE:view_test>" "-DSCENE=${sponza}"
+         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/view_switch" -P "${CMAKE_CURRENT_SOURCE_DIR}/view_test.cmake")
+set_tests_properties(view_switch PROPERTIES RESOURCE_LOCK sponza)
