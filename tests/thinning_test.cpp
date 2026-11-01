@@ -1,12 +1,8 @@
 // Under a checkpoint budget the kept checkpoints stay within it, the interval
 // doubles per thinning, and a seek still draws the bytes stepping straight drew.
-#include <algorithm>
 #include <climits>
 #include <cstdio>
-#include <iterator>
 #include <limits>
-#include <map>
-#include <vector>
 
 #include "frames_fixture.hpp"
 
@@ -23,6 +19,36 @@ constexpr size_t SIZE_SLACK_PARTS = 8;
 // Past this, EVERY doubled that many times overflows an int.
 constexpr long long MAX_THINNINGS = 24;
 
+// Judges each step: the kept checkpoints within the budget, and each one saved
+// about the size of the first, the one kept when the watch starts.
+class BudgetWatch {
+  public:
+    BudgetWatch(const loupe::Frames& frames, size_t budget)
+        : frames_(frames), one_(frames.checkpoint_bytes()), budget_(budget), last_(one_) {}
+
+    bool
+    operator()(int shown) {
+        const size_t now = frames_.checkpoint_bytes();
+        // A step that saved without thinning grows the total by exactly that checkpoint.
+        const size_t added = now > last_ ? now - last_ : 0;
+        last_ = now;
+        if (now > budget_) {
+            std::fprintf(stderr, "%s: %zu bytes kept at frame %d, over %zu\n", TEST, now, shown, budget_);
+            return false;
+        }
+        if (added != 0 && (added > one_ ? added - one_ : one_ - added) * SIZE_SLACK_PARTS > one_) {
+            std::fprintf(stderr, "%s: checkpoint before frame %d is %zu bytes, the first %zu\n", TEST, shown, added,
+                         one_);
+            return false;
+        }
+        return true;
+    }
+
+  private:
+    const loupe::Frames& frames_;
+    size_t one_, budget_, last_;
+};
+
 } // namespace
 
 int
@@ -35,7 +61,7 @@ main(int argc, char** argv) {
         std::fprintf(stderr, "usage: thinning_test SCENE.scene.toml out.bmp HALVES THINNINGS\n");
         return 2;
     }
-    std::unique_ptr<loupe::Frames> frames = loupe::test::open_scene(TEST, argv[1], argv[2]);
+    std::unique_ptr<loupe::Frames> frames = loupe::test::open_or_report(TEST, loupe::test::scene_args(argv));
     if (frames == nullptr) {
         return 1;
     }
@@ -47,34 +73,13 @@ main(int argc, char** argv) {
     const size_t budget = one * static_cast<size_t>(halves) / 2;
     frames->keep_checkpoints(budget);
 
-    std::map<int, std::vector<uint8_t>> straight;
-    while (frames->index() < STRAIGHT_TO) {
-        const size_t before = frames->checkpoint_bytes();
-        ok &= frames->step(frames->dt_ms());
-        const int shown = frames->index() - 1;
-        if (std::ranges::find(TARGETS, shown) != std::end(TARGETS)) {
-            straight[shown] = loupe::test::pixels(*frames);
-        }
-        const size_t after = frames->checkpoint_bytes();
-        if (after > budget) {
-            std::fprintf(stderr, "%s: %zu bytes kept at frame %d, over %zu\n", TEST, after, shown, budget);
-            ok = false;
-        }
-        // A step that saved without thinning grows the total by exactly that checkpoint.
-        const size_t added = after > before ? after - before : 0;
-        if (added != 0 && (added > one ? added - one : one - added) * SIZE_SLACK_PARTS > one) {
-            std::fprintf(stderr, "%s: checkpoint before frame %d is %zu bytes, the first %zu\n", TEST, shown, added,
-                         one);
-            ok = false;
-        }
-    }
+    loupe::test::Straight straight;
+    ok &= loupe::test::step_straight(*frames, STRAIGHT_TO, TARGETS, &straight, BudgetWatch(*frames, budget));
     const int expected_every = EVERY << static_cast<int>(thinnings);
     if (frames->checkpoint_every() != expected_every) {
         std::fprintf(stderr, "%s: every %d, not %d\n", TEST, frames->checkpoint_every(), expected_every);
         ok = false;
     }
-    for (const int target : TARGETS) {
-        ok &= loupe::test::same(TEST, *frames, target, straight[target], "thinned");
-    }
+    ok &= loupe::test::same_each(TEST, *frames, TARGETS, straight, "thinned");
     return frames->close() && ok ? 0 : 1;
 }
