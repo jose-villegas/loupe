@@ -1,6 +1,6 @@
-#include "pack.h"
+#include "pack.hpp"
 
-#include "options.h"
+#include "options.hpp"
 
 #include <cstdint>
 #include <cstdio>

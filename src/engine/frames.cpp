@@ -1,4 +1,4 @@
-#include "engine/frames.h"
+#include "engine/frames.hpp"
 
 #include <algorithm>
 #include <cstdio>
@@ -7,8 +7,8 @@
 #include <map>
 #include <vector>
 
-#include "engine/autana.h"
-#include "pack.h"
+#include "engine/autana.hpp"
+#include "pack.hpp"
 
 namespace loupe {
 

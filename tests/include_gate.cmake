@@ -1,9 +1,9 @@
-# Fails when any file under src/ or tests/ but src/engine/autana.h includes a
+# Fails when any file under src/ or tests/ but src/engine/autana.hpp includes a
 # header from autana's tree. Each include resolves as the compiler finds it:
 # a quoted one beside its file first, then along INCLUDE_DIRS in order.
 file(STRINGS "${INCLUDE_DIRS}" include_dirs)
 file(REAL_PATH "${AUTANA_DIR}" autana)
-file(REAL_PATH "${SOURCE_DIR}/src/engine/autana.h" seam)
+file(REAL_PATH "${SOURCE_DIR}/src/engine/autana.hpp" seam)
 file(GLOB_RECURSE sources "${SOURCE_DIR}/src/*" "${SOURCE_DIR}/tests/*")
 
 set(reaches "")
@@ -38,7 +38,7 @@ endforeach()
 
 if(reaches)
     list(JOIN reaches "\n  " listed)
-    message(FATAL_ERROR "Only src/engine/autana.h includes autana's headers:\n  ${listed}")
+    message(FATAL_ERROR "Only src/engine/autana.hpp includes autana's headers:\n  ${listed}")
 endif()
 list(LENGTH sources count)
-message(STATUS "${count} files, none reaching into ${autana} but src/engine/autana.h")
+message(STATUS "${count} files, none reaching into ${autana} but src/engine/autana.hpp")
