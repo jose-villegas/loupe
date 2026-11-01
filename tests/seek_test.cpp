@@ -1,5 +1,6 @@
 // Seeking to frame N through a checkpoint draws the bytes stepping straight to N drew.
 #include <cstdio>
+#include <limits>
 #include <map>
 #include <string>
 #include <vector>
@@ -22,7 +23,7 @@ constexpr int RETIMED_TO = EVERY + 12;
 std::vector<uint8_t>
 pixels(const loupe::Frames& frames) {
     const loupe::Frame frame = frames.frame();
-    return std::vector<uint8_t>(frame.begin(), frame.end());
+    return std::vector<uint8_t>(frame.bgr.begin(), frame.bgr.end());
 }
 
 bool
@@ -50,7 +51,7 @@ main(int argc, char** argv) {
         std::fprintf(stderr, "seek_test: %s\n", why.c_str());
         return 1;
     }
-    frames->keep_checkpoints();
+    frames->keep_checkpoints(std::numeric_limits<size_t>::max());
 
     bool ok = true;
     std::map<int, std::vector<uint8_t>> straight;
