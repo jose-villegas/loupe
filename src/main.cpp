@@ -16,7 +16,7 @@ namespace {
 // A window run's stand-in for -o. autana's close writes the last frame, to stdout
 // without -o, and with it captures the engine's stdout beside the image
 // (out.bmp.console). The window wants neither, so both go to a scratch file this
-// removes (autana-kl3ab: a close that writes no image).
+// removes, until autana can close a run without writing an image.
 class ScratchImage {
   public:
     ScratchImage()

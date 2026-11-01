@@ -36,7 +36,7 @@ class Frames {
     // until thinning doubles the interval.
     static constexpr int CHECKPOINT_EVERY = 30;
     // The first frame a seek reaches: the first checkpoint is saved before it, and
-    // autana restores no state from before frame 1 (autana-r73cu).
+    // autana restores no state from before frame 1.
     static constexpr int FIRST_SEEKABLE = 1;
 
     // The scene provider on `options`' scene file, its pack built first.
