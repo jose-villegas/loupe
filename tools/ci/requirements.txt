@@ -1,6 +1,8 @@
 # The tools CI and the hooks run beside autana's gates. clang-format and
 # clang-tidy must be the LLVM major autana pins (its scripts/lib/pinned_tool.py
 # refuses another), so a bump past it fails CI until autana's pin moves.
+# shellcheck is the one autana's check-shell-scripts.sh runs, on every runner.
 clang-format==21.1.8
 clang-tidy==21.1.6
 ninja==1.13.2
+shellcheck-py==0.11.0.1
