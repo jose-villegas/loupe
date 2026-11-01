@@ -58,6 +58,9 @@ jobs:
           python-version-file: third_party/autana/.python-version
       - name: Build tools
         run: python -m pip install -r tools/ci/requirements.txt
+      - name: Linux packages
+        if: ${{ runner.os == 'Linux' }}
+        run: sudo apt-get update && grep -v '^#' tools/ci/linux-packages.txt | xargs sudo apt-get install -y --no-install-recommends
       - name: Build and test
         run: cmake --workflow --preset default
       # Also run before a push that changes C++ or CMake (README, Standards).

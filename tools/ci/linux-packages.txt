@@ -1,0 +1,7 @@
+# Debian/Ubuntu packages a Linux build needs beyond a compiler, one per line:
+# X11 headers for SDL's windows, and Mesa's lavapipe (Vulkan on the CPU) for
+# the window_smoke test. CI installs them with:
+#   grep -v '^#' tools/ci/linux-packages.txt | xargs sudo apt-get install -y --no-install-recommends
+libx11-dev
+libxext-dev
+mesa-vulkan-drivers
