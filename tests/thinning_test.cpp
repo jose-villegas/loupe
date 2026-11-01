@@ -2,7 +2,6 @@
 // doubles per thinning, and a seek still draws the bytes stepping straight drew.
 #include <climits>
 #include <cstdio>
-#include <limits>
 
 #include "frames_fixture.hpp"
 
@@ -18,6 +17,7 @@ const int TARGETS[] = {STRAIGHT_TO - 1, 4 * EVERY + 2, 4 * EVERY, 2 * EVERY + 5,
 constexpr size_t SIZE_SLACK_PARTS = 8;
 // Past this, EVERY doubled that many times overflows an int.
 constexpr long long MAX_THINNINGS = 24;
+constexpr const char USAGE[] = "SCENE.scene.toml out.bmp HALVES THINNINGS";
 
 // Judges each step: the kept checkpoints within the budget, and each one saved
 // about the size of the first, the one kept when the watch starts.
@@ -58,16 +58,15 @@ main(int argc, char** argv) {
     long long thinnings = 0;
     if (argc != 5 || !loupe::parse_count(argv[3], 1, INT_MAX, &halves)
         || !loupe::parse_count(argv[4], 0, MAX_THINNINGS, &thinnings)) {
-        std::fprintf(stderr, "usage: thinning_test SCENE.scene.toml out.bmp HALVES THINNINGS\n");
+        std::fprintf(stderr, "usage: %s %s\n", TEST, USAGE);
         return 2;
     }
-    std::unique_ptr<loupe::Frames> frames = loupe::test::open_or_report(TEST, loupe::test::scene_args(argv));
+    // The first checkpoint's size sets the budget.
+    std::unique_ptr<loupe::Frames> frames =
+        loupe::test::open_test(TEST, std::span(argv, static_cast<size_t>(argc)), 5, USAGE);
     if (frames == nullptr) {
         return 1;
     }
-
-    // The first checkpoint's size sets the budget.
-    frames->keep_checkpoints(std::numeric_limits<size_t>::max());
     bool ok = frames->step(frames->dt_ms()) && frames->step(frames->dt_ms());
     const size_t one = frames->checkpoint_bytes();
     const size_t budget = one * static_cast<size_t>(halves) / 2;
