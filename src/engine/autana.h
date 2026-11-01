@@ -6,8 +6,6 @@
 extern "C" {
 #include "asset/asset_store.h"
 #include "render_host.h"
-
-// The scene-file provider, launcher/tools/render/scene_viewer.c.
-extern const frame_provider_t scene_provider;
+#include "scene_viewer.h"
 }
 #undef _Static_assert

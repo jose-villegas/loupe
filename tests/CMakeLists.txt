@@ -1,5 +1,5 @@
 set(sponza "${AUTANA_DIR}/launcher/demo/sponza/sponza.scene.toml")
-find_program(SH NAMES sh bash REQUIRED)
+find_program(SH NAMES sh REQUIRED)
 
 # The include path loupe_core compiles with, in order, for the gate to resolve includes against.
 file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/include_dirs.txt"
@@ -14,7 +14,7 @@ function(parity name args)
              "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/parity_${name}" -P "${CMAKE_CURRENT_SOURCE_DIR}/parity.cmake")
     set_tests_properties(parity_${name} PROPERTIES RESOURCE_LOCK sponza)
 endfunction()
-parity(defaults "--frames|3|--dt|100")
+parity(defaults "")
 parity(every_flag "--object|atrium|--camera|tour|--view|meshlets|--set|render.batched=0|--frames|4|--dt|50|--video")
 
 add_executable(seek_test seek_test.cpp)

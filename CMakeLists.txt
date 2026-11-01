@@ -6,7 +6,8 @@ set(AUTANA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/autana" CACHE PATH
 if(NOT EXISTS "${AUTANA_DIR}/launcher/tools/render/CMakeLists.txt")
     message(FATAL_ERROR "No autana at ${AUTANA_DIR}: run `git submodule update --init` or pass -DAUTANA_DIR=<path>")
 endif()
-find_package(Python3 3.11 REQUIRED COMPONENTS Interpreter)
+file(STRINGS "${AUTANA_DIR}/scripts/lib/python-min-version" python_min LIMIT_COUNT 1)
+find_package(Python3 ${python_min} REQUIRED COMPONENTS Interpreter)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -21,8 +22,8 @@ endif()
 add_subdirectory("${AUTANA_DIR}/launcher/tools/render" autana)
 
 # Everything but the command line. Autana's sources compile into this library
-# alone; its usage requirements stay private, so only src/engine/ can reach
-# autana's headers (tests/include_gate.cmake checks the rest). Objects, not an
+# alone; its usage requirements stay private, and only src/engine/autana.h
+# includes autana's headers (tests/include_gate.cmake). Objects, not an
 # archive: an archive would keep render_host.c's weak stand-ins and drop the
 # scene manager's real definitions.
 add_library(loupe_core OBJECT

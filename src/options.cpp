@@ -1,6 +1,10 @@
 #include "options.h"
 
+#include <cerrno>
+#include <climits>
+#include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 
 namespace loupe {
 
@@ -12,14 +16,20 @@ bool ends_with(const std::string& text, const std::string& suffix) {
     return text.size() >= suffix.size() && text.compare(text.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
-// A whole decimal number at least `least`; false for anything else.
-bool parse_count(const std::string& text, long least, long* value) {
+// A whole decimal number from `least` to `most`; false for anything else.
+bool parse_count(const std::string& text, long long least, long long most, long long* value) {
     char* end = nullptr;
-    *value = std::strtol(text.c_str(), &end, 10);
-    return !text.empty() && *end == '\0' && *value >= least;
+    errno = 0;
+    *value = std::strtoll(text.c_str(), &end, 10);
+    return !text.empty() && *end == '\0' && errno == 0 && *value >= least && *value <= most;
 }
 
 }  // namespace
+
+std::string scene_id(const std::string& scene_toml) {
+    const std::string name = std::filesystem::path(scene_toml).filename().string();
+    return name.substr(0, name.size() - (sizeof SCENE_SUFFIX - 1));
+}
 
 const char* usage() {
     return "usage: loupe SCENE.scene.toml [--object NAME ...] [--camera NAME] [--view NAME]\n"
@@ -42,7 +52,7 @@ bool parse_options(int argc, char** argv, Options* options, std::string* why) {
             return false;
         }
         const std::string value = argv[++i];
-        long count = 0;
+        long long count = 0;
         if (flag == "--object") {
             options->objects.push_back(value);
         } else if (flag == "--camera") {
@@ -50,13 +60,13 @@ bool parse_options(int argc, char** argv, Options* options, std::string* why) {
         } else if (flag == "--view") {
             options->view = value;
         } else if (flag == "--frames") {
-            if (!parse_count(value, 1, &count)) {
+            if (!parse_count(value, 1, INT_MAX, &count)) {
                 *why = "--frames is a whole number from 1, not " + value;
                 return false;
             }
             options->frames = static_cast<int>(count);
         } else if (flag == "--dt") {
-            if (!parse_count(value, 0, &count)) {
+            if (!parse_count(value, 0, UINT32_MAX, &count)) {
                 *why = "--dt is whole milliseconds, not " + value;
                 return false;
             }

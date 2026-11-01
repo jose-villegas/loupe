@@ -9,14 +9,14 @@ video from the command line; a window with a scrubber and a view picker comes ne
 flowchart LR
   cli["loupe (command line)"] --> core["loupe_core: Frames, options, pack"]
   core -- "render_host_open / step / save / restore / close" --> autana["autana::scene_provider<br/>(submodule third_party/autana)"]
-  core -- "when the scene changed" --> pack["autana's build_pack.py<br/>into build/packs"]
+  core -- "every run" --> pack["autana's build_pack.py<br/>into build/packs"]
   pack -- "AUTANA_ASSET_DIR" --> autana
 ```
 
 ## Build
 
-You need GCC (MinGW-w64 on Windows), CMake 3.21 or newer and Python 3.11 or
-newer, which autana's pack tool runs on.
+You need GCC (MinGW-w64 on Windows), CMake 3.21 or newer and the Python
+autana's pack tool runs on (`third_party/autana/scripts/lib/python-min-version`).
 
 ```bash
 git clone --recurse-submodules https://github.com/jose-villegas/loupe
@@ -42,7 +42,7 @@ loupe/build/loupe loupe/third_party/autana/launcher/demo/sponza/sponza.scene.tom
 | `-o out.bmp`, `--video out.avi` | the last frame, every frame |
 
 The flags are autana's `scene_viewer.sh` flags, and the output is the same bytes.
-The scene's pack is built on the first run and again only when its folder changes.
+Each run brings the scene's pack in `build/packs` up to date with autana's `build_pack.py`.
 
 ## Tests
 

@@ -21,8 +21,9 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "loupe: %s\n", why.c_str());
         return 1;
     }
-    for (int i = 0; i < options.frames; i++) {
-        frames->step(options.dt_ms);
+    const int count = frames->count();
+    for (int i = 0; i < count; i++) {
+        frames->step(frames->dt_ms());
     }
     return frames->close() ? 0 : 1;
 }
