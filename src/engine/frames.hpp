@@ -8,7 +8,7 @@
 #include <span>
 #include <string>
 
-#include "options.h"
+#include "options.hpp"
 
 namespace loupe {
 

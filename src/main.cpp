@@ -2,8 +2,8 @@
 #include <cstdio>
 #include <string>
 
-#include "engine/frames.h"
-#include "options.h"
+#include "engine/frames.hpp"
+#include "options.hpp"
 
 int
 main(int argc, char** argv) {

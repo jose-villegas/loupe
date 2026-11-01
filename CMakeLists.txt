@@ -26,7 +26,7 @@ include(cmake/standards.cmake)
 add_subdirectory("${AUTANA_DIR}/launcher/tools/render" autana SYSTEM)
 
 # Everything but the command line. Autana's sources compile into this library
-# alone; its usage requirements stay private, and only src/engine/autana.h
+# alone; its usage requirements stay private, and only src/engine/autana.hpp
 # includes autana's headers (tests/include_gate.cmake). Objects, not an
 # archive: an archive would keep render_host.c's weak stand-ins and drop the
 # scene manager's real definitions.

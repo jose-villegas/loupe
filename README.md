@@ -52,7 +52,7 @@ Each run brings the scene's pack in `build/packs` up to date with autana's `thir
 |---|---|
 | `parity_*` | `loupe` writes the same bytes as autana's scene viewer for the same arguments |
 | `seek` | a seek back through a checkpoint draws the bytes stepping straight there drew |
-| `include_gate` | only `src/engine/autana.h` includes autana's headers |
+| `include_gate` | only `src/engine/autana.hpp` includes autana's headers |
 
 CI runs them on Linux and Windows at the pinned autana on every pull request,
 and nightly against autana's `main`, keeping one issue open while that fails.
