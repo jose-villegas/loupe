@@ -1,0 +1,72 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "default",
+      "displayName": "GCC, Ninja",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "sanitize",
+      "displayName": "UBSan, and ASan on Linux",
+      "inherits": "default",
+      "cacheVariables": { "AUTANA_CPP_SANITIZE": "ON" }
+    },
+    {
+      "name": "tidy",
+      "displayName": "clang-tidy on every C++ file",
+      "inherits": "default",
+      "cacheVariables": { "AUTANA_CPP_CLANG_TIDY": "ON" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "default", "configurePreset": "default" },
+    { "name": "sanitize", "configurePreset": "sanitize" },
+    { "name": "tidy", "configurePreset": "tidy" }
+  ],
+  "testPresets": [
+    {
+      "name": "default",
+      "configurePreset": "default",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    {
+      "name": "sanitize",
+      "inherits": "default",
+      "configurePreset": "sanitize",
+      "environment": { "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1" }
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "default",
+      "steps": [
+        { "type": "configure", "name": "default" },
+        { "type": "build", "name": "default" },
+        { "type": "test", "name": "default" }
+      ]
+    },
+    {
+      "name": "sanitize",
+      "steps": [
+        { "type": "configure", "name": "sanitize" },
+        { "type": "build", "name": "sanitize" },
+        { "type": "test", "name": "sanitize" }
+      ]
+    },
+    {
+      "name": "tidy",
+      "steps": [
+        { "type": "configure", "name": "tidy" },
+        { "type": "build", "name": "tidy" }
+      ]
+    }
+  ]
+}

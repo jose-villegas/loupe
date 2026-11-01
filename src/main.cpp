@@ -2,10 +2,11 @@
 #include <cstdio>
 #include <string>
 
-#include "engine/frames.h"
-#include "options.h"
+#include "engine/frames.hpp"
+#include "options.hpp"
 
-int main(int argc, char** argv) {
+int
+main(int argc, char** argv) {
     loupe::Options options;
     std::string why;
     if (!loupe::parse_options(argc, argv, &options, &why)) {
