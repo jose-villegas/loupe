@@ -16,13 +16,13 @@
       "name": "sanitize",
       "displayName": "UBSan, and ASan on Linux",
       "inherits": "default",
-      "cacheVariables": { "LOUPE_SANITIZE": "ON" }
+      "cacheVariables": { "AUTANA_CPP_SANITIZE": "ON" }
     },
     {
       "name": "tidy",
       "displayName": "clang-tidy on every C++ file",
       "inherits": "default",
-      "cacheVariables": { "LOUPE_CLANG_TIDY": "ON" }
+      "cacheVariables": { "AUTANA_CPP_CLANG_TIDY": "ON" }
     }
   ],
   "buildPresets": [
@@ -37,7 +37,12 @@
       "output": { "outputOnFailure": true },
       "execution": { "noTestsAction": "error" }
     },
-    { "name": "sanitize", "inherits": "default", "configurePreset": "sanitize" }
+    {
+      "name": "sanitize",
+      "inherits": "default",
+      "configurePreset": "sanitize",
+      "environment": { "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1" }
+    }
   ],
   "workflowPresets": [
     {

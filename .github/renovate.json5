@@ -24,7 +24,7 @@
       //   RENOVATE_VERSION: 44.151.5
       customType: 'regex',
       managerFilePatterns: ['/^\.github/workflows/[^/]+\.yml$/'],
-      matchStrings: ['# renovate: datasource=(?<datasource>\S+) depName=(?<depName>\S+)\s+\w+: (?<currentValue>\S+)'],
+      matchStrings: ['# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+\\w+: (?<currentValue>\\S+)'],
     },
   ],
 

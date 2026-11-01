@@ -1,19 +1,6 @@
 # GENERATED FILE - do not edit.
-# python tools/gen/standards_config.py clang-format > .clang-format
+# python third_party/autana/scripts/cpp/style_configs.py clang-format > .clang-format
 
-# The C format for this repository, as deviations from clang-format's LLVM
-# style. Anything absent here is that style's default, so this file lists
-# only what was actually decided - see docs/c-style/README.md for the prose
-# and scripts/gates/format-file-list.sh for which files it applies to.
-#
-# One clang-format major version and no other: the esp-clang release
-# launcher/idf-pin.json pins. Major versions disagree about C on this tree,
-# and a file of deviations leans on one version's defaults, so the pin is
-# what makes it reproducible: scripts/gates/check-format.sh enforces it and
-# .github/workflows/format.yml installs it.
-#
-# No `Language:` key, deliberately: clang-format handles C and C++ under one
-# Cpp language, and every option below is one that C uses.
 ---
 BasedOnStyle: LLVM
 
