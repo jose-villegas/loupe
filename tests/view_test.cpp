@@ -1,14 +1,15 @@
-// Writes one frame's bytes for view_test.cmake to compare. "straight VIEW": the
-// run opens under --view VIEW and steps to the frame. "switched": the run steps
-// shaded past the frame, then for every view picks it and seeks back, which
-// restores a checkpoint and sets the view again. The two agree only when
-// picking a view mid-run draws what that view drew from the start.
+// Writes two frames' bytes for view_test.cmake to compare. "straight VIEW": the
+// run opens under --view VIEW and steps to SWITCH_AT, writing FRAME on the way.
+// "switched": the run steps shaded to SWITCH_AT, then for every view picks it,
+// which draws SWITCH_AT again under it, and seeks back to FRAME, which restores
+// a checkpoint and sets the view again. They agree only when picking a view
+// mid-run draws what that view drew from the start.
 #include <cstdio>
 #include <fstream>
 #include <limits>
 #include <string>
 
-#include "engine/frames.hpp"
+#include "frames_fixture.hpp"
 
 namespace {
 
@@ -41,18 +42,19 @@ main(int argc, char** argv) {
     if (mode == "straight") {
         options.view = argv[4];
     }
-    std::string why;
-    std::unique_ptr<loupe::Frames> frames = loupe::Frames::open(options, &why);
+    std::unique_ptr<loupe::Frames> frames = loupe::test::open_or_report("view_test", options);
     if (frames == nullptr) {
-        std::fprintf(stderr, "view_test: %s\n", why.c_str());
         return 1;
     }
     bool ok = frames->has_views();
     if (mode == "straight") {
-        while (frames->index() <= FRAME) {
+        while (frames->index() <= SWITCH_AT) {
             ok &= frames->step(frames->dt_ms());
+            if (frames->index() - 1 == FRAME) {
+                ok &= write(*frames, out + "/straight-" + argv[4] + "-sought.bin");
+            }
         }
-        ok &= write(*frames, out + "/straight-" + argv[4] + ".bin");
+        ok &= write(*frames, out + "/straight-" + argv[4] + "-picked.bin");
         return frames->close() && ok ? 0 : 1;
     }
 
@@ -62,12 +64,14 @@ main(int argc, char** argv) {
     }
     std::ofstream names(out + "/views.txt");
     for (const loupe::DebugView& view : loupe::debug_views()) {
-        const bool sought = frames->set_view(view.id) && frames->view() == view.id && frames->seek(FRAME);
-        if (!sought || frames->view() != view.id) {
+        const bool picked = frames->seek(SWITCH_AT) && frames->set_view(view.id);
+        ok &= picked && write(*frames, out + "/switched-" + view.name + "-picked.bin");
+        const bool sought = picked && frames->seek(FRAME) && frames->view() == view.id;
+        if (!sought) {
             std::fprintf(stderr, "view_test: %s did not stay picked through the seek\n", view.name.c_str());
             ok = false;
         }
-        ok &= write(*frames, out + "/switched-" + view.name + ".bin");
+        ok &= write(*frames, out + "/switched-" + view.name + "-sought.bin");
         names << view.name << '\n';
     }
     return frames->close() && ok ? 0 : 1;

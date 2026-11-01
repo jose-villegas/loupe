@@ -77,8 +77,12 @@ class Frames {
 
   private:
     struct State;
-    // seek(), and with `redraw` also draws `index` again when it is the shown frame.
-    bool replay(int index, bool redraw);
+    // Restores the last checkpoint at or before frame `index`, keeping the picked view.
+    bool restore_before(int index);
+    // Steps until frame `index` is shown, each frame at the dt it drew with before.
+    void step_to(int index);
+    // Draws the shown frame again from the checkpoint before it, when there is one.
+    bool redraw_shown();
     explicit Frames(std::unique_ptr<State> state);
     std::unique_ptr<State> state_;
 };
