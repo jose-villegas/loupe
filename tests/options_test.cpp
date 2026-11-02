@@ -73,9 +73,9 @@ check_refusals() {
         {.args = {"s.apak", "--compare", "HEAD", "--video", "v.mp4"},
          .refusal = tool ? "--compare needs a .scene.toml" : no_tool},
         {.args = {toml, "--compare", "HEAD", "--b-args", "--frames 3", "--video", "v.mp4"},
-         .refusal = tool ? "--b-args takes --object, --camera, --view and --set, not --frames" : no_tool},
+         .refusal = "--b-args takes --object, --camera, --view and --set, not --frames"},
         {.args = {toml, "--compare", "HEAD", "--b-args", "--view", "--video", "v.mp4"},
-         .refusal = tool ? "--b-args: --view needs a value" : no_tool},
+         .refusal = "--b-args: --view needs a value"},
     };
     bool ok = true;
     for (const Case& c : cases) {
