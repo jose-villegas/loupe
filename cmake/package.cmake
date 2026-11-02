@@ -8,8 +8,10 @@ if(WIN32)
     set(bin_dir .)
     set(scenes_dir scenes)
     set(doc_dir .)
+    # loupe.exe's icon, for Explorer, its shortcuts and its .apak files.
+    target_sources(loupe PRIVATE assets/loupe.rc)
     set(CPACK_GENERATOR ZIP NSIS)
-    set(CPACK_SYSTEM_NAME windows-portable)
+    set(CPACK_SYSTEM_NAME windows)
     set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_LIST_DIR}/cpack_generator.cmake")
     # One key and one folder for every version, so a new one replaces the old.
     set(CPACK_PACKAGE_INSTALL_DIRECTORY Loupe)
@@ -68,6 +70,8 @@ endif()
 set(CPACK_PACKAGE_VENDOR "jose-villegas")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A frame debugger for the autana engine")
 set(CPACK_STRIP_FILES ON)
+# Writes the values above into CPackConfig.cmake as they are: the
+# backslashes and quotes of the NSIS lines survive.
 set(CPACK_VERBATIM_VARIABLES ON)
 # CPACK_PACKAGE_FILE_NAME's default: loupe-<version>-<system name>.
 include(CPack)

@@ -135,7 +135,7 @@ what they enforce. The build takes its flags, sanitizers and clang-tidy from
 | `default` | with every warning an error |
 | `sanitize` | under UBSan, and ASan on Linux, without the pack tool |
 | `tidy` | with clang-tidy (`.clang-tidy`) on every C++ file |
-| `release` | optimized, without the pack tool and with every demo scene's pack as a sample, then `cpack`'s download into `build/release` |
+| `release` | optimized, without the pack tool and with every demo scene's pack as a sample, then `cpack`'s downloads into `build/release`; on Windows the setup needs NSIS's `makensis` on `PATH` |
 
 ```bash
 cmake --workflow --preset sanitize
