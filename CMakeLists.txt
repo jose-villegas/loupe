@@ -27,6 +27,7 @@ endif()
 include("${AUTANA_DIR}/scripts/cpp/standards.cmake")
 autana_cpp_sanitize()
 add_subdirectory("${AUTANA_DIR}/launcher/tools/render" autana SYSTEM)
+add_subdirectory(third_party)
 autana_cpp_checks()
 
 # Everything but the command line. Autana's sources compile into this library
@@ -44,8 +45,24 @@ target_compile_definitions(loupe_core PRIVATE
     "LOUPE_AUTANA_DIR=\"${AUTANA_DIR}\"" "LOUPE_PYTHON=\"${Python3_EXECUTABLE}\""
     "LOUPE_PACK_CACHE=\"${CMAKE_BINARY_DIR}/packs\"")
 
+# The window: SDL3, Vulkan through volk, Dear ImGui (third_party/CMakeLists.txt).
+# Only runs without -o or --video open it, so those still need no GPU.
+add_library(loupe_window OBJECT
+    src/window/frame_texture.cpp
+    src/window/gpu.cpp
+    src/window/panels.cpp
+    src/window/run_window.cpp)
+target_link_libraries(loupe_window PUBLIC loupe_core imgui)
+# The window's icon, the app logo, built into the binary as the bytes of its PNG.
+set(icon_png "${CMAKE_CURRENT_SOURCE_DIR}/assets/loupe.png")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${icon_png}")
+file(READ "${icon_png}" icon_bytes HEX)
+string(REGEX REPLACE "(..)" "0x\\1," icon_bytes "${icon_bytes}")
+file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/generated/window/icon_png.inc" CONTENT "${icon_bytes}\n")
+target_include_directories(loupe_window PRIVATE "${CMAKE_BINARY_DIR}/generated")
+
 add_executable(loupe src/main.cpp)
-target_link_libraries(loupe PRIVATE loupe_core)
+target_link_libraries(loupe PRIVATE loupe_core loupe_window)
 
 include(CTest)
 if(BUILD_TESTING)

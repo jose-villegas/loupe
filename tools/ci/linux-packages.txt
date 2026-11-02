@@ -1,0 +1,28 @@
+# Debian/Ubuntu packages a Linux build needs beyond a compiler, one per line;
+# tools/ci/install-linux-packages.sh installs them. First the video half of
+# SDL3's own list (third_party/SDL/docs/README-linux.md, "Build Dependencies"),
+# which SDL's configure requires for its X11 and Wayland windows; then Mesa's
+# lavapipe (Vulkan on the CPU) and the Khronos validation layer for window_smoke.
+libx11-dev
+libxext-dev
+libxrandr-dev
+libxcursor-dev
+libxfixes-dev
+libxi-dev
+libxss-dev
+libxtst-dev
+libxkbcommon-dev
+libdrm-dev
+libgbm-dev
+libgl1-mesa-dev
+libgles2-mesa-dev
+libegl1-mesa-dev
+libdbus-1-dev
+libibus-1.0-dev
+libudev-dev
+libthai-dev
+libfribidi-dev
+libwayland-dev
+libdecor-0-dev
+mesa-vulkan-drivers
+vulkan-validationlayers

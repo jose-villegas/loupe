@@ -38,3 +38,9 @@ target_link_libraries(view_test PRIVATE loupe_core)
 add_test(NAME view_switch COMMAND "${CMAKE_COMMAND}" "-DVIEW_TEST=$<TARGET_FILE:view_test>" "-DSCENE=${sponza}"
          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/view_switch" -P "${CMAKE_CURRENT_SOURCE_DIR}/view_test.cmake")
 set_tests_properties(view_switch PROPERTIES RESOURCE_LOCK sponza)
+
+# The window drawn offscreen for a few ticks: on Linux CI, Mesa's lavapipe.
+set(window_ticks 10)
+add_test(NAME window_smoke COMMAND "${CMAKE_COMMAND}" "-DLOUPE=$<TARGET_FILE:loupe>" "-DSCENE=${sponza}"
+         "-DTICKS=${window_ticks}" -P "${CMAKE_CURRENT_SOURCE_DIR}/window_smoke.cmake")
+set_tests_properties(window_smoke PROPERTIES RESOURCE_LOCK sponza SKIP_REGULAR_EXPRESSION "SKIP:")

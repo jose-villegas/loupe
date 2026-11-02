@@ -1,9 +1,13 @@
 #include "options.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <climits>
 #include <cstdint>
 #include <filesystem>
+#include <format>
+#include <iterator>
+#include <optional>
 #include <system_error>
 
 namespace loupe {
@@ -12,29 +16,78 @@ namespace {
 
 constexpr const char SCENE_SUFFIX[] = ".scene.toml";
 
+// A flag that takes a whole number: its range, what an error calls it, and where it goes.
+struct CountFlag {
+    const char* name;
+    long long least, most;
+    const char* is;
+    void (*set)(Options* options, long long count);
+};
+
+// Sets the optional<T> `field` of the options to a count already in T's range.
+template <typename T, std::optional<T> Options::* field>
+void
+set_count(Options* options, long long count) {
+    options->*field = static_cast<T>(count);
+}
+
+const CountFlag COUNT_FLAGS[] = {
+    {.name = "--frames",
+     .least = 1,
+     .most = INT_MAX,
+     .is = "a whole number from 1",
+     .set = set_count<int, &Options::frames>},
+    {.name = "--dt",
+     .least = 0,
+     .most = UINT32_MAX,
+     .is = "whole milliseconds",
+     .set = set_count<uint32_t, &Options::dt_ms>},
+    {.name = "--checkpoint-mb",
+     .least = 1,
+     .most = LLONG_MAX / static_cast<long long>(MIB),
+     .is = "whole megabytes from 1",
+     .set = set_count<size_t, &Options::checkpoint_mb>},
+    {.name = "--ticks",
+     .least = 1,
+     .most = INT_MAX,
+     .is = "a whole number from 1",
+     .set = set_count<int, &Options::ticks>},
+};
+
+const CountFlag*
+find_count_flag(const std::string& flag) {
+    const auto found = std::ranges::find(COUNT_FLAGS, flag, &CountFlag::name);
+    return found == std::end(COUNT_FLAGS) ? nullptr : found;
+}
+
+// False with `why` set when the window's own flags come with -o or --video, which open no window.
+bool
+window_flags_fit(const Options& options, std::string* why) {
+    const bool windowed = options.out_bmp.empty() && options.out_video.empty();
+    if (!windowed && (options.checkpoint_mb || options.ticks)) {
+        *why = "--checkpoint-mb and --ticks are for the window, not for -o or --video";
+        return false;
+    }
+    return true;
+}
+
 // Sets the option `flag` names to `value`; false with `why` set for an unknown
 // flag or a value it cannot take.
 bool
 apply_flag(const std::string& flag, const std::string& value, Options* options, std::string* why) {
-    long long count = 0;
-    if (flag == "--object") {
+    if (const CountFlag* counted = find_count_flag(flag)) {
+        long long count = 0;
+        if (!parse_count(value, counted->least, counted->most, &count)) {
+            *why = std::format("{} is {}, not {}", flag, counted->is, value);
+            return false;
+        }
+        counted->set(options, count);
+    } else if (flag == "--object") {
         options->objects.push_back(value);
     } else if (flag == "--camera") {
         options->camera = value;
     } else if (flag == "--view") {
         options->view = value;
-    } else if (flag == "--frames") {
-        if (!parse_count(value, 1, INT_MAX, &count)) {
-            *why = "--frames is a whole number from 1, not " + value;
-            return false;
-        }
-        options->frames = static_cast<int>(count);
-    } else if (flag == "--dt") {
-        if (!parse_count(value, 0, UINT32_MAX, &count)) {
-            *why = "--dt is whole milliseconds, not " + value;
-            return false;
-        }
-        options->dt_ms = static_cast<uint32_t>(count);
     } else if (flag == "--set") {
         options->sets.push_back(value);
     } else if (flag == "-o") {
@@ -66,7 +119,8 @@ scene_id(const std::string& scene_toml) {
 const char*
 usage() {
     return "usage: loupe SCENE.scene.toml [--object NAME ...] [--camera NAME] [--view NAME]\n"
-           "             [--frames N] [--dt MS] [--set owner.name=value ...] [-o out.bmp] [--video out.avi]\n";
+           "             [--frames N] [--dt MS] [--set owner.name=value ...] [-o out.bmp] [--video out.avi]\n"
+           "             [--checkpoint-mb MB] [--ticks N]\n";
 }
 
 bool
@@ -94,7 +148,7 @@ parse_options(int argc, char** argv, Options* options, std::string* why) {
             options->scene_toml.empty() ? "needs a scene file" : "expected a .scene.toml file: " + options->scene_toml;
         return false;
     }
-    return true;
+    return window_flags_fit(*options, why);
 }
 
 } // namespace loupe

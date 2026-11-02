@@ -2,12 +2,15 @@
 
 Loupe is a frame debugger for the [autana](https://github.com/jose-villegas/autana)
 engine. It runs autana's own drawing code on a desktop, so the frame it shows
-is the frame the device draws. Today it renders a scene file to an image or a
-video from the command line; a window with a scrubber and a view picker comes next.
+is the frame the device draws. It opens a scene file in a window with a
+timeline and a debug-view picker, or renders it to an image or a video from the
+command line.
 
 ```mermaid
 flowchart LR
-  cli["loupe (command line)"] --> core["loupe_core: Frames, options, pack"]
+  cli["loupe"] --> window["loupe_window: SDL3, Vulkan (volk), Dear ImGui"]
+  cli --> core["loupe_core: Frames, options, pack"]
+  window --> core
   core -- "render_host_open / step / save / restore / close" --> autana["autana::scene_provider<br/>(submodule third_party/autana)"]
   core -- "every run" --> pack["autana's build_pack.py<br/>into build/packs"]
   pack -- "AUTANA_ASSET_DIR" --> autana
@@ -17,6 +20,9 @@ flowchart LR
 
 You need GCC (MinGW-w64 on Windows), CMake 3.25 or newer and the Python
 autana's pack tool runs on (`third_party/autana/scripts/lib/python-min-version`).
+On Linux, also the packages in `tools/ci/linux-packages.txt`, which
+`tools/ci/install-linux-packages.sh` installs. The window draws through Vulkan,
+loaded when it opens, so the build needs no Vulkan SDK.
 
 ```bash
 git clone --recurse-submodules https://github.com/jose-villegas/loupe
@@ -27,7 +33,20 @@ cmake --workflow --preset default
 
 `cmake --preset default -DAUTANA_DIR=<path>` configures against another autana checkout instead of the submodule.
 
+## Open a scene
+
+```bash
+build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml
+```
+
+The window shows the engine's frame at the largest whole zoom that fits. Play
+steps one frame per display refresh; the arrows and the scrubber seek through
+checkpoints, so a frame sought is the frame stepping straight there drew. The
+view picker draws the frame on screen again under another debug view.
+
 ## Render a scene
+
+With `-o` or `--video`, Loupe writes the frames and exits, without a window:
 
 ```bash
 build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml --view meshlets --frames 60 -o sponza.bmp
@@ -41,8 +60,10 @@ build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml --
 | `--frames N`, `--dt MS` | how many frames, how far apart (30 at 16 ms) |
 | `--set owner.name=value` | a tunable; repeatable |
 | `-o out.bmp`, `--video out.avi` | the last frame, every frame |
+| `--checkpoint-mb MB` | the window's checkpoint memory (1024); past it, every other checkpoint goes |
+| `--ticks N` | closes the window after N ticks, for scripted runs |
 
-The flags are autana's `third_party/autana/launcher/tools/render/scene_viewer.sh` flags, and the output is the same bytes.
+The flags but the last two are autana's `third_party/autana/launcher/tools/render/scene_viewer.sh` flags, and the output is the same bytes.
 Each run brings the scene's pack in `build/packs` up to date with autana's `third_party/autana/launcher/tools/r3d/build_pack.py`.
 
 ## Tests
@@ -55,6 +76,7 @@ The preset's test step (`ctest --preset default`) runs:
 | `seek` | a seek back through a checkpoint draws the bytes stepping straight there drew |
 | `thinning_*` | under a checkpoint budget the checkpoints stay within it, their interval doubles, and seeks still draw the straight bytes |
 | `view_switch` | a debug view picked mid-run, and kept through a seek back, draws what it drew when picked from the start |
+| `window_smoke` | the window opens and draws 10 ticks offscreen on Mesa's lavapipe under the Khronos validation layer, with no validation error; skipped where either is missing |
 | `include_gate` | only `src/engine/autana.hpp` includes autana's headers |
 
 CI runs them on Linux and Windows at the pinned autana on every pull request,

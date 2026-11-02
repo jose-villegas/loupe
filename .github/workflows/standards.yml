@@ -168,5 +168,7 @@ jobs:
         with:
           python-version-file: third_party/autana/.python-version
       - run: python -m pip install -r tools/ci/requirements.txt
+      - name: Linux packages
+        run: tools/ci/install-linux-packages.sh
       - name: Build and test with clang-tidy on every C++ file
         run: cmake --workflow --preset tidy

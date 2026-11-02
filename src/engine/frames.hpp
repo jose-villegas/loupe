@@ -32,9 +32,12 @@ std::vector<DebugView> debug_views();
 
 class Frames {
   public:
-    // With checkpoints kept, the state before frames 1, 1 + this, 1 + twice this... is saved,
+    // With checkpoints kept, the state before frames FIRST_SEEKABLE, FIRST_SEEKABLE + this... is saved,
     // until thinning doubles the interval.
     static constexpr int CHECKPOINT_EVERY = 30;
+    // The first frame a seek reaches: the first checkpoint is saved before it, and
+    // autana restores no state from before frame 1.
+    static constexpr int FIRST_SEEKABLE = 1;
 
     // The scene provider on `options`' scene file, its pack built first.
     static std::unique_ptr<Frames> open(const Options& options, std::string* why);
