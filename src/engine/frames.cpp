@@ -1,11 +1,13 @@
 #include "engine/frames.hpp"
 
 #include <algorithm>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -304,6 +306,32 @@ Frames::path_ms() const {
         return std::nullopt;
     }
     return scene_provider.path_ms();
+}
+
+int
+frames_on_path(uint32_t path_ms, uint32_t dt_ms) {
+    return static_cast<int>(std::min<int64_t>(int64_t{path_ms / dt_ms} + 1, INT_MAX));
+}
+
+std::unique_ptr<Frames>
+open_whole_path(const Options& options, std::string* why) {
+    std::unique_ptr<Frames> frames = Frames::open(options, why);
+    if (frames == nullptr || options.frames) {
+        return frames;
+    }
+    const std::optional<uint32_t> path_ms = frames->path_ms();
+    if (!path_ms) {
+        return frames;
+    }
+    // The run's length is fixed at open, and the path's is known only once open.
+    const int whole = frames_on_path(*path_ms, frames->dt_ms());
+    if (whole <= frames->count()) {
+        return frames;
+    }
+    frames.reset();
+    Options run = options;
+    run.frames = whole;
+    return Frames::open(run, why);
 }
 
 int64_t
