@@ -9,15 +9,14 @@ builds the pack of first.
 
 ```mermaid
 flowchart LR
-  cli["loupe"] --> window["loupe_window: SDL3, Vulkan (volk), Dear ImGui"]
-  cli --> core["loupe_core: Frames, options, pack, tools, library"]
-  cli --> path["loupe_path: --frame, --compare"]
+  cli["loupe"] --> window["loupe_window<br/>SDL3 · Vulkan (volk) · Dear ImGui"]
+  cli --> path["loupe_path<br/>--frame · --compare"]
+  cli --> core
   window --> core
   path --> core
-  core -- "render_host_open / step / save / restore / close" --> autana["autana::scene_provider<br/>(submodule third_party/autana)"]
-  core -- "with the pack tool: a .scene.toml's pack,<br/>B's at a revision or folder, the A | B video" --> tools["git, a checkout's build_pack.py,<br/>autana's render_compare.py"]
-  tools -- ".apak into build/packs or the run's scratch" --> core
-  core -- "AUTANA_ASSET_DIR: the .apak's folder" --> autana
+  core["loupe_core<br/>Frames · options · pack · tools · library"]
+  core -- "render_host_*" --> autana["autana::scene_provider<br/>third_party/autana"]
+  core -- "pack tool builds only" --> tools["git · build_pack.py<br/>render_compare.py"]
 ```
 
 ## Download
