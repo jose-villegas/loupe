@@ -99,6 +99,9 @@ file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/generated/window/icon_png.inc" CONTEN
 target_include_directories(loupe_window PRIVATE "${CMAKE_BINARY_DIR}/generated")
 
 add_executable(loupe src/main.cpp)
+if(WIN32)
+    target_sources(loupe PRIVATE assets/loupe.rc)
+endif()
 target_link_libraries(loupe PRIVATE loupe_core loupe_window)
 
 include(cmake/package.cmake)

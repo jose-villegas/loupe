@@ -1,21 +1,28 @@
 #!/bin/sh
-# Unpacks a download (cpack's .zip or .tar.gz) into an empty folder and renders
-# every sample in it with -o, on a PATH that holds nothing: no compiler runtime,
-# no Python, only what the archive and the system carry.
+# Unpacks a download (cpack's .zip or .tar.gz) into an empty folder, or takes a
+# folder it was installed into, and renders every sample in it with -o, on a
+# PATH that holds nothing: no compiler runtime, no Python, only what the
+# download and the system carry.
 #
-# usage: tools/ci/package_smoke.sh ARCHIVE OUT_DIR
+# usage: tools/ci/package_smoke.sh ARCHIVE|FOLDER OUT_DIR
 set -eu
 
-archive=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
 out=$2
 rm -rf "$out"
-mkdir -p "$out/unpacked" "$out/renders" "$out/empty-path"
-(cd "$out/unpacked" && cmake -E tar xf "$archive")
+mkdir -p "$out/renders" "$out/empty-path"
+if [ -d "$1" ]; then
+    root=$1
+else
+    root=$out/unpacked
+    archive=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+    mkdir "$root"
+    (cd "$root" && cmake -E tar xf "$archive")
+fi
 
-loupe=$(find "$out/unpacked" -type f \( -name loupe -o -name loupe.exe \))
-[ -n "$loupe" ] || { echo "package_smoke: no loupe in $archive" >&2; exit 1; }
-samples=$(find "$out/unpacked" -type f -name '*.apak' | sort)
-[ -n "$samples" ] || { echo "package_smoke: no sample in $archive" >&2; exit 1; }
+loupe=$(find "$root" -type f \( -name loupe -o -name loupe.exe \))
+[ -n "$loupe" ] || { echo "package_smoke: no loupe in $1" >&2; exit 1; }
+samples=$(find "$root" -type f -name '*.apak' | sort)
+[ -n "$samples" ] || { echo "package_smoke: no sample in $1" >&2; exit 1; }
 
 # On Linux, the C library is the only shared library loupe links; SDL loads
 # the display's own at run time.
