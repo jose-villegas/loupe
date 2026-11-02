@@ -6,6 +6,7 @@
 
 #include "engine/frames.hpp"
 #include "options.hpp"
+#include "version.hpp"
 #include "window/run_window.hpp"
 
 int
@@ -15,6 +16,10 @@ main(int argc, char** argv) {
     if (!loupe::parse_options(argc, argv, &options, &why)) {
         std::fprintf(stderr, "loupe: %s\n%s", why.c_str(), loupe::usage());
         return 2;
+    }
+    if (options.version) {
+        std::printf("%s\n", loupe::version_line());
+        return 0;
     }
     if (options.out_bmp.empty() && options.out_video.empty()) {
         return loupe::run_window(options) ? 0 : 1;

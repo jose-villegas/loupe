@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Loupe
+Comment=A frame debugger for the autana engine
+Exec=loupe %f
+Icon=loupe
+Terminal=false
+Categories=Development;Graphics;

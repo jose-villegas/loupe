@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.25...3.31)
-project(loupe LANGUAGES C CXX)
+# The one version: --version, About, the release's file names and its tag (v0.1.0).
+project(loupe VERSION 0.1.0 LANGUAGES C CXX)
 
 set(AUTANA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/autana" CACHE PATH
     "The autana checkout Loupe builds against; the submodule by default")
@@ -9,8 +10,10 @@ endif()
 # The pack tool builds a .scene.toml's pack with autana's build_pack.py, so
 # only a build with it needs Python; without it, loupe opens .apak files alone.
 option(LOUPE_PACK_TOOL "Open a .scene.toml by building its pack with autana's build_pack.py" ON)
+# The release's samples: every autana demo scene's pack, installed (cmake/package.cmake).
+option(LOUPE_SAMPLES "Install every autana demo scene's pack as a sample" OFF)
 file(STRINGS "${AUTANA_DIR}/scripts/lib/python-min-version" python_min LIMIT_COUNT 1)
-if(LOUPE_PACK_TOOL)
+if(LOUPE_PACK_TOOL OR LOUPE_SAMPLES)
     find_package(Python3 ${python_min} REQUIRED COMPONENTS Interpreter)
 endif()
 
@@ -46,8 +49,23 @@ add_library(loupe_core OBJECT
     src/options.cpp
     src/pack.cpp
     src/paths.cpp
-    src/process.cpp)
+    src/process.cpp
+    src/version.cpp)
 target_include_directories(loupe_core PUBLIC src)
+# The autana commit compiled, for version.cpp; configure runs again when the submodule moves.
+find_package(Git QUIET)
+set(autana_commit unknown)
+if(Git_FOUND)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${AUTANA_DIR}" rev-parse --short=9 HEAD
+                    OUTPUT_VARIABLE autana_commit OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${AUTANA_DIR}" rev-parse --absolute-git-dir
+                    OUTPUT_VARIABLE autana_git_dir OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    if(EXISTS "${autana_git_dir}/HEAD")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${autana_git_dir}/HEAD")
+    endif()
+endif()
+set_property(SOURCE src/version.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+             "LOUPE_VERSION=\"${PROJECT_VERSION}\"" "LOUPE_AUTANA_COMMIT=\"${autana_commit}\"")
 if(WIN32)
     # Every executable that links loupe_core, tests too, runs with UTF-8 as its code page.
     enable_language(RC)
@@ -81,6 +99,8 @@ target_include_directories(loupe_window PRIVATE "${CMAKE_BINARY_DIR}/generated")
 
 add_executable(loupe src/main.cpp)
 target_link_libraries(loupe PRIVATE loupe_core loupe_window)
+
+include(cmake/package.cmake)
 
 include(CTest)
 if(BUILD_TESTING)

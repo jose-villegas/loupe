@@ -1,0 +1,26 @@
+#!/bin/sh
+# Unpacks a download (cpack's .zip or .tar.gz) into an empty folder and renders
+# every sample in it with -o, on a PATH that holds nothing: no compiler runtime,
+# no Python, only what the archive and the system carry.
+#
+# usage: tools/ci/package_smoke.sh ARCHIVE OUT_DIR
+set -eu
+
+archive=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+out=$2
+rm -rf "$out"
+mkdir -p "$out/unpacked" "$out/renders" "$out/empty-path"
+(cd "$out/unpacked" && cmake -E tar xf "$archive")
+
+loupe=$(find "$out/unpacked" -type f \( -name loupe -o -name loupe.exe \))
+[ -n "$loupe" ] || { echo "package_smoke: no loupe in $archive" >&2; exit 1; }
+samples=$(find "$out/unpacked" -type f -name '*.apak' | sort)
+[ -n "$samples" ] || { echo "package_smoke: no sample in $archive" >&2; exit 1; }
+
+env PATH="$out/empty-path" "$loupe" --version
+for sample in $samples; do
+    image="$out/renders/$(basename "$sample" .apak).bmp"
+    env PATH="$out/empty-path" "$loupe" "$sample" -o "$image"
+    [ "$(head -c 2 "$image")" = BM ] || { echo "package_smoke: $image is not a BMP" >&2; exit 1; }
+    echo "package_smoke: $(basename "$sample") rendered"
+done

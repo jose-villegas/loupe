@@ -23,12 +23,19 @@
       "displayName": "clang-tidy on every C++ file",
       "inherits": "default",
       "cacheVariables": { "AUTANA_CPP_CLANG_TIDY": "ON" }
+    },
+    {
+      "name": "release",
+      "displayName": "The downloads: optimized, no pack tool, every demo scene as a sample",
+      "inherits": "default",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "LOUPE_PACK_TOOL": "OFF", "LOUPE_SAMPLES": "ON" }
     }
   ],
   "buildPresets": [
     { "name": "default", "configurePreset": "default" },
     { "name": "sanitize", "configurePreset": "sanitize" },
-    { "name": "tidy", "configurePreset": "tidy" }
+    { "name": "tidy", "configurePreset": "tidy" },
+    { "name": "release", "configurePreset": "release" }
   ],
   "testPresets": [
     {
@@ -42,7 +49,11 @@
       "inherits": "default",
       "configurePreset": "sanitize",
       "environment": { "UBSAN_OPTIONS": "halt_on_error=1:print_stacktrace=1" }
-    }
+    },
+    { "name": "release", "inherits": "default", "configurePreset": "release" }
+  ],
+  "packagePresets": [
+    { "name": "release", "configurePreset": "release" }
   ],
   "workflowPresets": [
     {
@@ -66,6 +77,15 @@
       "steps": [
         { "type": "configure", "name": "tidy" },
         { "type": "build", "name": "tidy" }
+      ]
+    },
+    {
+      "name": "release",
+      "steps": [
+        { "type": "configure", "name": "release" },
+        { "type": "build", "name": "release" },
+        { "type": "test", "name": "release" },
+        { "type": "package", "name": "release" }
       ]
     }
   ]
