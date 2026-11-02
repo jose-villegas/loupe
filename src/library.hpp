@@ -20,8 +20,10 @@ struct Folders {
     std::filesystem::path exe_dir, config;
 };
 
-// The .apak files in <exe_dir>/../share/loupe/scenes (installed) and
-// <exe_dir>/scenes (portable), and the recent list in <config>/recent.txt
+// Where the samples are installed beside loupe: <exe_dir>/scenes on Windows,
+// <exe_dir>/../share/loupe/scenes elsewhere (cmake/package.cmake).
+std::filesystem::path samples_dir(const Folders& folders);
+// The .apak files in samples_dir(), and the recent list in <config>/recent.txt
 // without the files gone since.
 Library library(const Folders& folders);
 // Puts `scene` first in <config>/recent.txt, RECENT_KEPT kept; false when it

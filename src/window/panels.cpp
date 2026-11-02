@@ -6,10 +6,13 @@
 
 #include "imgui.h"
 #include "paths.hpp"
+#include "version.hpp"
 
 namespace loupe::window {
 
 namespace {
+
+constexpr const char ABOUT[] = "About";
 
 // One selectable row per scene under `heading`, labelled by `label`; a click picks it.
 template <typename Label>
@@ -31,6 +34,26 @@ scene_list(const char* heading, const std::vector<std::filesystem::path>& scenes
 }
 
 } // namespace
+
+void
+draw_menu() {
+    bool about = false;
+    if (ImGui::BeginMenuBar()) {
+        about = ImGui::MenuItem(ABOUT);
+        ImGui::EndMenuBar();
+    }
+    // Opened outside the menu bar, whose ID scope the modal is not in.
+    if (about) {
+        ImGui::OpenPopup(ABOUT);
+    }
+    if (ImGui::BeginPopupModal(ABOUT, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted(version_line());
+        if (ImGui::Button("Close")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
 
 void
 draw_start(const Library& library, const std::string& refusal, Start& start) {

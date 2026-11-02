@@ -133,3 +133,7 @@ function(window_smoke name scene)
 endfunction()
 window_smoke(window_smoke "${sponza}")
 window_smoke(window_start "")
+
+# --version names the project version and the autana commit compiled.
+add_test(NAME version COMMAND loupe --version)
+set_tests_properties(version PROPERTIES PASS_REGULAR_EXPRESSION "^loupe ${PROJECT_VERSION}, autana [0-9a-f]+\n$")

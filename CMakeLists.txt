@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.25...3.31)
-project(loupe LANGUAGES C CXX)
+# The one version: --version, About, the release's file names and its tag (v0.1.0).
+project(loupe VERSION 0.1.0 LANGUAGES C CXX)
 
 set(AUTANA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/autana" CACHE PATH
     "The autana checkout Loupe builds against; the submodule by default")
@@ -9,8 +10,10 @@ endif()
 # The pack tool builds a .scene.toml's pack with autana's build_pack.py, so
 # only a build with it needs Python; without it, loupe opens .apak files alone.
 option(LOUPE_PACK_TOOL "Open a .scene.toml by building its pack with autana's build_pack.py" ON)
+# The release's samples: every autana demo scene's pack, installed (cmake/package.cmake).
+option(LOUPE_SAMPLES "Install every autana demo scene's pack as a sample" OFF)
 file(STRINGS "${AUTANA_DIR}/scripts/lib/python-min-version" python_min LIMIT_COUNT 1)
-if(LOUPE_PACK_TOOL)
+if(LOUPE_PACK_TOOL OR LOUPE_SAMPLES)
     find_package(Python3 ${python_min} REQUIRED COMPONENTS Interpreter)
 endif()
 
@@ -24,6 +27,10 @@ set(CMAKE_C_EXTENSIONS OFF)
 if(MINGW)
     # One file that runs anywhere, not whichever libstdc++ is first on PATH.
     add_link_options(-static)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT AUTANA_CPP_SANITIZE)
+    # GCC's runtime inside too, so a Linux loupe needs only the C library;
+    # the sanitizers keep theirs shared.
+    add_link_options(-static-libstdc++ -static-libgcc)
 endif()
 
 # autana's C++ rules: sanitizers (AUTANA_CPP_SANITIZE) before its subdirectory,
@@ -46,8 +53,20 @@ add_library(loupe_core OBJECT
     src/options.cpp
     src/pack.cpp
     src/paths.cpp
-    src/process.cpp)
+    src/process.cpp
+    src/version.cpp)
 target_include_directories(loupe_core PUBLIC src)
+# The version and the autana commit, for version.cpp. The commit is read on
+# every build, so it follows the submodule whatever moved it.
+find_package(Git QUIET)
+set(autana_commit "${CMAKE_BINARY_DIR}/generated/autana_commit.inc")
+add_custom_target(autana_commit BYPRODUCTS "${autana_commit}"
+    COMMAND "${CMAKE_COMMAND}" "-DGIT=${GIT_EXECUTABLE}" "-DAUTANA_DIR=${AUTANA_DIR}" "-DOUT=${autana_commit}"
+            -P "${PROJECT_SOURCE_DIR}/cmake/autana_commit.cmake"
+    VERBATIM)
+add_dependencies(loupe_core autana_commit)
+target_include_directories(loupe_core PRIVATE "${CMAKE_BINARY_DIR}/generated")
+set_property(SOURCE src/version.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_VERSION=\"${PROJECT_VERSION}\"")
 if(WIN32)
     # Every executable that links loupe_core, tests too, runs with UTF-8 as its code page.
     enable_language(RC)
@@ -81,6 +100,8 @@ target_include_directories(loupe_window PRIVATE "${CMAKE_BINARY_DIR}/generated")
 
 add_executable(loupe src/main.cpp)
 target_link_libraries(loupe PRIVATE loupe_core loupe_window)
+
+include(cmake/package.cmake)
 
 include(CTest)
 if(BUILD_TESTING)

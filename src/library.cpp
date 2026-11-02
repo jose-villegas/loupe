@@ -7,6 +7,7 @@
 #include <fstream>
 #include <string>
 #include <system_error>
+#include <utility>
 
 namespace fs = std::filesystem;
 
@@ -53,13 +54,15 @@ read_recent(const fs::path& config) {
 
 } // namespace
 
+fs::path
+samples_dir(const Folders& folders) {
+    return folders.exe_dir / LOUPE_SAMPLES_DIR;
+}
+
 Library
 library(const Folders& folders) {
     Library found;
-    for (const fs::path& folder : {folders.exe_dir / ".." / "share" / "loupe" / "scenes", folders.exe_dir / "scenes"}) {
-        const std::vector<fs::path> packs = packs_in(folder);
-        found.samples.insert(found.samples.end(), packs.begin(), packs.end());
-    }
+    found.samples = packs_in(samples_dir(folders));
     std::error_code error;
     for (const fs::path& scene : read_recent(folders.config)) {
         if (fs::is_regular_file(scene, error)) {
@@ -80,10 +83,12 @@ remember(const Folders& folders, const fs::path& scene) {
     if (error) {
         return false;
     }
-    std::vector<fs::path> recent = read_recent(config);
-    std::erase(recent, absolute);
-    recent.insert(recent.begin(), absolute);
-    recent.resize(std::min(recent.size(), RECENT_KEPT));
+    std::vector<fs::path> recent = {absolute};
+    for (fs::path& path : read_recent(config)) {
+        if (path != absolute && recent.size() < RECENT_KEPT) {
+            recent.push_back(std::move(path));
+        }
+    }
     fs::create_directories(config, error);
     std::ofstream out(config / RECENT_FILE, std::ios::binary | std::ios::trunc);
     for (const fs::path& path : recent) {

@@ -121,7 +121,8 @@ const char*
 usage() {
     return "usage: loupe [SCENE.apak | SCENE.scene.toml] [--object NAME ...] [--camera NAME] [--view NAME]\n"
            "             [--frames N] [--dt MS] [--set owner.name=value ...] [-o out.bmp] [--video out.avi]\n"
-           "             [--checkpoint-mb MB] [--ticks N]\n";
+           "             [--checkpoint-mb MB] [--ticks N]\n"
+           "       loupe --version\n";
 }
 
 std::vector<std::string>
@@ -143,6 +144,10 @@ parse_options(int argc, char** argv, Options* options, std::string* why) {
                 return false;
             }
             options->scene = flag;
+            continue;
+        }
+        if (flag == "--version") {
+            options->version = true;
             continue;
         }
         if (i + 1 >= argc) {
