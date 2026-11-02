@@ -59,7 +59,7 @@ child(const std::string& out, const std::string& text) {
 
 std::string
 read_all(const fs::path& file) {
-    std::ifstream in(file, std::ios::binary);
+    const std::ifstream in(file, std::ios::binary);
     std::ostringstream text;
     text << in.rdbuf();
     return text.str();
