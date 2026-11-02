@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <string>
 
+#include "engine/frames.hpp"
 #include "options.hpp"
 #include "path/path.hpp"
 #include "version.hpp"

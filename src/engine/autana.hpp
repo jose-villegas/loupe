@@ -6,7 +6,6 @@
 extern "C" {
 #include "asset/asset_store.h"
 #include "render_host.h"
-#include "render_video.h"
 #include "scene_viewer.h"
 }
 #undef _Static_assert

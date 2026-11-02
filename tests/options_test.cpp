@@ -7,6 +7,7 @@
 
 #include "options.hpp"
 #include "pack.hpp"
+#include "tools.hpp"
 
 namespace {
 
@@ -83,16 +84,13 @@ check_refusals() {
     return ok;
 }
 
-// B takes --b-args' renderer flags in place of A's, and keeps the path and the output.
+// --b-args parses into B's own renderer flags, A's staying A's, and both
+// spell out in the provider's flags.
 bool
-check_b_options() {
-    const std::string toml = "s.scene.toml";
+check_b_render() {
     const bool tool = loupe::builds_packs();
-    bool ok = true;
     loupe::Options a;
-    loupe::Options b;
-    std::string why;
-    const std::vector<std::string> both = {toml,
+    const std::vector<std::string> both = {"s.scene.toml",
                                            "--object",
                                            "atrium",
                                            "--view",
@@ -108,18 +106,13 @@ check_b_options() {
                                            "--compare",
                                            "HEAD",
                                            "--b-args",
-                                           "  --view meshlets\t--set c.d=2 "};
+                                           "  --view meshlets	--set c.d=2 "};
     // Parsed in builds without the pack tool too, though they refuse the compare.
-    ok &= check(parse(both, &a).empty() == tool, "A's compare command line");
-    ok &= check(loupe::b_options(a, &b, &why), "B's options build");
-    ok &= check(b.objects.empty() && b.camera.empty() && b.view == "meshlets"
-                    && b.sets == std::vector<std::string>{"c.d=2"},
-                "B takes --b-args' renderer flags in place of A's");
-    ok &= check(b.dt_ms == a.dt_ms && b.frame == a.frame && b.out_bmp == a.out_bmp && b.scene == a.scene,
-                "B keeps A's path, frame, output and scene");
-    a.b_args.reset();
-    ok &= check(loupe::b_options(a, &b, &why) && b.objects == a.objects && b.view == a.view && b.sets == a.sets,
-                "without --b-args, B draws as A");
+    bool ok = check(parse(both, &a).empty() == tool, "A's compare command line");
+    const std::vector<std::string> a_args = {"--object", "atrium", "--view", "shaded", "--set", "a.b=1"};
+    const std::vector<std::string> b_args = {"--view", "meshlets", "--set", "c.d=2"};
+    ok &= check(a.render.args() == a_args, "A keeps its own renderer flags");
+    ok &= check(a.b_render && a.b_render->args() == b_args, "B's are --b-args' alone, not added to A's");
     return ok;
 }
 
@@ -128,6 +121,6 @@ check_b_options() {
 int
 main() {
     const bool refusals = check_refusals();
-    const bool b_options = check_b_options();
-    return refusals && b_options ? 0 : 1;
+    const bool b_render = check_b_render();
+    return refusals && b_render ? 0 : 1;
 }

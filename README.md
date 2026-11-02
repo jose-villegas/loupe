@@ -10,14 +10,13 @@ builds the pack of first.
 ```mermaid
 flowchart LR
   cli["loupe"] --> window["loupe_window: SDL3, Vulkan (volk), Dear ImGui"]
-  cli --> core["loupe_core: Frames, options, pack, library"]
+  cli --> core["loupe_core: Frames, options, pack, tools, library"]
   cli --> path["loupe_path: --frame, --compare"]
   window --> core
   path --> core
-  path -- "B's pack at a revision or folder; the A | B video" --> tools["git, B's build_pack.py,<br/>autana's render_compare.py"]
   core -- "render_host_open / step / save / restore / close" --> autana["autana::scene_provider<br/>(submodule third_party/autana)"]
-  core -- ".scene.toml, with the pack tool" --> pack["autana's build_pack.py<br/>into build/packs"]
-  pack -- ".apak" --> core
+  core -- "with the pack tool: a .scene.toml's pack,<br/>B's at a revision or folder, the A | B video" --> tools["git, a checkout's build_pack.py,<br/>autana's render_compare.py"]
+  tools -- ".apak into build/packs or the run's scratch" --> core
   core -- "AUTANA_ASSET_DIR: the .apak's folder" --> autana
 ```
 
@@ -104,7 +103,7 @@ with `-DLOUPE_PACK_TOOL=OFF` refuses one, and says so.
 ## Frames of a camera path, and A | B compares
 
 `--frame N -o out.png` writes frame N of the scene's camera path as a PNG, the
-pixels a run of `--frames N+1` writes with `-o`. `--compare REV|DIR` draws the
+pixels a run of `--frames N+1` at the same `--dt` writes with `-o`. `--compare REV|DIR` draws the
 path twice: side A is the scene given, side B the same `.scene.toml`'s pack
 built by B's own copy of `third_party/autana/launcher/tools/r3d/build_pack.py`,
 in a git worktree at the revision REV of

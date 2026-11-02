@@ -2,7 +2,9 @@
 # --compare COMPARE and B_ARGS as --b-args when given, writing OUT/pair.png
 # (and OUT/pair-b.png). Fails unless each holds the pixels a straight run of
 # PACK to that frame writes with -o: A's under ARGS, B's under B_ARGS or
-# ARGS; and with B_ARGS, unless the two differ. ARGS are |-separated.
+# ARGS; and with B_ARGS, unless the two differ. ARGS are |-separated. A
+# COMPARE that is a revision must leave the scene's repository with the
+# worktrees it had, GIT listing them.
 string(REPLACE "|" ";" args "${ARGS}")
 file(REMOVE_RECURSE "${OUT}")
 file(MAKE_DIRECTORY "${OUT}")
@@ -30,7 +32,29 @@ if(COMPARE)
         list(APPEND compare --b-args "${B_ARGS}")
     endif()
 endif()
+# The scene repository's worktrees, as git lists them, into `out`.
+function(worktrees out)
+    get_filename_component(scene_dir "${SCENE}" DIRECTORY)
+    execute_process(COMMAND "${GIT}" -C "${scene_dir}" worktree list --porcelain OUTPUT_VARIABLE list
+                    RESULT_VARIABLE status)
+    if(NOT status EQUAL 0)
+        message(FATAL_ERROR "git worktree list: exit ${status}")
+    endif()
+    set(${out} "${list}" PARENT_SCOPE)
+endfunction()
+
+set(revision OFF)
+if(COMPARE AND NOT IS_DIRECTORY "${COMPARE}")
+    set(revision ON)
+    worktrees(before)
+endif()
 loupe(pair "${SCENE}" ${args} --dt "${DT}" --frame "${FRAME}" ${compare} -o "${OUT}/pair.png")
+if(revision)
+    worktrees(after)
+    if(NOT after STREQUAL before)
+        message(FATAL_ERROR "the compare left the worktrees changed:\n${before}\nbecame\n${after}")
+    endif()
+endif()
 
 math(EXPR frames "${FRAME} + 1")
 loupe(straight_a "${PACK}" ${args} --frames ${frames} --dt "${DT}" -o "${OUT}/a.bmp")

@@ -192,8 +192,8 @@ Window::open(const Options& options) {
     close();
     Options run = options;
     run.out_bmp = utf8(scratch_.path() / "frame.bmp");
-    std::string why;
-    std::unique_ptr<Frames> frames = open_scene(run, options.scene, &why);
+    std::string why = "cannot make a scratch folder for its frames";
+    std::unique_ptr<Frames> frames = scratch_.path().empty() ? nullptr : open_scene(run, options.scene, &why);
     if (frames == nullptr) {
         refusal_ = std::format("{}: {}", utf8(options.scene), why);
         std::fprintf(stderr, "loupe: %s\n", refusal_.c_str());

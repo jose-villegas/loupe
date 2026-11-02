@@ -71,9 +71,6 @@ struct Frames::State {
 
 namespace {
 
-// PENDING: autana's own budget, once it says it.
-constexpr int64_t VIDEO_MAX_BYTES_PENDING = int64_t{1} << 30;
-
 bool
 set_asset_dir(const std::filesystem::path& folder) {
 #if defined(_WIN32)
@@ -88,21 +85,15 @@ set_asset_dir(const std::filesystem::path& folder) {
 std::vector<std::string>
 provider_args(const std::string& id, const Options& options) {
     std::vector<std::string> args = {"loupe", "--scene", id};
+    const std::vector<std::string> render = options.render.args();
+    args.insert(args.end(), render.begin(), render.end());
     const auto add = [&args](const char* flag, const std::string& value) {
         if (!value.empty()) {
             args.insert(args.end(), {flag, value});
         }
     };
-    for (const std::string& object : options.objects) {
-        add("--object", object);
-    }
-    add("--camera", options.camera);
-    add("--view", options.view);
     add("--frames", options.frames ? std::to_string(*options.frames) : "");
     add("--dt", options.dt_ms ? std::to_string(*options.dt_ms) : "");
-    for (const std::string& set : options.sets) {
-        add("--set", set);
-    }
     add("-o", options.out_bmp);
     add("--video", options.out_video);
     return args;
@@ -306,8 +297,7 @@ Frames::path_ms() const {
 
 int64_t
 Frames::video_frames_fit() const {
-    const render_host_image_t image = render_host_image();
-    return render_video_frames_that_fit(image.width, image.height, VIDEO_MAX_BYTES_PENDING);
+    return render_host_video_frames_fit();
 }
 
 bool
@@ -318,6 +308,23 @@ Frames::close() {
     state_->forget_after(-1);
     state_->open = false;
     return render_host_close();
+}
+
+bool
+render(const Options& options, std::string* why) {
+    std::unique_ptr<Frames> frames = Frames::open(options, why);
+    if (frames == nullptr) {
+        return false;
+    }
+    const int count = frames->count();
+    for (int i = 0; i < count; i++) {
+        frames->step(frames->dt_ms());
+    }
+    if (!frames->close()) {
+        *why = "the run failed; autana said why above";
+        return false;
+    }
+    return true;
 }
 
 } // namespace loupe

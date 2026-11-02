@@ -95,4 +95,8 @@ class Frames {
     std::unique_ptr<State> state_;
 };
 
+// One run as -o and --video ask: opened, stepped through every frame, closed;
+// false with `why` set when it failed.
+bool render(const Options& options, std::string* why);
+
 } // namespace loupe

@@ -11,6 +11,7 @@
 #include "pack.hpp"
 #include "paths.hpp"
 #include "process.hpp"
+#include "tools.hpp"
 
 namespace loupe::window {
 

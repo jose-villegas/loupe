@@ -31,10 +31,6 @@ struct PathFacts {
 // not at that; `given`'s --frames, else from the start of the path to its end.
 PathTiming path_timing(const PathFacts& path, const Options& given);
 
-// One run as -o and --video ask: opened, stepped through every frame, closed;
-// false with `why` set when it failed.
-bool render(const Options& options, std::string* why);
-
 // --frame and --compare as main runs them, saying on stderr what failed:
 // 0 when everything was written, 1 when a run or a tool failed, 2 when the
 // command cannot run (no such revision, no such scene in it, a frame past the

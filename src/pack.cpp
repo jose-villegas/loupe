@@ -5,10 +5,9 @@
 #include <filesystem>
 #include <string>
 #include <system_error>
-#include <vector>
 
 #include "paths.hpp"
-#include "process.hpp"
+#include "tools.hpp"
 
 namespace fs = std::filesystem;
 
@@ -24,7 +23,6 @@ stem_before(const fs::path& path, std::string_view suffix) {
                                                                  : std::string();
 }
 
-#if LOUPE_PACK_TOOL
 constexpr uint64_t FNV_OFFSET = 14695981039346656037ull;
 constexpr uint64_t FNV_PRIME = 1099511628211ull;
 
@@ -49,21 +47,12 @@ built_pack(const fs::path& scene_toml, const std::string& id, std::string* why) 
     }
     char tag[17];
     std::snprintf(tag, sizeof tag, "%016llx", static_cast<unsigned long long>(path_hash(scene.generic_string())));
-    const fs::path folder = fs::path(LOUPE_PACK_CACHE) / (id + "-" + tag);
-
-    const fs::path script = fs::path(LOUPE_AUTANA_DIR) / "launcher" / "tools" / "r3d" / "build_pack.py";
-    const std::vector<std::string> args = {LOUPE_PYTHON, utf8(script), "-o", utf8(folder), utf8(scene)};
-    if (fs::create_directories(folder, error), error) {
-        *why = "cannot make " + utf8(folder) + ": " + error.message();
-        return std::nullopt;
-    }
-    if (!run_logged(args, folder / "build_pack.log")) {
-        *why = "build_pack.py failed; see " + utf8(folder / "build_pack.log");
+    const fs::path folder = pack_cache() / (id + "-" + tag);
+    if (!build_pack({.checkout = autana_dir(), .scene = scene, .folder = folder}, why)) {
         return std::nullopt;
     }
     return ScenePack{.folder = folder, .id = id};
 }
-#endif
 
 } // namespace
 
@@ -76,11 +65,6 @@ std::string
 scene_id(const fs::path& file) {
     const std::string pack = stem_before(file, PACK_SUFFIX);
     return pack.empty() ? stem_before(file, SCENE_SUFFIX) : pack;
-}
-
-bool
-builds_packs() {
-    return LOUPE_PACK_TOOL != 0;
 }
 
 std::optional<ScenePack>
@@ -99,12 +83,12 @@ resolve_scene(const fs::path& path, std::string* why) {
         *why = "expected a .apak or .scene.toml file: " + utf8(path);
         return std::nullopt;
     }
-#if LOUPE_PACK_TOOL
+    if (!builds_packs()) {
+        *why =
+            "this loupe opens a scene's .apak; it was built without the pack tool a .scene.toml needs: " + utf8(path);
+        return std::nullopt;
+    }
     return built_pack(path, id, why);
-#else
-    *why = "this loupe opens a scene's .apak; it was built without the pack tool a .scene.toml needs: " + utf8(path);
-    return std::nullopt;
-#endif
 }
 
 } // namespace loupe

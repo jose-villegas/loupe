@@ -73,7 +73,7 @@ add_test(NAME path_timing COMMAND path_timing_test)
 function(path_frame name scene args compare b_args)
     add_test(NAME ${name} COMMAND "${CMAKE_COMMAND}" "-DLOUPE=$<TARGET_FILE:loupe>"
              "-DSAME_IMAGE=$<TARGET_FILE:same_image>" "-DSCENE=${scene}" "-DPACK=${sponza}" "-DARGS=${args}"
-             -DFRAME=3 -DDT=50 "-DCOMPARE=${compare}" "-DB_ARGS=${b_args}"
+             -DFRAME=3 -DDT=50 "-DCOMPARE=${compare}" "-DB_ARGS=${b_args}" "-DGIT=${GIT_EXECUTABLE}"
              "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/${name}" -P "${CMAKE_CURRENT_SOURCE_DIR}/path_frame.cmake")
     on_packs(${name})
 endfunction()
@@ -83,6 +83,7 @@ if(LOUPE_PACK_TOOL)
     # The scene's own checkout: a folder, and its HEAD checked out as a worktree.
     get_filename_component(autana_dir "${AUTANA_DIR}" ABSOLUTE)
     path_frame(frame_compare "${sponza_toml}" "" "${autana_dir}" "--view meshlets --object atrium")
+    # HEAD's worktree clones its submodules, from the network.
     path_frame(frame_compare_head "${sponza_toml}" "" HEAD "")
     # --frames 3 at --dt 100 (tests/path_video.cmake).
     function(path_video name b_args expect)

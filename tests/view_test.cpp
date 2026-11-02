@@ -77,12 +77,12 @@ main(int argc, char** argv) {
     loupe::Options options;
     options.scene = argv[1];
     options.out_bmp = std::format("{}/{}.bmp", out, mode);
-    options.view = is_straight ? argv[4] : "";
+    options.render.view = is_straight ? argv[4] : "";
     std::unique_ptr<loupe::Frames> frames = loupe::test::open_or_report("view_test", options);
     if (frames == nullptr) {
         return 1;
     }
     const bool ok =
-        frames->has_views() && (is_straight ? straight(*frames, out, options.view) : switched(*frames, out));
+        frames->has_views() && (is_straight ? straight(*frames, out, options.render.view) : switched(*frames, out));
     return frames->close() && ok ? 0 : 1;
 }

@@ -16,6 +16,7 @@
 
 #include "pack.hpp"
 #include "paths.hpp"
+#include "tools.hpp"
 
 namespace loupe {
 
@@ -64,9 +65,6 @@ const CountFlag COUNT_FLAGS[] = {
      .set = set_count<int, &Options::frame>},
 };
 
-// The flags --b-args gives side B: the renderer's, not the path's or the output's.
-const std::string_view RENDER_FLAGS[] = {"--object", "--camera", "--view", "--set"};
-
 // `text` split at white space.
 std::vector<std::string>
 words(const std::string& text) {
@@ -101,7 +99,7 @@ window_flags_fit(const Options& options, std::string* why) {
 // and B's pack is built from the .scene.toml.
 bool
 path_flags_fit(const Options& options, std::string* why) {
-    if (options.b_args && options.compare.empty()) {
+    if (options.b_render && options.compare.empty()) {
         *why = "--b-args needs --compare REV|DIR";
         return false;
     }
@@ -128,14 +126,34 @@ path_flags_fit(const Options& options, std::string* why) {
         *why = "--compare needs a .scene.toml: B's pack is built from it";
         return false;
     }
-    Options b;
-    return b_options(options, &b, why);
+    return true;
+}
+
+// --b-args' words as side B's renderer flags; false with `why` set for a word
+// that is not a renderer flag, or one without its value.
+bool
+parse_b_args(const std::string& text, RenderFlags* flags, std::string* why) {
+    const std::vector<std::string> given = words(text);
+    for (size_t i = 0; i < given.size(); i += 2) {
+        if (i + 1 == given.size()) {
+            *why = "--b-args: " + given[i] + " needs a value";
+            return false;
+        }
+        if (!flags->set(given[i], given[i + 1])) {
+            *why = "--b-args takes --object, --camera, --view and --set, not " + given[i];
+            return false;
+        }
+    }
+    return true;
 }
 
 // Sets the option `flag` names to `value`; false with `why` set for an unknown
 // flag or a value it cannot take.
 bool
 apply_flag(const std::string& flag, const std::string& value, Options* options, std::string* why) {
+    if (options->render.set(flag, value)) {
+        return true;
+    }
     if (const CountFlag* counted = find_count_flag(flag)) {
         long long count = 0;
         if (!parse_count(value, counted->least, counted->most, &count)) {
@@ -143,14 +161,6 @@ apply_flag(const std::string& flag, const std::string& value, Options* options, 
             return false;
         }
         counted->set(options, count);
-    } else if (flag == "--object") {
-        options->objects.push_back(value);
-    } else if (flag == "--camera") {
-        options->camera = value;
-    } else if (flag == "--view") {
-        options->view = value;
-    } else if (flag == "--set") {
-        options->sets.push_back(value);
     } else if (flag == "-o") {
         options->out_bmp = value;
     } else if (flag == "--video") {
@@ -158,7 +168,7 @@ apply_flag(const std::string& flag, const std::string& value, Options* options, 
     } else if (flag == "--compare") {
         options->compare = value;
     } else if (flag == "--b-args") {
-        options->b_args = words(value);
+        return parse_b_args(value, &options->b_render.emplace(), why);
     } else {
         *why = "unknown option " + flag;
         return false;
@@ -167,6 +177,41 @@ apply_flag(const std::string& flag, const std::string& value, Options* options, 
 }
 
 } // namespace
+
+bool
+RenderFlags::set(std::string_view flag, const std::string& value) {
+    if (flag == "--object") {
+        objects.push_back(value);
+    } else if (flag == "--camera") {
+        camera = value;
+    } else if (flag == "--view") {
+        view = value;
+    } else if (flag == "--set") {
+        sets.push_back(value);
+    } else {
+        return false;
+    }
+    return true;
+}
+
+std::vector<std::string>
+RenderFlags::args() const {
+    std::vector<std::string> args;
+    const auto add = [&args](const char* flag, const std::string& value) {
+        if (!value.empty()) {
+            args.insert(args.end(), {flag, value});
+        }
+    };
+    for (const std::string& object : objects) {
+        add("--object", object);
+    }
+    add("--camera", camera);
+    add("--view", view);
+    for (const std::string& assignment : sets) {
+        add("--set", assignment);
+    }
+    return args;
+}
 
 bool
 parse_count(const std::string& text, long long least, long long most, long long* value) {
@@ -184,34 +229,6 @@ usage() {
            "       loupe SCENE.scene.toml [flags] [--frames N] [--dt MS] --compare REV|DIR [--b-args \"FLAGS\"]\n"
            "             (--video out.mp4 | --frame N -o out.png)\n"
            "       loupe --version\n";
-}
-
-bool
-b_options(const Options& a, Options* b, std::string* why) {
-    *b = a;
-    b->b_args.reset();
-    if (!a.b_args) {
-        return true;
-    }
-    b->objects.clear();
-    b->camera.clear();
-    b->view.clear();
-    b->sets.clear();
-    const std::vector<std::string>& given = *a.b_args;
-    for (size_t i = 0; i < given.size(); i += 2) {
-        if (std::ranges::find(RENDER_FLAGS, given[i]) == std::end(RENDER_FLAGS)) {
-            *why = "--b-args takes --object, --camera, --view and --set, not " + given[i];
-            return false;
-        }
-        if (i + 1 == given.size()) {
-            *why = "--b-args: " + given[i] + " needs a value";
-            return false;
-        }
-        if (!apply_flag(given[i], given[i + 1], b, why)) {
-            return false;
-        }
-    }
-    return true;
 }
 
 bool

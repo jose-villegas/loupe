@@ -18,8 +18,8 @@
 #include "engine/frames.hpp"
 #include "pack.hpp"
 #include "paths.hpp"
-#include "process.hpp"
 #include "scratch.hpp"
+#include "tools.hpp"
 
 namespace fs = std::filesystem;
 
@@ -89,45 +89,35 @@ write_frame(const std::string& side, Options options, int index, const fs::path&
     return true;
 }
 
-// The renderer flags of `options`, as a label shows them.
+// One side of a compare: what its panel is labelled, the pack it opens, and
+// the renderer flags it draws under.
+struct Side {
+    std::string label;
+    fs::path pack;
+    RenderFlags render;
+};
+
+// A side's label: what it is drawn from, then its renderer flags.
 std::string
-flags_text(const Options& options) {
-    std::string text;
-    const auto add = [&text](const char* flag, const std::string& value) {
-        if (!value.empty()) {
-            text += std::format(" {} {}", flag, value);
-        }
-    };
-    for (const std::string& object : options.objects) {
-        add("--object", object);
-    }
-    add("--camera", options.camera);
-    add("--view", options.view);
-    for (const std::string& set : options.sets) {
-        add("--set", set);
+label(const std::string& from, const RenderFlags& render) {
+    std::string text = from;
+    for (const std::string& arg : render.args()) {
+        text += " " + arg;
     }
     return text;
 }
 
-// `options` with only the renderer's flags and the scene: the path, the outputs
-// and the compare are each side's run's to set.
+// A run of `side` at `timing`, writing `out_bmp`.
 Options
-renderer_only(Options options) {
-    options.frames.reset();
-    options.dt_ms.reset();
-    options.out_bmp.clear();
-    options.out_video.clear();
-    options.frame.reset();
-    options.compare.clear();
-    options.b_args.reset();
-    return options;
+side_run(const Side& side, const PathTiming& timing, const fs::path& out_bmp) {
+    Options run;
+    run.scene = side.pack;
+    run.render = side.render;
+    run.frames = timing.frames;
+    run.dt_ms = timing.dt_ms;
+    run.out_bmp = utf8(out_bmp);
+    return run;
 }
-
-// One side of a compare: what its panel is labelled, and its run.
-struct Side {
-    std::string label;
-    Options options;
-};
 
 // Where side `index` of --frame's pair goes: OUT for A, OUT's stem with -b for B.
 fs::path
@@ -140,10 +130,8 @@ side_path(const fs::path& out, size_t index) {
 // `given`.
 bool
 time_path(const Side& a, const Options& given, const fs::path& work, PathTiming* timing, Stop* failed) {
-    Options probe = a.options;
-    probe.frames = 1;
+    Options probe = side_run(a, {.frames = 1}, work / "probe.bmp");
     probe.dt_ms = given.dt_ms;
-    probe.out_bmp = utf8(work / "probe.bmp");
     std::string why;
     std::unique_ptr<Frames> frames = Frames::open(probe, &why);
     if (frames == nullptr) {
@@ -181,9 +169,9 @@ a_side(const Options& options, Side* a, Stop* failed) {
     if (!pack) {
         return stop(failed, FAILED, why);
     }
-    a->label = utf8(options.scene.filename()) + flags_text(options);
-    a->options = renderer_only(options);
-    a->options.scene = pack_file(*pack);
+    *a = {.label = label(utf8(options.scene.filename()), options.render),
+          .pack = pack_file(*pack),
+          .render = options.render};
     return true;
 }
 
@@ -194,12 +182,11 @@ class Work {
     Work() = default;
 
     ~Work() {
-#if LOUPE_PACK_TOOL
         if (!repo_.empty()) {
-            (void)run_logged({LOUPE_GIT, "-C", utf8(repo_), "worktree", "remove", "--force", utf8(tree())},
-                             dir() / "worktree-remove.log");
+            std::string ignored;
+            (void)loupe::git({"-C", utf8(repo_), "worktree", "remove", "--force", utf8(tree())},
+                             dir() / "worktree-remove.log", &ignored);
         }
-#endif
     }
 
     Work(const Work&) = delete;
@@ -217,18 +204,15 @@ class Work {
         return dir() / "b";
     }
 
-#if LOUPE_PACK_TOOL
     // Git in `repo` with `args`; its output, or none with `failed` set to say why.
     std::optional<std::string>
     git(const fs::path& repo, std::vector<std::string> args, Stop* failed) const {
-        args.insert(args.begin(), {LOUPE_GIT, "-C", utf8(repo)});
-        const fs::path log = dir() / "git.log";
-        if (!run_logged(args, log)) {
-            (void)stop(failed, FAILED, std::format("git {} failed:\n{}", args[3], read_text(log)));
-            return std::nullopt;
+        args.insert(args.begin(), {"-C", utf8(repo)});
+        std::string why;
+        std::optional<std::string> out = loupe::git(args, dir() / "git.log", &why);
+        if (!out) {
+            (void)stop(failed, FAILED, why);
         }
-        std::string out = read_text(log);
-        out.erase(out.find_last_not_of("\r\n") + 1);
         return out;
     }
 
@@ -244,14 +228,12 @@ class Work {
         repo_ = repo;
         return git(tree(), {"submodule", "update", "--init", "--recursive"}, failed).has_value();
     }
-#endif
 
   private:
     Scratch scratch_;
     fs::path repo_; // the repository tree() was added to, once it was
 };
 
-#if LOUPE_PACK_TOOL
 // B's pack: the scene's .scene.toml at the same path in the checkout at `rev_or_dir`,
 // a folder or a revision of the scene's own repository, built by that
 // checkout's build_pack.py. The pack's path, or none with `failed` set.
@@ -285,14 +267,13 @@ pack_at(const fs::path& scene, const std::string& rev_or_dir, Work& work, Stop* 
         return std::nullopt;
     }
     std::fprintf(stderr, "loupe: building B's pack in %s\n", utf8(root).c_str());
-    const fs::path folder = work.dir() / "b_pack";
-    const fs::path script = root / "launcher" / "tools" / "r3d" / "build_pack.py";
-    const fs::path log = work.dir() / "b_pack.log";
-    if (!run_logged({LOUPE_PYTHON, utf8(script), "-o", utf8(folder), utf8(b_scene)}, log)) {
-        (void)stop(failed, FAILED, "B's build_pack.py failed:\n" + read_text(log));
+    const PackBuild build = {.checkout = root, .scene = b_scene, .folder = work.dir() / "b_pack"};
+    std::string why;
+    if (!build_pack(build, &why)) {
+        (void)stop(failed, FAILED, std::format("B's {}:\n{}", why, read_text(build.folder / "build_pack.log")));
         return std::nullopt;
     }
-    return ScenePack{.folder = folder, .id = scene_id(b_scene)};
+    return ScenePack{.folder = build.folder, .id = scene_id(b_scene)};
 }
 
 // Side B: the scene's pack at --compare's REV or DIR, under --b-args' flags or A's.
@@ -302,11 +283,8 @@ b_side(const Options& options, Work& work, Side* b, Stop* failed) {
     if (!pack) {
         return false;
     }
-    std::string why;
-    (void)b_options(options, &b->options, &why);
-    b->options = renderer_only(b->options);
-    b->options.scene = pack_file(*pack);
-    b->label = options.compare + flags_text(b->options);
+    const RenderFlags render = options.b_render.value_or(options.render);
+    *b = {.label = label(options.compare, render), .pack = pack_file(*pack), .render = render};
     return true;
 }
 
@@ -319,10 +297,7 @@ compare_video(const std::vector<Side>& sides, const PathTiming& timing, const fs
               Stop* failed) {
     std::vector<std::string> videos;
     for (const auto& [name, side] : {std::pair{"a", &sides[0]}, std::pair{"b", &sides[1]}}) {
-        Options run = side->options;
-        run.frames = timing.frames;
-        run.dt_ms = timing.dt_ms;
-        run.out_bmp = utf8(work.dir() / std::format("{}.bmp", name));
+        Options run = side_run(*side, timing, work.dir() / std::format("{}.bmp", name));
         run.out_video = utf8(work.dir() / std::format("{}.avi", name));
         std::fprintf(stderr, "loupe: drawing %s, %d frames at --dt %u\n", side->label.c_str(), timing.frames,
                      timing.dt_ms);
@@ -334,20 +309,19 @@ compare_video(const std::vector<Side>& sides, const PathTiming& timing, const fs
     }
     std::error_code ignored;
     fs::create_directories(fs::absolute(out).parent_path(), ignored);
-    const fs::path script = fs::path(LOUPE_AUTANA_DIR) / "launcher" / "tools" / "render" / "render_compare.py";
     const fs::path csv = fs::path(out).replace_extension(".csv");
     const fs::path log = work.dir() / "render_compare.log";
-    const bool ok = run_logged({LOUPE_PYTHON, utf8(script), "--out", utf8(out), "--csv", utf8(csv), "--video",
-                                videos[0], videos[1], "--label-a", sides[0].label, "--label-b", sides[1].label},
-                               log);
+    std::string why;
+    const bool ok = render_compare({"--out", utf8(out), "--csv", utf8(csv), "--video", videos[0], videos[1],
+                                    "--label-a", sides[0].label, "--label-b", sides[1].label},
+                                   log, &why);
     std::fputs(read_text(log).c_str(), stderr);
     if (!ok) {
-        return stop(failed, FAILED, "render_compare.py failed");
+        return stop(failed, FAILED, why);
     }
     std::printf("%s\n", utf8(out).c_str());
     return true;
 }
-#endif
 
 } // namespace
 
@@ -362,23 +336,6 @@ path_timing(const PathFacts& path, const Options& given) {
     return {.frames = given.frames.value_or(static_cast<int>(whole)), .dt_ms = dt};
 }
 
-bool
-render(const Options& options, std::string* why) {
-    std::unique_ptr<Frames> frames = Frames::open(options, why);
-    if (frames == nullptr) {
-        return false;
-    }
-    const int count = frames->count();
-    for (int i = 0; i < count; i++) {
-        frames->step(frames->dt_ms());
-    }
-    if (!frames->close()) {
-        *why = "the run failed; autana said why above";
-        return false;
-    }
-    return true;
-}
-
 int
 run_path(const Options& options) {
     Stop failed;
@@ -390,26 +347,18 @@ run_path(const Options& options) {
     std::vector<Side> sides(1);
     PathTiming timing;
     if (!(!work.dir().empty() || stop(&failed, FAILED, "cannot make a scratch folder"))
-        || !a_side(options, &sides[0], &failed)) {
+        || !a_side(options, &sides[0], &failed) || !time_path(sides[0], options, work.dir(), &timing, &failed)
+        || !frame_on_path(options.frame, timing, &failed)) {
         return said();
     }
-#if LOUPE_PACK_TOOL
     if (!options.compare.empty() && !b_side(options, work, &sides.emplace_back(), &failed)) {
         return said();
     }
-#endif
-    if (!time_path(sides[0], options, work.dir(), &timing, &failed) || !frame_on_path(options.frame, timing, &failed)) {
-        return said();
-    }
-#if LOUPE_PACK_TOOL
     if (!options.frame) {
         return compare_video(sides, timing, options.out_video, work, &failed) ? 0 : said();
     }
-#endif
     for (size_t i = 0; i < sides.size(); i++) {
-        Options run = sides[i].options;
-        run.dt_ms = timing.dt_ms;
-        run.out_bmp = utf8(work.dir() / std::format("frame-{}.bmp", i));
+        const Options run = side_run(sides[i], timing, work.dir() / std::format("frame-{}.bmp", i));
         if (!write_frame(sides[i].label, run, *options.frame, side_path(options.out_bmp, i), &failed)) {
             return said();
         }
