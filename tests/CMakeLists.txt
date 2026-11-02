@@ -84,15 +84,18 @@ add_test(NAME view_switch COMMAND "${CMAKE_COMMAND}" "-DVIEW_TEST=$<TARGET_FILE:
 on_packs(view_switch)
 
 # A scene opened again after another closed, in one process, draws what it drew
-# opened first, both ways round.
+# opened first, both ways round. Each open's framebuffer outlives its close, so
+# the sanitizers accept that one leak here.
 add_executable(reopen_test reopen_test.cpp)
 target_link_libraries(reopen_test PRIVATE loupe_core)
+set(reopen_leaks "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/reopen.lsan.supp")
 foreach(order IN ITEMS "sponza;water" "water;sponza")
     list(GET order 0 first)
     list(GET order 1 second)
     add_test(NAME reopen_${first} COMMAND reopen_test "${CMAKE_CURRENT_BINARY_DIR}/reopen_${first}" "${${first}}"
                                           "${${second}}" "${${first}}")
     on_packs(reopen_${first})
+    set_tests_properties(reopen_${first} PROPERTIES ENVIRONMENT "${reopen_leaks}")
 endforeach()
 # But autana keeps a scene's pack mounted after its run closes, so a pack of the
 # same name opened later is never read: here the next-version pack opens as the
@@ -103,7 +106,7 @@ add_test(NAME reopen_same_name COMMAND reopen_test "${CMAKE_CURRENT_BINARY_DIR}/
                                        --refused "${next_pack}" "${sponza}")
 set_tests_properties(reopen_same_name PROPERTIES FIXTURES_REQUIRED "packs;next_version" RESOURCE_LOCK sponza
                                                  PASS_REGULAR_EXPRESSION "opened, not refused"
-                                                 FAIL_REGULAR_EXPRESSION " failed|DIFFERS")
+                                                 FAIL_REGULAR_EXPRESSION " failed|DIFFERS" ENVIRONMENT "${reopen_leaks}")
 
 # The command line the window relaunches loupe with parses back to the run it came from.
 add_executable(options_test options_test.cpp)
