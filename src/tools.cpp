@@ -1,8 +1,6 @@
 #include "tools.hpp"
 
 #include <filesystem>
-#include <fstream>
-#include <sstream>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -35,14 +33,6 @@ has_tool(std::string* why) {
         *why = "this loupe was built without the pack tool";
     }
     return LOUPE_PACK_TOOL != 0;
-}
-
-std::string
-read_text(const fs::path& file) {
-    const std::ifstream in(file, std::ios::binary);
-    std::ostringstream text;
-    text << in.rdbuf();
-    return text.str();
 }
 
 // `program` with `args` after it, its output into `log`.
@@ -83,7 +73,7 @@ build_pack(const PackBuild& build, std::string* why) {
     const fs::path script = build.checkout / "launcher" / "tools" / "r3d" / "build_pack.py";
     const fs::path log = build.folder / "build_pack.log";
     if (!run(PYTHON, {utf8(script), "-o", utf8(build.folder), utf8(build.scene)}, log)) {
-        *why = "build_pack.py failed; see " + utf8(log);
+        *why = "build_pack.py failed:\n" + read_text(log);
         return false;
     }
     return true;

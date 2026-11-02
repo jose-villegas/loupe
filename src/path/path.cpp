@@ -7,9 +7,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <format>
-#include <fstream>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -40,14 +38,6 @@ bool
 stop(Stop* stop, int code, std::string why) {
     *stop = {.code = code, .why = std::move(why)};
     return false;
-}
-
-std::string
-read_text(const fs::path& file) {
-    const std::ifstream in(file, std::ios::binary);
-    std::ostringstream text;
-    text << in.rdbuf();
-    return text.str();
 }
 
 // `frame` as a PNG at `out`, its bottom-up rows turned top-down as a surface
@@ -270,7 +260,7 @@ pack_at(const fs::path& scene, const std::string& rev_or_dir, Work& work, Stop* 
     const PackBuild build = {.checkout = root, .scene = b_scene, .folder = work.dir() / "b_pack"};
     std::string why;
     if (!build_pack(build, &why)) {
-        (void)stop(failed, FAILED, std::format("B's {}:\n{}", why, read_text(build.folder / "build_pack.log")));
+        (void)stop(failed, FAILED, "B's " + why);
         return std::nullopt;
     }
     return ScenePack{.folder = build.folder, .id = scene_id(b_scene)};
@@ -346,8 +336,11 @@ run_path(const Options& options) {
     Work work;
     std::vector<Side> sides(1);
     PathTiming timing;
-    if (!(!work.dir().empty() || stop(&failed, FAILED, "cannot make a scratch folder"))
-        || !a_side(options, &sides[0], &failed) || !time_path(sides[0], options, work.dir(), &timing, &failed)
+    if (work.dir().empty()) {
+        (void)stop(&failed, FAILED, "cannot make a scratch folder");
+        return said();
+    }
+    if (!a_side(options, &sides[0], &failed) || !time_path(sides[0], options, work.dir(), &timing, &failed)
         || !frame_on_path(options.frame, timing, &failed)) {
         return said();
     }

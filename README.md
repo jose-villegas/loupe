@@ -108,8 +108,9 @@ path twice: side A is the scene given, side B the same `.scene.toml`'s pack
 built by B's own copy of `third_party/autana/launcher/tools/r3d/build_pack.py`,
 in a git worktree at the revision REV of
 the scene's repository (removed after) or in the checkout DIR. Both sides are
-drawn by this Loupe, one after the other. `--b-args "FLAGS"` gives B other
-`--object`, `--camera`, `--view` and `--set` flags than A's.
+drawn by this Loupe, one after the other. `--b-args "FLAGS"` gives B its own
+`--object`, `--camera`, `--view` and `--set` flags in place of A's, so
+`--b-args ""` draws B with none.
 
 ```bash
 loupe sponza.scene.toml --frame 120 -o f.png

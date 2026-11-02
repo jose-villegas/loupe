@@ -106,7 +106,7 @@ check_b_render() {
                                            "--compare",
                                            "HEAD",
                                            "--b-args",
-                                           "  --view meshlets	--set c.d=2 "};
+                                           "  --view meshlets\t--set c.d=2 "};
     // Parsed in builds without the pack tool too, though they refuse the compare.
     bool ok = check(parse(both, &a).empty() == tool, "A's compare command line");
     const std::vector<std::string> a_args = {"--object", "atrium", "--view", "shaded", "--set", "a.b=1"};
