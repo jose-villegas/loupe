@@ -3,7 +3,6 @@
 #include <SDL3/SDL_surface.h>
 
 #include <algorithm>
-#include <climits>
 #include <cstdio>
 #include <filesystem>
 #include <format>
@@ -322,12 +321,11 @@ compare_video(const std::vector<Side>& sides, const PathTiming& timing, const fs
 PathTiming
 path_timing(const PathFacts& path, const Options& given) {
     uint32_t dt = given.dt_ms.value_or(path.own_dt_ms);
-    if (!given.dt_ms && int64_t{path.path_ms / dt} + 1 > path.fit) {
+    if (!given.dt_ms && frames_on_path(path.path_ms, dt) > path.fit) {
         const int64_t gaps = std::max<int64_t>(path.fit - 1, 1);
         dt = static_cast<uint32_t>((path.path_ms + gaps - 1) / gaps);
     }
-    const int64_t whole = std::min<int64_t>(path.path_ms / dt + 1, INT_MAX);
-    return {.frames = given.frames.value_or(static_cast<int>(whole)), .dt_ms = dt};
+    return {.frames = given.frames.value_or(frames_on_path(path.path_ms, dt)), .dt_ms = dt};
 }
 
 int

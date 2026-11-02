@@ -31,7 +31,7 @@ std::unique_ptr<Frames>
 open_scene(const Options& options, const std::filesystem::path& scene, std::string* why) {
     Options run = options;
     run.scene = scene;
-    std::unique_ptr<Frames> frames = Frames::open(run, why);
+    std::unique_ptr<Frames> frames = open_whole_path(run, why);
     if (frames == nullptr) {
         return nullptr;
     }

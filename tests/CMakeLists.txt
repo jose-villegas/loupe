@@ -111,6 +111,11 @@ target_link_libraries(seek_test PRIVATE loupe_core)
 add_test(NAME seek COMMAND seek_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/seek.bmp")
 on_packs(seek)
 
+add_executable(whole_path_test whole_path_test.cpp)
+target_link_libraries(whole_path_test PRIVATE loupe_core)
+add_test(NAME whole_path COMMAND whole_path_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/whole_path.bmp")
+on_packs(whole_path)
+
 add_executable(thinning_test thinning_test.cpp)
 target_link_libraries(thinning_test PRIVATE loupe_core)
 # Budgets of 1.5, 3.5 and 4.5 checkpoints: by the test's last frame they thin three, two and one times.
