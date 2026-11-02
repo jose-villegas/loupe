@@ -1,14 +1,45 @@
 # What `cpack` puts in a download. Windows: a portable zip, loupe.exe beside
-# scenes/ and LICENSE. Linux: a tarball in the prefix layout, bin/loupe and
+# scenes/ and LICENSE, and the same files in an installer (NSIS) that adds
+# shortcuts and opens .apak files in Loupe. Linux: a tarball in the prefix layout, bin/loupe and
 # share/ with its samples, .desktop file and icon, to copy into ~/.local or
 # /usr/local or run where it lands. LOUPE_SAMPLES adds every autana demo scene's pack.
 
+set(CPACK_PACKAGE_VENDOR "jose-villegas")
 if(WIN32)
     set(bin_dir .)
     set(scenes_dir scenes)
     set(doc_dir .)
-    set(CPACK_GENERATOR ZIP)
-    set(CPACK_SYSTEM_NAME windows-portable)
+    # loupe.exe's icon, for Explorer, its shortcuts and its .apak files.
+    target_sources(loupe PRIVATE assets/loupe.rc)
+    set(CPACK_GENERATOR ZIP NSIS)
+    set(CPACK_SYSTEM_NAME windows)
+    set(CPACK_PROJECT_CONFIG_FILE "${CMAKE_CURRENT_LIST_DIR}/cpack_generator.cmake")
+    # One key and one folder for every version, so a new one replaces the old.
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY Loupe)
+    set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY Loupe)
+    set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    set(CPACK_NSIS_INSTALL_ROOT "$PROGRAMFILES64")
+    set(CPACK_NSIS_PACKAGE_NAME Loupe)
+    set(CPACK_NSIS_DISPLAY_NAME Loupe)
+    set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/jose-villegas/loupe")
+    set(CPACK_NSIS_MUI_ICON "${CMAKE_CURRENT_SOURCE_DIR}/assets/loupe.ico")
+    set(CPACK_NSIS_MUI_UNIICON "${CMAKE_CURRENT_SOURCE_DIR}/assets/loupe.ico")
+    set(CPACK_NSIS_INSTALLED_ICON_NAME loupe.exe)
+    set(CPACK_NSIS_MANIFEST_DPI_AWARE ON)
+    set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+    # The Start menu entry; loupe.exe sits at the install root, not in bin/.
+    set(CPACK_PACKAGE_EXECUTABLES loupe Loupe)
+    set(CPACK_NSIS_EXECUTABLES_DIRECTORY .)
+    # The shortcuts and the .apak association; NSIS wants backslashes.
+    foreach(step install uninstall)
+        set(${step}_nsh "${CMAKE_CURRENT_LIST_DIR}/nsis/${step}.nsh")
+        cmake_path(NATIVE_PATH ${step}_nsh ${step}_nsh)
+    endforeach()
+    set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "!include \"${install_nsh}\"")
+    set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "!include \"${uninstall_nsh}\"")
+    # CPack removes Software\<vendor>\Loupe after the commands above, and
+    # never the vendor's key; this hook runs after it.
+    set(CPACK_NSIS_DELETE_ICONS_EXTRA "DeleteRegKey /ifempty SHCTX \"Software\\${CPACK_PACKAGE_VENDOR}\"")
 else()
     include(GNUInstallDirs)
     set(bin_dir "${CMAKE_INSTALL_BINDIR}")
@@ -40,8 +71,10 @@ if(LOUPE_SAMPLES)
     install(DIRECTORY "${samples}/" DESTINATION "${scenes_dir}" FILES_MATCHING PATTERN "*.apak")
 endif()
 
-set(CPACK_PACKAGE_VENDOR "jose-villegas")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A frame debugger for the autana engine")
 set(CPACK_STRIP_FILES ON)
+# Writes the values above into CPackConfig.cmake as they are: the
+# backslashes and quotes of the NSIS lines survive.
+set(CPACK_VERBATIM_VARIABLES ON)
 # CPACK_PACKAGE_FILE_NAME's default: loupe-<version>-<system name>.
 include(CPack)

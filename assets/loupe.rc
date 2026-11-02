@@ -1,0 +1,2 @@
+// loupe.exe's icon, the first in the file, so Explorer, its shortcuts and its .apak files show it.
+1 ICON "loupe.ico"
