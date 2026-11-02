@@ -20,7 +20,7 @@ flowchart LR
 
 ## Download
 
-Each [release](https://github.com/jose-villegas/loupe/releases) has two
+Each [release](https://github.com/jose-villegas/loupe/releases) has three
 downloads, unsigned, so Windows SmartScreen warns on their first run. Each holds
 a pack of every autana demo scene as a sample, listed on the start panel. They
 need no Python and no compiler; the window needs a Vulkan driver.
@@ -28,6 +28,7 @@ need no Python and no compiler; the window needs a Vulkan driver.
 | Download | Holds | To run it |
 |---|---|---|
 | `loupe-<version>-windows-portable.zip` | `loupe.exe`, `scenes/`, `LICENSE` | unzip anywhere and run `loupe.exe` |
+| `loupe-<version>-windows-setup.exe` | the same files, installed into Program Files with a Start menu entry and a desktop shortcut; `.apak` files then open in Loupe | run it; uninstall from Windows' installed apps, which removes the shortcuts and the `.apak` association too |
 | `loupe-<version>-linux-x86_64.tar.gz` | `bin/loupe`, and in `share/` the samples, `applications/loupe.desktop` and the icon | run `bin/loupe` where it lands, or copy `bin/` and `share/` into `~/.local` to list Loupe among the desktop's applications |
 
 The Linux build is made on Ubuntu 24.04 with GCC's runtime linked in, so it
@@ -134,7 +135,7 @@ what they enforce. The build takes its flags, sanitizers and clang-tidy from
 | `default` | with every warning an error |
 | `sanitize` | under UBSan, and ASan on Linux, without the pack tool |
 | `tidy` | with clang-tidy (`.clang-tidy`) on every C++ file |
-| `release` | optimized, without the pack tool and with every demo scene's pack as a sample, then `cpack`'s download into `build/release` |
+| `release` | optimized, without the pack tool and with every demo scene's pack as a sample, then `cpack`'s downloads into `build/release`; on Windows the setup needs NSIS's `makensis` on `PATH` |
 
 ```bash
 cmake --workflow --preset sanitize
@@ -157,7 +158,10 @@ git config core.hooksPath third_party/autana/scripts/git-hooks
 then push the tag `v<version>` on that commit. `.github/workflows/build.yml`
 runs the `release` workflow preset on Windows and Linux, unpacks each download
 into an empty folder and renders every sample in it with nothing on `PATH`
-(`tools/ci/package_smoke.sh`). It then attaches the downloads to the tag's
+(`tools/ci/package_smoke.sh`), and on Windows installs the setup silently,
+renders every sample from the installed `loupe.exe`, uninstalls it and checks
+that no file, shortcut or registry key is left (`tools/ci/installer_smoke.sh`).
+It then attaches the downloads to the tag's
 GitHub Release, and refuses a tag that names another version. Every pull
 request and nightly run builds and smoke-tests the downloads the same way,
 without publishing them. A tag `v<version>-rc.1` publishes a pre-release whose
