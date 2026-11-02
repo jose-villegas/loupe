@@ -1,53 +1,110 @@
-// The command line the window starts loupe with, for a scene picked on the
-// start panel, parses back to a window on that scene with the provider's
-// defaults and the checkpoint budget it was given, if any.
-#include <cstddef>
+// --frame, --compare and --b-args parse only together with what they need,
+// each refusal saying why, and side B takes --b-args' renderer flags in place
+// of A's while keeping the rest.
 #include <cstdio>
-#include <optional>
 #include <string>
 #include <vector>
 
 #include "options.hpp"
+#include "pack.hpp"
 
 namespace {
 
 constexpr const char TEST[] = "options_test";
-constexpr const char PICKED[] = "picked dir/second \"scene\".apak";
-constexpr size_t BUDGET_MB = 256;
+
+struct Case {
+    std::vector<std::string> args; // after the program name
+    // Empty when the command line parses; else what its refusal says.
+    std::string refusal;
+};
+
+// `args` parsed into `options`; the refusal, or empty when they parse.
+std::string
+parse(const std::vector<std::string>& args, loupe::Options* options) {
+    std::vector<std::string> line = {"loupe"};
+    line.insert(line.end(), args.begin(), args.end());
+    std::vector<char*> argv;
+    for (std::string& arg : line) {
+        argv.push_back(arg.data());
+    }
+    std::string why;
+    return loupe::parse_options(static_cast<int>(argv.size()), argv.data(), options, &why) ? "" : why;
+}
 
 bool
 check(bool ok, const std::string& what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, what.c_str(), ok ? "ok" : "FAILED");
+    std::fprintf(stderr, "%s: %s %s\n", TEST, ok ? "ok" : "FAILED", what.c_str());
     return ok;
-}
-
-// The window_args() for `budget` parsed back; false when they do not parse.
-bool
-parse_back(std::optional<size_t> budget, loupe::Options* parsed) {
-    const std::vector<std::string> args = loupe::window_args("loupe", PICKED, budget);
-    std::vector<char*> argv;
-    argv.reserve(args.size());
-    for (const std::string& arg : args) {
-        argv.push_back(const_cast<char*>(arg.c_str()));
-    }
-    std::string why;
-    return loupe::parse_options(static_cast<int>(argv.size()), argv.data(), parsed, &why);
 }
 
 } // namespace
 
 int
 main() {
+    const std::string toml = "s.scene.toml";
+    const bool tool = loupe::builds_packs();
+    const std::string no_tool = "built without the pack tool";
+    const std::vector<Case> cases = {
+        {.args = {"s.apak", "--frame", "2", "-o", "f.png"}, .refusal = ""},
+        {.args = {"s.apak", "--frame", "2"}, .refusal = "--frame N writes -o"},
+        {.args = {"s.apak", "--frame", "2", "-o", "f.png", "--video", "v.avi"}, .refusal = "--frame N writes -o"},
+        {.args = {"s.apak", "--frame", "-1", "-o", "f.png"}, .refusal = "--frame is a frame index from 0"},
+        {.args = {toml, "--b-args", "--view meshlets", "--video", "v.mp4"}, .refusal = "--b-args needs --compare"},
+        {.args = {toml, "--compare", "HEAD", "--video", "v.mp4"}, .refusal = tool ? "" : no_tool},
+        {.args = {toml, "--compare", "HEAD", "--frame", "1", "-o", "f.png"}, .refusal = tool ? "" : no_tool},
+        {.args = {toml, "--compare", "HEAD", "-o", "f.png"}, .refusal = tool ? "--compare writes --video" : no_tool},
+        {.args = {toml, "--compare", "HEAD", "--video", "v.mp4", "-o", "f.png"},
+         .refusal = tool ? "--compare writes --video" : no_tool},
+        {.args = {"s.apak", "--compare", "HEAD", "--video", "v.mp4"},
+         .refusal = tool ? "--compare needs a .scene.toml" : no_tool},
+        {.args = {toml, "--compare", "HEAD", "--b-args", "--frames 3", "--video", "v.mp4"},
+         .refusal = tool ? "--b-args takes --object, --camera, --view and --set, not --frames" : no_tool},
+        {.args = {toml, "--compare", "HEAD", "--b-args", "--view", "--video", "v.mp4"},
+         .refusal = tool ? "--b-args: --view needs a value" : no_tool},
+    };
     bool ok = true;
-    for (const std::optional<size_t> budget : {std::optional<size_t>(), std::optional<size_t>(BUDGET_MB)}) {
-        const std::string with = budget ? "with a budget" : "without a budget";
-        loupe::Options parsed;
-        ok &= check(parse_back(budget, &parsed), with + ": parses");
-        ok &= check(parsed.scene == PICKED && parsed.checkpoint_mb == budget, with + ": the scene and budget");
-        ok &= check(parsed.objects.empty() && parsed.camera.empty() && parsed.view.empty() && !parsed.frames
-                        && !parsed.dt_ms && parsed.sets.empty() && !parsed.ticks && parsed.out_bmp.empty()
-                        && parsed.out_video.empty(),
-                    with + ": nothing else");
+    for (const Case& c : cases) {
+        std::string line;
+        for (const std::string& arg : c.args) {
+            line += " " + arg;
+        }
+        loupe::Options options;
+        const std::string refusal = parse(c.args, &options);
+        ok &= check(c.refusal.empty() ? refusal.empty() : refusal.find(c.refusal) != std::string::npos,
+                    "loupe" + line + (refusal.empty() ? ": parses" : ": " + refusal));
     }
+
+    // B's flags in place of A's renderer flags; the path and the output kept.
+    loupe::Options a;
+    loupe::Options b;
+    std::string why;
+    const std::vector<std::string> both = {toml,
+                                           "--object",
+                                           "atrium",
+                                           "--view",
+                                           "shaded",
+                                           "--set",
+                                           "a.b=1",
+                                           "--dt",
+                                           "50",
+                                           "--frame",
+                                           "2",
+                                           "-o",
+                                           "f.png",
+                                           "--compare",
+                                           "HEAD",
+                                           "--b-args",
+                                           "  --view meshlets\t--set c.d=2 "};
+    // Parsed in builds without the pack tool too, though they refuse the compare.
+    ok &= check(parse(both, &a).empty() == tool, "A's compare command line");
+    ok &= check(loupe::b_options(a, &b, &why), "B's options build");
+    ok &= check(b.objects.empty() && b.camera.empty() && b.view == "meshlets"
+                    && b.sets == std::vector<std::string>{"c.d=2"},
+                "B takes --b-args' renderer flags in place of A's");
+    ok &= check(b.dt_ms == a.dt_ms && b.frame == a.frame && b.out_bmp == a.out_bmp && b.scene == a.scene,
+                "B keeps A's path, frame, output and scene");
+    a.b_args.reset();
+    ok &= check(loupe::b_options(a, &b, &why) && b.objects == a.objects && b.view == a.view && b.sets == a.sets,
+                "without --b-args, B draws as A");
     return ok ? 0 : 1;
 }

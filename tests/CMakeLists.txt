@@ -35,9 +35,9 @@ parity(defaults "${sponza}" "")
 parity(every_flag "${sponza}"
        "--object|atrium|--camera|tour|--view|meshlets|--set|render.batched=0|--frames|4|--dt|50|--video")
 
-# loupe on SCENE with -o exits 1, saying REASON (a regex) on stderr.
-function(refused name scene reason)
-    add_test(NAME ${name} COMMAND "${CMAKE_COMMAND}" "-DLOUPE=$<TARGET_FILE:loupe>" "-DSCENE=${scene}"
+# loupe on ARGS (|-separated, run in the test's own folder) exits EXIT, saying REASON (a regex) on stderr.
+function(refused name args exit reason)
+    add_test(NAME ${name} COMMAND "${CMAKE_COMMAND}" "-DLOUPE=$<TARGET_FILE:loupe>" "-DARGS=${args}" "-DEXIT=${exit}"
              "-DREASON=${reason}" "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/${name}"
              -P "${CMAKE_CURRENT_SOURCE_DIR}/refused.cmake")
     on_packs(${name})
@@ -45,7 +45,7 @@ endfunction()
 if(LOUPE_PACK_TOOL)
     parity(scene_toml "${sponza_toml}" "")
 else()
-    refused(scene_toml_refused "${sponza_toml}" "built without the pack tool")
+    refused(scene_toml_refused "${sponza_toml}|-o|out.bmp" 1 "built without the pack tool")
 endif()
 
 # A pack of the next format version, refused with autana's own reason, read from its source.
@@ -58,8 +58,50 @@ set(next_pack "${CMAKE_CURRENT_BINARY_DIR}/next_version/sponza.apak")
 add_test(NAME next_version_pack COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/set_pack_version.py"
                                         "${sponza}" "${next_version}" "${next_pack}")
 set_tests_properties(next_version_pack PROPERTIES FIXTURES_REQUIRED packs FIXTURES_SETUP next_version)
-refused(wrong_version_refused "${next_pack}" "sponza.apak: ${reason}")
+refused(wrong_version_refused "${next_pack}|-o|out.bmp" 1 "sponza.apak: ${reason}")
 set_tests_properties(wrong_version_refused PROPERTIES FIXTURES_REQUIRED "packs;next_version")
+
+# --frame and --compare (src/path): one frame of the camera path, alone or for
+# both sides, is what a straight run to it writes; a compare video's difference
+# is nothing against the same pack and something under other flags.
+add_executable(same_image same_image.cpp)
+target_link_libraries(same_image PRIVATE SDL3::SDL3-static)
+add_executable(path_timing_test path_timing_test.cpp)
+target_link_libraries(path_timing_test PRIVATE loupe_core loupe_path)
+add_test(NAME path_timing COMMAND path_timing_test)
+# --frame FRAME on SCENE at --dt 50 under ARGS, with COMPARE and B_ARGS when given (tests/path_frame.cmake).
+function(path_frame name scene args compare b_args)
+    add_test(NAME ${name} COMMAND "${CMAKE_COMMAND}" "-DLOUPE=$<TARGET_FILE:loupe>"
+             "-DSAME_IMAGE=$<TARGET_FILE:same_image>" "-DSCENE=${scene}" "-DPACK=${sponza}" "-DARGS=${args}"
+             -DFRAME=3 -DDT=50 "-DCOMPARE=${compare}" "-DB_ARGS=${b_args}"
+             "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/${name}" -P "${CMAKE_CURRENT_SOURCE_DIR}/path_frame.cmake")
+    on_packs(${name})
+endfunction()
+path_frame(frame "${sponza}" "--view|meshlets" "" "")
+refused(frame_past_end "${sponza}|--frames|3|--dt|50|--frame|3|-o|f.png" 2 "the path has frames 0 to 2 at --dt 50, not 3")
+if(LOUPE_PACK_TOOL)
+    # The scene's own checkout: a folder, and its HEAD checked out as a worktree.
+    get_filename_component(autana_dir "${AUTANA_DIR}" ABSOLUTE)
+    path_frame(frame_compare "${sponza_toml}" "" "${autana_dir}" "--view meshlets --object atrium")
+    path_frame(frame_compare_head "${sponza_toml}" "" HEAD "")
+    # --frames 3 at --dt 100 (tests/path_video.cmake).
+    function(path_video name b_args expect)
+        add_test(NAME ${name} COMMAND "${CMAKE_COMMAND}" "-DLOUPE=$<TARGET_FILE:loupe>" "-DPYTHON=${Python3_EXECUTABLE}"
+                 "-DSCENE=${sponza_toml}" "-DCOMPARE=${autana_dir}" "-DB_ARGS=${b_args}" -DFRAMES=3 -DDT=100
+                 "-DEXPECT=${expect}" "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/${name}"
+                 -P "${CMAKE_CURRENT_SOURCE_DIR}/path_video.cmake")
+        on_packs(${name})
+        set_tests_properties(${name} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+    endfunction()
+    path_video(compare_same "" same)
+    path_video(compare_view "--view meshlets" differ)
+    refused(compare_bad_rev "${sponza_toml}|--compare|no-such-rev|--frame|1|-o|f.png" 2
+            "not a revision or directory: no-such-rev")
+    # A folder that is no checkout of the scene: this test's own.
+    refused(compare_no_scene "${sponza_toml}|--compare|.|--frame|1|-o|f.png" 2 ". has no launcher/demo/sponza/sponza.scene.toml")
+else()
+    refused(compare_refused "${sponza_toml}|--compare|HEAD|--video|v.mp4" 2 "built without the pack tool --compare needs")
+endif()
 
 add_executable(seek_test seek_test.cpp)
 target_link_libraries(seek_test PRIVATE loupe_core)
@@ -83,39 +125,31 @@ add_test(NAME view_switch COMMAND "${CMAKE_COMMAND}" "-DVIEW_TEST=$<TARGET_FILE:
          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/view_switch" -P "${CMAKE_CURRENT_SOURCE_DIR}/view_test.cmake")
 on_packs(view_switch)
 
-# A scene opened again after another closed, in one process, draws what it drew
-# opened first, both ways round. Each open's framebuffer outlives its close, so
-# the sanitizers accept that one leak here.
+# A scene opened again after another closed, in one process, draws what it
+# drew opened first, both ways round; and a pack of the same name from another
+# folder, here the next-version pack, is read afresh and refused, leaving the
+# next opening unharmed.
 add_executable(reopen_test reopen_test.cpp)
 target_link_libraries(reopen_test PRIVATE loupe_core)
-set(reopen_leaks "LSAN_OPTIONS=suppressions=${CMAKE_CURRENT_SOURCE_DIR}/reopen.lsan.supp")
 foreach(order IN ITEMS "sponza;water" "water;sponza")
     list(GET order 0 first)
     list(GET order 1 second)
     add_test(NAME reopen_${first} COMMAND reopen_test "${CMAKE_CURRENT_BINARY_DIR}/reopen_${first}" "${${first}}"
                                           "${${second}}" "${${first}}")
     on_packs(reopen_${first})
-    set_tests_properties(reopen_${first} PROPERTIES ENVIRONMENT "${reopen_leaks}")
 endforeach()
-# But autana keeps a scene's pack mounted after its run closes, so a pack of the
-# same name opened later is never read: here the next-version pack opens as the
-# first one. That is why the window starts loupe again for a scene picked on the
-# start panel. Passes on that one line and no other failure, until autana
-# releases the pack at close.
 add_test(NAME reopen_same_name COMMAND reopen_test "${CMAKE_CURRENT_BINARY_DIR}/reopen_same_name" "${sponza}"
                                        --refused "${next_pack}" "${sponza}")
-set_tests_properties(reopen_same_name PROPERTIES FIXTURES_REQUIRED "packs;next_version" RESOURCE_LOCK sponza
-                                                 PASS_REGULAR_EXPRESSION "opened, not refused"
-                                                 FAIL_REGULAR_EXPRESSION " failed|DIFFERS" ENVIRONMENT "${reopen_leaks}")
+set_tests_properties(reopen_same_name PROPERTIES FIXTURES_REQUIRED "packs;next_version" RESOURCE_LOCK sponza)
 
-# The command line the window relaunches loupe with parses back to the run it came from.
+# --frame, --compare and --b-args parse only with what they need.
 add_executable(options_test options_test.cpp)
 target_link_libraries(options_test PRIVATE loupe_core)
-add_test(NAME relaunch_args COMMAND options_test)
-# What the relaunch starts loupe with: its own executable, in a process it does not wait on.
+add_test(NAME path_flags COMMAND options_test)
+# A tool loupe runs gets its arguments and paths intact, its output in the log.
 add_executable(process_test process_test.cpp)
 target_link_libraries(process_test PRIVATE loupe_core)
-add_test(NAME spawn COMMAND process_test "${CMAKE_CURRENT_BINARY_DIR}/spawn")
+add_test(NAME run_logged COMMAND process_test "${CMAKE_CURRENT_BINARY_DIR}/run_logged")
 
 add_executable(library_test library_test.cpp)
 target_link_libraries(library_test PRIVATE loupe_core)

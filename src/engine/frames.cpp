@@ -71,6 +71,9 @@ struct Frames::State {
 
 namespace {
 
+// PENDING: autana's own budget, once it says it.
+constexpr int64_t VIDEO_MAX_BYTES_PENDING = int64_t{1} << 30;
+
 bool
 set_asset_dir(const std::filesystem::path& folder) {
 #if defined(_WIN32)
@@ -299,6 +302,12 @@ Frames::path_ms() const {
         return std::nullopt;
     }
     return scene_provider.path_ms();
+}
+
+int64_t
+Frames::video_frames_fit() const {
+    const render_host_image_t image = render_host_image();
+    return render_video_frames_that_fit(image.width, image.height, VIDEO_MAX_BYTES_PENDING);
 }
 
 bool

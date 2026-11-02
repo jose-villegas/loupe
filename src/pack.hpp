@@ -19,6 +19,12 @@ struct ScenePack {
     std::string id;
 };
 
+// The pack's file: <folder>/<id>.apak.
+std::filesystem::path pack_file(const ScenePack& pack);
+// The scene id a .apak or .scene.toml file names: its file name without the
+// suffix; empty for any other file.
+std::string scene_id(const std::filesystem::path& file);
+
 // True in builds with LOUPE_PACK_TOOL, which build a .scene.toml's pack.
 bool builds_packs();
 

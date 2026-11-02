@@ -6,3 +6,5 @@ clang-format==21.1.8
 clang-tidy==21.1.6
 ninja==1.13.2
 shellcheck-py==0.11.0.1
+# numpy and Pillow for autana's render_compare.py, which --compare runs: autana's pins.
+-r ../../third_party/autana/launcher/tools/render/requirements.txt

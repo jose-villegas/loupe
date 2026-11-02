@@ -54,6 +54,7 @@ add_library(loupe_core OBJECT
     src/pack.cpp
     src/paths.cpp
     src/process.cpp
+    src/scratch.cpp
     src/version.cpp)
 target_include_directories(loupe_core PUBLIC src)
 # The version and the autana commit, for version.cpp. The commit is read on
@@ -73,16 +74,20 @@ if(WIN32)
     target_sources(loupe_core PRIVATE src/windows/utf8.rc)
 endif()
 target_link_libraries(loupe_core PRIVATE autana::scene_provider)
+# The pack tool's own programs, and where it keeps packs; --compare also
+# checks out revisions with git and lays the sides out with autana's
+# render_compare.py.
 if(LOUPE_PACK_TOOL)
-    target_compile_definitions(loupe_core PRIVATE LOUPE_PACK_TOOL=1
-        "LOUPE_AUTANA_DIR=\"${AUTANA_DIR}\"" "LOUPE_PYTHON=\"${Python3_EXECUTABLE}\""
-        "LOUPE_PACK_CACHE=\"${CMAKE_BINARY_DIR}/packs\"")
+    find_package(Git REQUIRED)
+    set(pack_tool LOUPE_PACK_TOOL=1 "LOUPE_AUTANA_DIR=\"${AUTANA_DIR}\"" "LOUPE_PYTHON=\"${Python3_EXECUTABLE}\""
+                  "LOUPE_GIT=\"${GIT_EXECUTABLE}\"" "LOUPE_PACK_CACHE=\"${CMAKE_BINARY_DIR}/packs\"")
 else()
-    target_compile_definitions(loupe_core PRIVATE LOUPE_PACK_TOOL=0)
+    set(pack_tool LOUPE_PACK_TOOL=0)
 endif()
+target_compile_definitions(loupe_core PRIVATE ${pack_tool})
 
 # The window: SDL3, Vulkan through volk, Dear ImGui (third_party/CMakeLists.txt).
-# Only runs without -o or --video open it, so those still need no GPU.
+# Only runs that write no file open it, so those need no GPU.
 add_library(loupe_window OBJECT
     src/window/files.cpp
     src/window/frame_texture.cpp
@@ -98,8 +103,13 @@ string(REGEX REPLACE "(..)" "0x\\1," icon_bytes "${icon_bytes}")
 file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/generated/window/icon_png.inc" CONTENT "${icon_bytes}\n")
 target_include_directories(loupe_window PRIVATE "${CMAKE_BINARY_DIR}/generated")
 
+# A camera path's frame, and the A | B compare; PNGs through SDL.
+add_library(loupe_path OBJECT src/path/path.cpp)
+target_link_libraries(loupe_path PUBLIC loupe_core SDL3::SDL3-static)
+target_compile_definitions(loupe_path PRIVATE ${pack_tool})
+
 add_executable(loupe src/main.cpp)
-target_link_libraries(loupe PRIVATE loupe_core loupe_window)
+target_link_libraries(loupe PRIVATE loupe_core loupe_path loupe_window)
 
 include(cmake/package.cmake)
 

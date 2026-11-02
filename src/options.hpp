@@ -25,6 +25,12 @@ struct Options {
     std::optional<uint32_t> dt_ms;    // --dt
     std::vector<std::string> sets;    // --set owner.name=value, repeatable
     std::string out_bmp, out_video;   // -o, --video
+    // A path's frame, and the A | B compare (src/path/compare.hpp): the side B
+    // checkout, a git revision or a folder, and B's renderer flags, which
+    // replace A's --object, --camera, --view and --set when given.
+    std::optional<int> frame;                       // --frame
+    std::string compare;                            // --compare
+    std::optional<std::vector<std::string>> b_args; // --b-args, split into words
     // Loupe's own, for the window only: the checkpoints' memory budget
     // (DEFAULT_CHECKPOINT_MB), and how many ticks it runs before it closes itself
     // (scripted runs; until closed by default).
@@ -36,11 +42,9 @@ struct Options {
 // False with `why` set for a command line it cannot run.
 bool parse_options(int argc, char** argv, Options* options, std::string* why);
 const char* usage();
-// The command line that opens the window on `scene` picked from the start
-// panel: the provider's defaults, and the window's checkpoint budget when
-// one was given; `exe` is the loupe to start.
-std::vector<std::string> window_args(const std::filesystem::path& exe, const std::filesystem::path& scene,
-                                     std::optional<size_t> checkpoint_mb);
+// Side B's options: A's, with --b-args' renderer flags in place of A's when
+// given. False with `why` set for words --b-args cannot take.
+bool b_options(const Options& a, Options* b, std::string* why);
 // A whole decimal number from `least` to `most`; false for anything else.
 bool parse_count(const std::string& text, long long least, long long most, long long* value);
 

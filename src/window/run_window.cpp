@@ -5,9 +5,7 @@
 #include <format>
 #include <memory>
 #include <optional>
-#include <random>
 #include <string>
-#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -15,7 +13,7 @@
 #include "imgui.h"
 #include "library.hpp"
 #include "paths.hpp"
-#include "process.hpp"
+#include "scratch.hpp"
 #include "window/files.hpp"
 #include "window/frame_texture.hpp"
 #include "window/gpu.hpp"
@@ -26,35 +24,6 @@ namespace loupe {
 namespace {
 
 constexpr const char TITLE[] = "loupe";
-
-// A window run's stand-in for -o. autana's close writes the last frame, to stdout
-// without -o, and with it captures the engine's stdout beside the image
-// (out.bmp.console). The window wants neither, so both go to a scratch file this
-// removes, until autana can close a run without writing an image.
-class ScratchImage {
-  public:
-    ScratchImage()
-        : path_(std::filesystem::temp_directory_path() / std::format("loupe-{}.bmp", std::random_device{}())) {}
-
-    ~ScratchImage() {
-        std::error_code ignored;
-        std::filesystem::remove(path_, ignored);
-        std::filesystem::remove(path_.string() + ".console", ignored);
-    }
-
-    ScratchImage(const ScratchImage&) = delete;
-    ScratchImage& operator=(const ScratchImage&) = delete;
-    ScratchImage(ScratchImage&&) = delete;
-    ScratchImage& operator=(ScratchImage&&) = delete;
-
-    std::string
-    path() const {
-        return path_.string();
-    }
-
-  private:
-    std::filesystem::path path_;
-};
 
 // `options`' run on `scene`, open on the first frame a seek reaches so every
 // control works from the start; null, with `why` set, when it cannot be shown.
@@ -142,24 +111,24 @@ draw_shown(Shown& shown, bool* ok) {
 class Window {
   public:
     Window(window::Gpu& gpu, const Options& options);
-    // Opens the command line's scene, or says on the start panel why it did not open.
-    void open(const Options& options);
-    // One tick's panels, then the scene they asked for; false once another
-    // loupe took the window over.
-    bool tick();
+    // Opens `options`' scene in place of the open one; false, said on the
+    // start panel, when it did not open.
+    bool open(const Options& options);
+    // One tick's panels, then the scene they asked for.
+    void tick();
     // Closes the open scene; false when a run failed along the way.
     bool finish();
 
   private:
     // Closes the open scene, if any, back to the start panel.
     void close();
-    // Starts loupe again on `scene`, picked on the start panel, with the
-    // provider's defaults: autana keeps a run's asset packs mounted after it
-    // closes, so only a process's first run is a fresh one.
-    bool relaunch(const std::filesystem::path& scene);
 
     window::Gpu& gpu_;
-    ScratchImage scratch_;
+    // A window run's stand-in for -o: autana's close writes the last frame, to
+    // stdout without -o, and with it the engine's stdout beside the image
+    // (out.bmp.console). The window wants neither, so both go here, until
+    // autana can close a run without writing an image.
+    Scratch scratch_;
     std::optional<size_t> checkpoint_mb_;
     Folders folders_;
     Library library_;
@@ -171,7 +140,7 @@ class Window {
 Window::Window(window::Gpu& gpu, const Options& options)
     : gpu_(gpu), checkpoint_mb_(options.checkpoint_mb), folders_(window::folders()), library_(library(folders_)) {}
 
-bool
+void
 Window::tick() {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -193,8 +162,13 @@ Window::tick() {
     if (start.browse) {
         window::browse(gpu_.sdl_window());
     }
-    const std::optional<std::filesystem::path> scene = start.picked ? start.picked : window::browsed();
-    return !scene || !relaunch(*scene);
+    // A scene picked on the start panel opens with the provider's defaults.
+    if (const std::optional<std::filesystem::path> scene = start.picked ? start.picked : window::browsed()) {
+        Options picked;
+        picked.scene = *scene;
+        picked.checkpoint_mb = checkpoint_mb_;
+        (void)open(picked);
+    }
 }
 
 bool
@@ -213,29 +187,22 @@ Window::close() {
     }
 }
 
-void
+bool
 Window::open(const Options& options) {
+    close();
     Options run = options;
-    run.out_bmp = scratch_.path();
+    run.out_bmp = utf8(scratch_.path() / "frame.bmp");
     std::string why;
     std::unique_ptr<Frames> frames = open_scene(run, options.scene, &why);
     if (frames == nullptr) {
         refusal_ = std::format("{}: {}", utf8(options.scene), why);
         std::fprintf(stderr, "loupe: %s\n", refusal_.c_str());
-        ok_ = false;
-        return;
+        return false;
     }
+    refusal_.clear();
     (void)remember(folders_, options.scene);
     gpu_.set_title(std::format("{}: {}", TITLE, frames->scene_id()));
     shown_.emplace(gpu_, std::move(frames));
-}
-
-bool
-Window::relaunch(const std::filesystem::path& scene) {
-    if (!spawn(window_args(exe_path(), scene, checkpoint_mb_))) {
-        refusal_ = std::format("{}: loupe could not start again on it", utf8(scene));
-        return false;
-    }
     return true;
 }
 
@@ -250,11 +217,11 @@ run_window(const Options& options) {
         return false;
     }
     Window window(*gpu, options);
-    if (!options.scene.empty()) {
-        window.open(options);
+    const bool opened = options.scene.empty() || window.open(options);
+    for (int tick = 0; (!options.ticks || tick < *options.ticks) && gpu->begin_frame(); tick++) {
+        window.tick();
     }
-    for (int tick = 0; (!options.ticks || tick < *options.ticks) && gpu->begin_frame() && window.tick(); tick++) {}
-    return window.finish();
+    return window.finish() && opened;
 }
 
 } // namespace loupe

@@ -67,6 +67,17 @@ built_pack(const fs::path& scene_toml, const std::string& id, std::string* why) 
 
 } // namespace
 
+std::filesystem::path
+pack_file(const ScenePack& pack) {
+    return pack.folder / (pack.id + std::string(PACK_SUFFIX));
+}
+
+std::string
+scene_id(const fs::path& file) {
+    const std::string pack = stem_before(file, PACK_SUFFIX);
+    return pack.empty() ? stem_before(file, SCENE_SUFFIX) : pack;
+}
+
 bool
 builds_packs() {
     return LOUPE_PACK_TOOL != 0;

@@ -8,10 +8,13 @@
 #include <format>
 #include <iterator>
 #include <optional>
+#include <sstream>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
+#include "pack.hpp"
 #include "paths.hpp"
 
 namespace loupe {
@@ -54,7 +57,22 @@ const CountFlag COUNT_FLAGS[] = {
      .most = INT_MAX,
      .is = "a whole number from 1",
      .set = set_count<int, &Options::ticks>},
+    {.name = "--frame",
+     .least = 0,
+     .most = INT_MAX,
+     .is = "a frame index from 0",
+     .set = set_count<int, &Options::frame>},
 };
+
+// The flags --b-args gives side B: the renderer's, not the path's or the output's.
+const std::string_view RENDER_FLAGS[] = {"--object", "--camera", "--view", "--set"};
+
+// `text` split at white space.
+std::vector<std::string>
+words(const std::string& text) {
+    std::istringstream in(text);
+    return {std::istream_iterator<std::string>(in), std::istream_iterator<std::string>()};
+}
 
 const CountFlag*
 find_count_flag(const std::string& flag) {
@@ -76,6 +94,42 @@ window_flags_fit(const Options& options, std::string* why) {
         return false;
     }
     return true;
+}
+
+// False with `why` set when --frame, --compare or --b-args come without what
+// they need: --frame writes -o, a compare writes --video or --frame's pair,
+// and B's pack is built from the .scene.toml.
+bool
+path_flags_fit(const Options& options, std::string* why) {
+    if (options.b_args && options.compare.empty()) {
+        *why = "--b-args needs --compare REV|DIR";
+        return false;
+    }
+    if (options.frame && (options.out_bmp.empty() || !options.out_video.empty())) {
+        *why = "--frame N writes -o OUT.png, and no --video";
+        return false;
+    }
+    if ((options.frame || !options.compare.empty()) && options.dt_ms == 0U) {
+        *why = "--frame and --compare time the path at a nonzero --dt";
+        return false;
+    }
+    if (options.compare.empty()) {
+        return true;
+    }
+    if (!builds_packs()) {
+        *why = "this loupe was built without the pack tool --compare needs to build B's pack";
+        return false;
+    }
+    if (!options.frame && (options.out_video.empty() || !options.out_bmp.empty())) {
+        *why = "--compare writes --video OUT.mp4, or --frame N -o OUT.png";
+        return false;
+    }
+    if (!utf8(options.scene.filename()).ends_with(SCENE_SUFFIX)) {
+        *why = "--compare needs a .scene.toml: B's pack is built from it";
+        return false;
+    }
+    Options b;
+    return b_options(options, &b, why);
 }
 
 // Sets the option `flag` names to `value`; false with `why` set for an unknown
@@ -101,6 +155,10 @@ apply_flag(const std::string& flag, const std::string& value, Options* options, 
         options->out_bmp = value;
     } else if (flag == "--video") {
         options->out_video = value;
+    } else if (flag == "--compare") {
+        options->compare = value;
+    } else if (flag == "--b-args") {
+        options->b_args = words(value);
     } else {
         *why = "unknown option " + flag;
         return false;
@@ -122,16 +180,38 @@ usage() {
     return "usage: loupe [SCENE.apak | SCENE.scene.toml] [--object NAME ...] [--camera NAME] [--view NAME]\n"
            "             [--frames N] [--dt MS] [--set owner.name=value ...] [-o out.bmp] [--video out.avi]\n"
            "             [--checkpoint-mb MB] [--ticks N]\n"
+           "       loupe SCENE [flags] [--frames N] [--dt MS] --frame N -o out.png\n"
+           "       loupe SCENE.scene.toml [flags] [--frames N] [--dt MS] --compare REV|DIR [--b-args \"FLAGS\"]\n"
+           "             (--video out.mp4 | --frame N -o out.png)\n"
            "       loupe --version\n";
 }
 
-std::vector<std::string>
-window_args(const std::filesystem::path& exe, const std::filesystem::path& scene, std::optional<size_t> checkpoint_mb) {
-    std::vector<std::string> args = {utf8(exe), utf8(scene)};
-    if (checkpoint_mb) {
-        args.insert(args.end(), {"--checkpoint-mb", std::to_string(*checkpoint_mb)});
+bool
+b_options(const Options& a, Options* b, std::string* why) {
+    *b = a;
+    b->b_args.reset();
+    if (!a.b_args) {
+        return true;
     }
-    return args;
+    b->objects.clear();
+    b->camera.clear();
+    b->view.clear();
+    b->sets.clear();
+    const std::vector<std::string>& given = *a.b_args;
+    for (size_t i = 0; i < given.size(); i += 2) {
+        if (std::ranges::find(RENDER_FLAGS, given[i]) == std::end(RENDER_FLAGS)) {
+            *why = "--b-args takes --object, --camera, --view and --set, not " + given[i];
+            return false;
+        }
+        if (i + 1 == given.size()) {
+            *why = "--b-args: " + given[i] + " needs a value";
+            return false;
+        }
+        if (!apply_flag(given[i], given[i + 1], b, why)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 bool
@@ -158,7 +238,7 @@ parse_options(int argc, char** argv, Options* options, std::string* why) {
             return false;
         }
     }
-    return window_flags_fit(*options, why);
+    return window_flags_fit(*options, why) && path_flags_fit(*options, why);
 }
 
 } // namespace loupe

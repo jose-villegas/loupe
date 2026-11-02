@@ -11,7 +11,10 @@ builds the pack of first.
 flowchart LR
   cli["loupe"] --> window["loupe_window: SDL3, Vulkan (volk), Dear ImGui"]
   cli --> core["loupe_core: Frames, options, pack, library"]
+  cli --> path["loupe_path: --frame, --compare"]
   window --> core
+  path --> core
+  path -- "B's pack at a revision or folder; the A | B video" --> tools["git, B's build_pack.py,<br/>autana's render_compare.py"]
   core -- "render_host_open / step / save / restore / close" --> autana["autana::scene_provider<br/>(submodule third_party/autana)"]
   core -- ".scene.toml, with the pack tool" --> pack["autana's build_pack.py<br/>into build/packs"]
   pack -- ".apak" --> core
@@ -62,8 +65,8 @@ build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml
 
 Run without a scene, the window opens on a start panel: the sample packs beside
 `loupe` (`scenes/`, or `../share/loupe/scenes/` when installed), the last 10
-scenes opened, and Open... for any other. A scene picked there opens in a new
-`loupe` with the scene's own defaults, and this window closes. Scenes, in a
+scenes opened, and Open... for any other. A scene picked there opens in this
+window with the scene's own defaults. Scenes, in a
 scene's window, closes the scene and goes back to the panel. The recent list is `recent.txt` in
 `%APPDATA%\autana\loupe` on Windows and `~/.local/share/autana/loupe` on Linux.
 
@@ -98,6 +101,37 @@ A `.scene.toml` run first brings the scene's pack in `build/packs` up to date
 with autana's `third_party/autana/launcher/tools/r3d/build_pack.py`; a build
 with `-DLOUPE_PACK_TOOL=OFF` refuses one, and says so.
 
+## Frames of a camera path, and A | B compares
+
+`--frame N -o out.png` writes frame N of the scene's camera path as a PNG, the
+pixels a run of `--frames N+1` writes with `-o`. `--compare REV|DIR` draws the
+path twice: side A is the scene given, side B the same `.scene.toml`'s pack
+built by B's own copy of `third_party/autana/launcher/tools/r3d/build_pack.py`,
+in a git worktree at the revision REV of
+the scene's repository (removed after) or in the checkout DIR. Both sides are
+drawn by this Loupe, one after the other. `--b-args "FLAGS"` gives B other
+`--object`, `--camera`, `--view` and `--set` flags than A's.
+
+```bash
+loupe sponza.scene.toml --frame 120 -o f.png
+loupe sponza.scene.toml --compare main --video ab.mp4
+loupe sponza.scene.toml --compare . --b-args "--view meshlets" --frame 120 -o f.png
+```
+
+| Command | Writes |
+|---|---|
+| `--frame N -o out.png` | frame N; with `--compare`, A's to `out.png` and B's to `out-b.png` |
+| `--compare REV\|DIR --video out.mp4` | every frame of the path as A \| B \| difference x8, each frame labelled with its index and time, by autana's `render_compare.py --video`; its numbers per frame go to `out.csv` |
+
+Both time the path alike, so frame N of a video is what `--frame N` writes:
+`--dt` when given, else the scene's own frame time, or the shortest whole
+millisecond at which the path fits one video when it does not at that;
+`--frames` when given, else the whole path. A frame past the path's end, a
+revision that does not exist and a checkout without the scene exit 2 saying
+why. `--compare` needs the pack tool, git, ffmpeg and the Python modules in
+`third_party/autana/launcher/tools/render/requirements.txt`; a build with
+`-DLOUPE_PACK_TOOL=OFF` refuses it, and says so.
+
 ## Tests
 
 The preset's test step (`ctest --preset default`) builds the packs it opens with `third_party/autana/launcher/tools/r3d/build_pack.py`, then runs:
@@ -105,11 +139,15 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | Test | Checks |
 |---|---|
 | `parity_*` | `loupe` on the scene's `.apak` (and, with the pack tool, its `.scene.toml`) writes the same bytes as autana's scene viewer for the same arguments |
-| `scene_toml_refused` | without the pack tool, a `.scene.toml` exits 1 saying why |
+| `scene_toml_refused`, `compare_refused` | without the pack tool, a `.scene.toml` exits 1 and `--compare` exits 2, saying why |
 | `wrong_version_refused` | a pack of another format version exits 1 with autana's reason |
-| `reopen_*` | a scene opened again after another closed, in one process, draws what it drew opened first; `reopen_same_name` passes only on the line showing a next-version pack opened as the first one, while autana keeps a closed run's pack mounted, which is why a scene picked on the start panel starts loupe again |
-| `relaunch_args` | the command line the window starts loupe with, on a scene picked on the start panel, parses back to that scene, the defaults and the checkpoint budget |
-| `spawn` | loupe starts a copy of itself in a folder named outside any one Windows code page without waiting on it, and paths reach the copy's C file calls intact (on Windows, through the UTF-8 code page manifest, `src/windows/utf8.manifest`) |
+| `reopen_*` | a scene opened again after another closed, in one process, draws what it drew opened first; a pack of the same name from another folder is read afresh, so the window switches scenes in one process |
+| `path_flags` | `--frame`, `--compare` and `--b-args` parse only with what they need, and B takes `--b-args`' flags in place of A's |
+| `path_timing` | a path is timed as described under Frames of a camera path |
+| `frame`, `frame_compare`, `frame_compare_head` | `--frame`'s PNG, alone and for both sides against a folder and against `HEAD`, holds the pixels a straight run to that frame writes; under other `--b-args`, B's differs from A's |
+| `compare_same`, `compare_view` | a compare video's difference is nothing on every frame against the same pack, and something under another `--view`; skipped without ffmpeg, numpy or Pillow |
+| `frame_past_end`, `compare_bad_rev`, `compare_no_scene` | exit 2 with the reason |
+| `run_logged` | a tool loupe runs, from a folder named outside any one Windows code page, gets its arguments and paths intact and its output lands in the log (on Windows, through the UTF-8 code page manifest, `src/windows/utf8.manifest`) |
 | `library` | the start panel's samples, and a recent list kept most recent first, each once, at most 10 |
 | `seek` | a seek back through a checkpoint draws the bytes stepping straight there drew |
 | `thinning_*` | under a checkpoint budget the checkpoints stay within it, their interval doubles, and seeks still draw the straight bytes |
