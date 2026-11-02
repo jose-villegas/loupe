@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -315,11 +316,15 @@ frames_on_path(uint32_t path_ms, uint32_t dt_ms) {
 std::unique_ptr<Frames>
 open_whole_path(const Options& options, std::string* why) {
     std::unique_ptr<Frames> frames = Frames::open(options, why);
-    if (frames == nullptr || options.frames || !frames->path_ms()) {
+    if (frames == nullptr || options.frames) {
+        return frames;
+    }
+    const std::optional<uint32_t> path_ms = frames->path_ms();
+    if (!path_ms) {
         return frames;
     }
     // The run's length is fixed at open, and the path's is known only once open.
-    const int whole = frames_on_path(*frames->path_ms(), frames->dt_ms());
+    const int whole = frames_on_path(*path_ms, frames->dt_ms());
     if (whole <= frames->count()) {
         return frames;
     }

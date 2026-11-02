@@ -1,7 +1,9 @@
 // A window's run covers the scene's whole camera path when --frames is not
 // given, and exactly --frames when it is.
+#include <cstdint>
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 
@@ -48,14 +50,15 @@ main(int argc, char** argv) {
     if (whole == nullptr) {
         return 1;
     }
-    if (!whole->path_ms()) {
+    const std::optional<uint32_t> path_ms = whole->path_ms();
+    if (!path_ms) {
         std::fprintf(stderr, "%s: %s has no camera path\n", TEST, args[1]);
         return 1;
     }
-    const int expected = loupe::frames_on_path(*whole->path_ms(), whole->dt_ms());
+    const int expected = loupe::frames_on_path(*path_ms, whole->dt_ms());
     if (whole->count() != expected || expected <= own) {
         std::fprintf(stderr, "%s: %d frames over a %u ms path at %u ms, %d expected; the provider's own run is %d\n",
-                     TEST, whole->count(), *whole->path_ms(), whole->dt_ms(), expected, own);
+                     TEST, whole->count(), *path_ms, whole->dt_ms(), expected, own);
         return 1;
     }
     whole.reset();
