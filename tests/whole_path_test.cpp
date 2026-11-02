@@ -1,11 +1,10 @@
 // A window's run covers the scene's whole camera path when --frames is not
-// given, and exactly --frames when it is.
+// given, exactly --frames when it is, and the provider's own run when still (--dt 0).
 #include <cstdint>
 #include <cstdio>
 #include <memory>
 #include <optional>
 #include <span>
-#include <string>
 
 #include "frames_fixture.hpp"
 
@@ -18,12 +17,7 @@ constexpr int GIVEN_FRAMES = loupe::Frames::FIRST_SEEKABLE + 3;
 
 std::unique_ptr<loupe::Frames>
 open_whole(const loupe::Options& options) {
-    std::string why;
-    std::unique_ptr<loupe::Frames> frames = loupe::open_whole_path(options, &why);
-    if (frames == nullptr) {
-        std::fprintf(stderr, "%s: %s\n", TEST, why.c_str());
-    }
-    return frames;
+    return loupe::test::open_or_report(TEST, options, &loupe::open_whole_path);
 }
 
 } // namespace
@@ -62,6 +56,13 @@ main(int argc, char** argv) {
         return 1;
     }
     whole.reset();
+
+    loupe::Options still = options;
+    still.dt_ms = 0;
+    if (const std::unique_ptr<loupe::Frames> frames = open_whole(still); frames == nullptr || frames->count() != own) {
+        std::fprintf(stderr, "%s: --dt 0 did not keep the provider's own %d frames\n", TEST, own);
+        return 1;
+    }
 
     options.frames = GIVEN_FRAMES;
     const std::unique_ptr<loupe::Frames> given = open_whole(options);
