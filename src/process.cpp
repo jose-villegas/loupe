@@ -53,14 +53,14 @@ command_line(const std::vector<std::string>& args) {
     return line;
 }
 
-// Starts `args` with `startup`, its handles inherited when `inherit`; the process, or none.
+// Starts `args` with `startup`, its handles inherited; the process, or none.
 std::optional<PROCESS_INFORMATION>
-start(const std::vector<std::string>& args, STARTUPINFOA& startup, bool inherit) {
+start(const std::vector<std::string>& args, STARTUPINFOA& startup) {
     std::string line = command_line(args);
     startup.cb = sizeof startup;
     PROCESS_INFORMATION process = {};
-    if (!CreateProcessA(args[0].c_str(), line.data(), nullptr, nullptr, inherit ? TRUE : FALSE, 0, nullptr, nullptr,
-                        &startup, &process)) {
+    if (!CreateProcessA(args[0].c_str(), line.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &startup,
+                        &process)) {
         return std::nullopt;
     }
     CloseHandle(process.hThread);
@@ -97,7 +97,7 @@ run_logged(const std::vector<std::string>& args, const fs::path& log) {
     startup.hStdOutput = file;
     startup.hStdError = file;
     DWORD status = 1;
-    if (const std::optional<PROCESS_INFORMATION> process = start(args, startup, true)) {
+    if (const std::optional<PROCESS_INFORMATION> process = start(args, startup)) {
         WaitForSingleObject(process->hProcess, INFINITE);
         GetExitCodeProcess(process->hProcess, &status);
         CloseHandle(process->hProcess);
@@ -116,22 +116,6 @@ run_logged(const std::vector<std::string>& args, const fs::path& log) {
                     && waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
     posix_spawn_file_actions_destroy(&actions);
     return ok;
-#endif
-}
-
-bool
-spawn(const std::vector<std::string>& args) {
-#if defined(_WIN32)
-    STARTUPINFOA startup = {};
-    const std::optional<PROCESS_INFORMATION> process = start(args, startup, false);
-    if (process) {
-        CloseHandle(process->hProcess);
-    }
-    return process.has_value();
-#else
-    std::vector<char*> argv = argv_of(args);
-    pid_t pid = 0;
-    return posix_spawn(&pid, args[0].c_str(), nullptr, nullptr, argv.data(), environ) == 0;
 #endif
 }
 

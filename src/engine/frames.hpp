@@ -76,7 +76,10 @@ class Frames {
     // How many frames are drawn; frame() is frame index() - 1.
     int index() const;
     Frame frame() const;
+    // The camera path's length; none without a path.
     std::optional<uint32_t> path_ms() const;
+    // The most frames of this run's size one --video holds.
+    int64_t video_frames_fit() const;
     // Writes what -o and --video ask for; false when the run failed.
     bool close();
 
@@ -91,5 +94,9 @@ class Frames {
     explicit Frames(std::unique_ptr<State> state);
     std::unique_ptr<State> state_;
 };
+
+// One run as -o and --video ask: opened, stepped through every frame, closed;
+// false with `why` set when it failed.
+bool render(const Options& options, std::string* why);
 
 } // namespace loupe

@@ -1,53 +1,126 @@
-// The command line the window starts loupe with, for a scene picked on the
-// start panel, parses back to a window on that scene with the provider's
-// defaults and the checkpoint budget it was given, if any.
-#include <cstddef>
+// --frame, --compare and --b-args parse only together with what they need,
+// each refusal saying why, and side B takes --b-args' renderer flags in place
+// of A's while keeping the rest.
 #include <cstdio>
-#include <optional>
 #include <string>
 #include <vector>
 
 #include "options.hpp"
+#include "pack.hpp"
+#include "tools.hpp"
 
 namespace {
 
 constexpr const char TEST[] = "options_test";
-constexpr const char PICKED[] = "picked dir/second \"scene\".apak";
-constexpr size_t BUDGET_MB = 256;
+
+struct Case {
+    std::vector<std::string> args; // after the program name
+    // Empty when the command line parses; else what its refusal says.
+    std::string refusal;
+};
+
+// `args` parsed into `options`; the refusal, or empty when they parse.
+std::string
+parse(const std::vector<std::string>& args, loupe::Options* options) {
+    std::vector<std::string> line = {"loupe"};
+    line.insert(line.end(), args.begin(), args.end());
+    std::vector<char*> argv;
+    argv.reserve(line.size());
+    for (std::string& arg : line) {
+        argv.push_back(arg.data());
+    }
+    std::string why;
+    return loupe::parse_options(static_cast<int>(argv.size()), argv.data(), options, &why) ? "" : why;
+}
 
 bool
 check(bool ok, const std::string& what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, what.c_str(), ok ? "ok" : "FAILED");
+    std::fprintf(stderr, "%s: %s %s\n", TEST, ok ? "ok" : "FAILED", what.c_str());
     return ok;
 }
 
-// The window_args() for `budget` parsed back; false when they do not parse.
+// Says whether `c` parses, or is refused with its reason.
 bool
-parse_back(std::optional<size_t> budget, loupe::Options* parsed) {
-    const std::vector<std::string> args = loupe::window_args("loupe", PICKED, budget);
-    std::vector<char*> argv;
-    argv.reserve(args.size());
-    for (const std::string& arg : args) {
-        argv.push_back(const_cast<char*>(arg.c_str()));
+check_case(const Case& c) {
+    std::string line = "loupe";
+    for (const std::string& arg : c.args) {
+        line += " " + arg;
     }
-    std::string why;
-    return loupe::parse_options(static_cast<int>(argv.size()), argv.data(), parsed, &why);
+    loupe::Options options;
+    const std::string refusal = parse(c.args, &options);
+    return check(c.refusal.empty() ? refusal.empty() : refusal.find(c.refusal) != std::string::npos,
+                 line + (refusal.empty() ? ": parses" : ": " + refusal));
+}
+
+// Each command line parses, or is refused for its reason.
+bool
+check_refusals() {
+    const std::string toml = "s.scene.toml";
+    const bool tool = loupe::builds_packs();
+    const std::string no_tool = "built without the pack tool";
+    const std::vector<Case> cases = {
+        {.args = {"s.apak", "--frame", "2", "-o", "f.png"}, .refusal = ""},
+        {.args = {"s.apak", "--frame", "2"}, .refusal = "--frame N writes -o"},
+        {.args = {"s.apak", "--frame", "2", "-o", "f.png", "--video", "v.avi"}, .refusal = "--frame N writes -o"},
+        {.args = {"s.apak", "--frame", "-1", "-o", "f.png"}, .refusal = "--frame is a frame index from 0"},
+        {.args = {"s.apak", "--dt", "0", "--frame", "1", "-o", "f.png"}, .refusal = "at a nonzero --dt"},
+        {.args = {toml, "--b-args", "--view meshlets", "--video", "v.mp4"}, .refusal = "--b-args needs --compare"},
+        {.args = {toml, "--compare", "HEAD", "--video", "v.mp4"}, .refusal = tool ? "" : no_tool},
+        {.args = {toml, "--compare", "HEAD", "--frame", "1", "-o", "f.png"}, .refusal = tool ? "" : no_tool},
+        {.args = {toml, "--compare", "HEAD", "-o", "f.png"}, .refusal = tool ? "--compare writes --video" : no_tool},
+        {.args = {toml, "--compare", "HEAD", "--video", "v.mp4", "-o", "f.png"},
+         .refusal = tool ? "--compare writes --video" : no_tool},
+        {.args = {"s.apak", "--compare", "HEAD", "--video", "v.mp4"},
+         .refusal = tool ? "--compare needs a .scene.toml" : no_tool},
+        {.args = {toml, "--compare", "HEAD", "--b-args", "--frames 3", "--video", "v.mp4"},
+         .refusal = "--b-args takes --object, --camera, --view and --set, not --frames"},
+        {.args = {toml, "--compare", "HEAD", "--b-args", "--view", "--video", "v.mp4"},
+         .refusal = "--b-args: --view needs a value"},
+    };
+    bool ok = true;
+    for (const Case& c : cases) {
+        ok &= check_case(c);
+    }
+    return ok;
+}
+
+// --b-args parses into B's own renderer flags, A's staying A's, and both
+// spell out in the provider's flags.
+bool
+check_b_render() {
+    const bool tool = loupe::builds_packs();
+    loupe::Options a;
+    const std::vector<std::string> both = {"s.scene.toml",
+                                           "--object",
+                                           "atrium",
+                                           "--view",
+                                           "shaded",
+                                           "--set",
+                                           "a.b=1",
+                                           "--dt",
+                                           "50",
+                                           "--frame",
+                                           "2",
+                                           "-o",
+                                           "f.png",
+                                           "--compare",
+                                           "HEAD",
+                                           "--b-args",
+                                           "  --view meshlets\t--set c.d=2 "};
+    // Parsed in builds without the pack tool too, though they refuse the compare.
+    bool ok = check(parse(both, &a).empty() == tool, "A's compare command line");
+    const std::vector<std::string> a_args = {"--object", "atrium", "--view", "shaded", "--set", "a.b=1"};
+    const std::vector<std::string> b_args = {"--view", "meshlets", "--set", "c.d=2"};
+    ok &= check(a.render.args() == a_args, "A keeps its own renderer flags");
+    ok &= check(a.b_render && a.b_render->args() == b_args, "B's are --b-args' alone, not added to A's");
+    return ok;
 }
 
 } // namespace
 
 int
 main() {
-    bool ok = true;
-    for (const std::optional<size_t> budget : {std::optional<size_t>(), std::optional<size_t>(BUDGET_MB)}) {
-        const std::string with = budget ? "with a budget" : "without a budget";
-        loupe::Options parsed;
-        ok &= check(parse_back(budget, &parsed), with + ": parses");
-        ok &= check(parsed.scene == PICKED && parsed.checkpoint_mb == budget, with + ": the scene and budget");
-        ok &= check(parsed.objects.empty() && parsed.camera.empty() && parsed.view.empty() && !parsed.frames
-                        && !parsed.dt_ms && parsed.sets.empty() && !parsed.ticks && parsed.out_bmp.empty()
-                        && parsed.out_video.empty(),
-                    with + ": nothing else");
-    }
-    return ok ? 0 : 1;
+    const bool refusals = check_refusals();
+    const bool b_render = check_b_render();
+    return refusals && b_render ? 0 : 1;
 }

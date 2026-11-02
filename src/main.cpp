@@ -1,11 +1,12 @@
 // loupe: opens a scene in the window, or the window's start panel without one;
-// with -o or --video, writes the scene's frames and exits.
+// with -o or --video, writes the scene's frames and exits; with --frame or
+// --compare, writes a frame of its camera path or an A | B video of it.
 #include <cstdio>
-#include <memory>
 #include <string>
 
 #include "engine/frames.hpp"
 #include "options.hpp"
+#include "path/path.hpp"
 #include "version.hpp"
 #include "window/run_window.hpp"
 
@@ -24,14 +25,12 @@ main(int argc, char** argv) {
     if (options.out_bmp.empty() && options.out_video.empty()) {
         return loupe::run_window(options) ? 0 : 1;
     }
-    std::unique_ptr<loupe::Frames> frames = loupe::Frames::open(options, &why);
-    if (frames == nullptr) {
+    if (options.frame || !options.compare.empty()) {
+        return loupe::run_path(options);
+    }
+    if (!loupe::render(options, &why)) {
         std::fprintf(stderr, "loupe: %s\n", why.c_str());
         return 1;
     }
-    const int count = frames->count();
-    for (int i = 0; i < count; i++) {
-        frames->step(frames->dt_ms());
-    }
-    return frames->close() ? 0 : 1;
+    return 0;
 }

@@ -2,7 +2,8 @@
 # tools/ci/install-linux-packages.sh installs them. First the video half of
 # SDL3's own list (third_party/SDL/docs/README-linux.md, "Build Dependencies"),
 # which SDL's configure requires for its X11 and Wayland windows; then Mesa's
-# lavapipe (Vulkan on the CPU) and the Khronos validation layer for window_smoke.
+# lavapipe (Vulkan on the CPU) and the Khronos validation layer for window_smoke;
+# last ffmpeg, which packs --compare's video.
 libx11-dev
 libxext-dev
 libxrandr-dev
@@ -26,3 +27,4 @@ libwayland-dev
 libdecor-0-dev
 mesa-vulkan-drivers
 vulkan-validationlayers
+ffmpeg

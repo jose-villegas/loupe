@@ -19,11 +19,14 @@ struct ScenePack {
     std::string id;
 };
 
-// True in builds with LOUPE_PACK_TOOL, which build a .scene.toml's pack.
-bool builds_packs();
+// The pack's file: <folder>/<id>.apak.
+std::filesystem::path pack_file(const ScenePack& pack);
+// The scene id a .apak or .scene.toml file names: its file name without the
+// suffix; empty for any other file.
+std::string scene_id(const std::filesystem::path& file);
 
 // A .apak opens as it is. A .scene.toml is built first, and brought up to date
-// on every call, where builds_packs(); elsewhere it is refused. None, with
+// on every call, where builds_packs() (tools.hpp); elsewhere it is refused. None, with
 // `why` set, for a scene that cannot open.
 std::optional<ScenePack> resolve_scene(const std::filesystem::path& path, std::string* why);
 

@@ -80,26 +80,30 @@ set_asset_dir(const std::filesystem::path& folder) {
 #endif
 }
 
+// Every tunable back to its own default. The registry outlives a run, so a
+// --set of the run before would otherwise reach this one.
+void
+reset_tunables() {
+    tune_registry_t* registry = tune_shared();
+    for (const tune_entry_t* entry = registry->first; entry != nullptr; entry = entry->next) {
+        (void)tune_reset(registry, entry->name);
+    }
+}
+
 // The scene provider's command line for scene `id` and `options`: only the
 // flags given, as scene_viewer.sh passes them.
 std::vector<std::string>
 provider_args(const std::string& id, const Options& options) {
     std::vector<std::string> args = {"loupe", "--scene", id};
+    const std::vector<std::string> render = options.render.args();
+    args.insert(args.end(), render.begin(), render.end());
     const auto add = [&args](const char* flag, const std::string& value) {
         if (!value.empty()) {
             args.insert(args.end(), {flag, value});
         }
     };
-    for (const std::string& object : options.objects) {
-        add("--object", object);
-    }
-    add("--camera", options.camera);
-    add("--view", options.view);
     add("--frames", options.frames ? std::to_string(*options.frames) : "");
     add("--dt", options.dt_ms ? std::to_string(*options.dt_ms) : "");
-    for (const std::string& set : options.sets) {
-        add("--set", set);
-    }
     add("-o", options.out_bmp);
     add("--video", options.out_video);
     return args;
@@ -127,6 +131,7 @@ Frames::open(const Options& options, std::string* why) {
     }
     state->argv.push_back(nullptr);
     int exit_code = 0;
+    reset_tunables();
     if (!render_host_open(&scene_provider, static_cast<int>(state->args.size()), state->argv.data(), &exit_code)) {
         *why = "the scene did not open; autana said why above";
         return nullptr;
@@ -301,6 +306,11 @@ Frames::path_ms() const {
     return scene_provider.path_ms();
 }
 
+int64_t
+Frames::video_frames_fit() const {
+    return render_host_video_frames_fit();
+}
+
 bool
 Frames::close() {
     if (!state_->open) {
@@ -309,6 +319,23 @@ Frames::close() {
     state_->forget_after(-1);
     state_->open = false;
     return render_host_close();
+}
+
+bool
+render(const Options& options, std::string* why) {
+    std::unique_ptr<Frames> frames = Frames::open(options, why);
+    if (frames == nullptr) {
+        return false;
+    }
+    const int count = frames->count();
+    for (int i = 0; i < count; i++) {
+        frames->step(frames->dt_ms());
+    }
+    if (!frames->close()) {
+        *why = "the run failed; autana said why above";
+        return false;
+    }
+    return true;
 }
 
 } // namespace loupe
