@@ -17,6 +17,14 @@ loupe=$(find "$out/unpacked" -type f \( -name loupe -o -name loupe.exe \))
 samples=$(find "$out/unpacked" -type f -name '*.apak' | sort)
 [ -n "$samples" ] || { echo "package_smoke: no sample in $archive" >&2; exit 1; }
 
+# On Linux, the C library is the only shared library loupe links; SDL loads
+# the display's own at run time.
+if [ "$(uname -s)" = Linux ] && ldd "$loupe" >"$out/ldd.txt" 2>&1; then
+    if grep -vE 'linux-vdso|ld-linux|lib(c|m|dl|pthread|rt)\.so' "$out/ldd.txt"; then
+        echo "package_smoke: loupe links more than the C library, above" >&2
+        exit 1
+    fi
+fi
 env PATH="$out/empty-path" "$loupe" --version
 for sample in $samples; do
     image="$out/renders/$(basename "$sample" .apak).bmp"

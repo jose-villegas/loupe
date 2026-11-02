@@ -1,4 +1,4 @@
-// The start panel's library: the sample packs in both folders it looks in,
+// The start panel's library: the sample packs in the folder they install to,
 // and a recent list that keeps the last RECENT_KEPT scenes opened, most
 // recent first, each once, without the files gone since; none without a config folder.
 #include <cstdio>
@@ -39,12 +39,11 @@ main(int argc, char** argv) {
     const fs::path out = fs::absolute(argv[1]);
     fs::remove_all(out);
     const loupe::Folders folders = {.exe_dir = out / "bin", .config = out / "config"};
-    const fs::path& exe_dir = folders.exe_dir;
-    const fs::path installed = out / "share" / "loupe" / "scenes" / "installed.apak";
-    const fs::path portable = exe_dir / "scenes" / "portable.apak";
-    touch(installed);
-    touch(portable);
-    touch(exe_dir / "scenes" / "notes.txt");
+    const fs::path first = loupe::samples_dir(folders) / "a.apak";
+    const fs::path second = loupe::samples_dir(folders) / "b.apak";
+    touch(second);
+    touch(first);
+    touch(loupe::samples_dir(folders) / "notes.txt");
 
     // One more scene than the list keeps, opened in order, then the first two again.
     std::vector<fs::path> scenes;
@@ -61,9 +60,9 @@ main(int argc, char** argv) {
     fs::remove(scenes[3]);
 
     const loupe::Library found = loupe::library(folders);
-    ok &= check(found.samples.size() == 2 && fs::equivalent(found.samples[0], installed)
-                    && fs::equivalent(found.samples[1], portable),
-                "samples, installed then portable, packs only");
+    ok &= check(found.samples.size() == 2 && fs::equivalent(found.samples[0], first)
+                    && fs::equivalent(found.samples[1], second),
+                "samples, by name, packs only");
     // s2, s1, then s10 down to s4: s0 fell off the end, s3 is gone, and s1 and s2 moved up.
     std::vector<fs::path> expected = {scenes[2], scenes[1]};
     for (size_t i = loupe::RECENT_KEPT; i >= 4; i--) {

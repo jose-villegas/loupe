@@ -8,8 +8,8 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <thread>
 
@@ -60,7 +60,9 @@ child(const std::string& out, const std::string& text) {
 std::string
 read_all(const fs::path& file) {
     std::ifstream in(file, std::ios::binary);
-    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    std::ostringstream text;
+    text << in.rdbuf();
+    return text.str();
 }
 
 } // namespace

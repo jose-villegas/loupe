@@ -1,8 +1,7 @@
 # What `cpack` puts in a download. Windows: a portable zip, loupe.exe beside
 # scenes/ and LICENSE. Linux: a tarball in the prefix layout, bin/loupe and
 # share/ with its samples, .desktop file and icon, to copy into ~/.local or
-# /usr/local or run where it lands. The start panel lists both scenes folders
-# (library.cpp). LOUPE_SAMPLES adds every autana demo scene's pack.
+# /usr/local or run where it lands. LOUPE_SAMPLES adds every autana demo scene's pack.
 
 if(WIN32)
     set(bin_dir .)
@@ -22,6 +21,9 @@ else()
 endif()
 install(TARGETS loupe RUNTIME DESTINATION "${bin_dir}")
 install(FILES LICENSE DESTINATION "${doc_dir}")
+# The start panel lists the samples where this installs them.
+file(RELATIVE_PATH samples_from_exe "/prefix/${bin_dir}" "/prefix/${scenes_dir}")
+set_property(SOURCE src/library.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_SAMPLES_DIR=\"${samples_from_exe}\"")
 
 if(LOUPE_SAMPLES)
     # By glob, so a scene autana adds ships without a change here.
@@ -29,11 +31,10 @@ if(LOUPE_SAMPLES)
     if(NOT scenes)
         message(FATAL_ERROR "LOUPE_SAMPLES: no .scene.toml under ${AUTANA_DIR}/launcher/demo")
     endif()
-    # Built on every build: only build_pack.py knows a pack's inputs. Emptied
-    # first, so a scene autana removed leaves no pack behind.
+    # On every build: only build_pack.py knows a pack's inputs. It rewrites
+    # only the packs that changed and removes those of scenes gone.
     set(samples "${CMAKE_BINARY_DIR}/samples")
     add_custom_target(samples ALL
-        COMMAND "${CMAKE_COMMAND}" -E rm -rf "${samples}"
         COMMAND "${Python3_EXECUTABLE}" "${AUTANA_DIR}/launcher/tools/r3d/build_pack.py" -o "${samples}" ${scenes}
         VERBATIM)
     install(DIRECTORY "${samples}/" DESTINATION "${scenes_dir}" FILES_MATCHING PATTERN "*.apak")
@@ -41,7 +42,6 @@ endif()
 
 set(CPACK_PACKAGE_VENDOR "jose-villegas")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A frame debugger for the autana engine")
-set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE")
 set(CPACK_STRIP_FILES ON)
 # CPACK_PACKAGE_FILE_NAME's default: loupe-<version>-<system name>.
 include(CPack)

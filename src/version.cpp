@@ -1,5 +1,7 @@
 #include "version.hpp"
 
+#include "autana_commit.inc"
+
 namespace loupe {
 
 const char*

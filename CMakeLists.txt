@@ -27,6 +27,10 @@ set(CMAKE_C_EXTENSIONS OFF)
 if(MINGW)
     # One file that runs anywhere, not whichever libstdc++ is first on PATH.
     add_link_options(-static)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND NOT AUTANA_CPP_SANITIZE)
+    # GCC's runtime inside too, so a Linux loupe needs only the C library;
+    # the sanitizers keep theirs shared.
+    add_link_options(-static-libstdc++ -static-libgcc)
 endif()
 
 # autana's C++ rules: sanitizers (AUTANA_CPP_SANITIZE) before its subdirectory,
@@ -52,20 +56,17 @@ add_library(loupe_core OBJECT
     src/process.cpp
     src/version.cpp)
 target_include_directories(loupe_core PUBLIC src)
-# The autana commit compiled, for version.cpp; configure runs again when the submodule moves.
+# The version and the autana commit, for version.cpp. The commit is read on
+# every build, so it follows the submodule whatever moved it.
 find_package(Git QUIET)
-set(autana_commit unknown)
-if(Git_FOUND)
-    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${AUTANA_DIR}" rev-parse --short=9 HEAD
-                    OUTPUT_VARIABLE autana_commit OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${AUTANA_DIR}" rev-parse --absolute-git-dir
-                    OUTPUT_VARIABLE autana_git_dir OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
-    if(EXISTS "${autana_git_dir}/HEAD")
-        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${autana_git_dir}/HEAD")
-    endif()
-endif()
-set_property(SOURCE src/version.cpp APPEND PROPERTY COMPILE_DEFINITIONS
-             "LOUPE_VERSION=\"${PROJECT_VERSION}\"" "LOUPE_AUTANA_COMMIT=\"${autana_commit}\"")
+set(autana_commit "${CMAKE_BINARY_DIR}/generated/autana_commit.inc")
+add_custom_target(autana_commit BYPRODUCTS "${autana_commit}"
+    COMMAND "${CMAKE_COMMAND}" "-DGIT=${GIT_EXECUTABLE}" "-DAUTANA_DIR=${AUTANA_DIR}" "-DOUT=${autana_commit}"
+            -P "${PROJECT_SOURCE_DIR}/cmake/autana_commit.cmake"
+    VERBATIM)
+add_dependencies(loupe_core autana_commit)
+target_include_directories(loupe_core PRIVATE "${CMAKE_BINARY_DIR}/generated")
+set_property(SOURCE src/version.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_VERSION=\"${PROJECT_VERSION}\"")
 if(WIN32)
     # Every executable that links loupe_core, tests too, runs with UTF-8 as its code page.
     enable_language(RC)

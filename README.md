@@ -30,7 +30,8 @@ need no Python and no compiler; the window needs a Vulkan driver.
 | `loupe-<version>-windows-portable.zip` | `loupe.exe`, `scenes/`, `LICENSE` | unzip anywhere and run `loupe.exe` |
 | `loupe-<version>-linux-x86_64.tar.gz` | `bin/loupe`, and in `share/` the samples, `applications/loupe.desktop` and the icon | run `bin/loupe` where it lands, or copy `bin/` and `share/` into `~/.local` to list Loupe among the desktop's applications |
 
-The Linux build is made on Ubuntu 24.04, so it needs glibc 2.39 or newer.
+The Linux build is made on Ubuntu 24.04 with GCC's runtime linked in, so it
+needs only glibc 2.39 or newer, X11 or Wayland, and a Vulkan driver.
 About, on the window's menu bar, or `loupe --version`, names the Loupe version and
 the autana commit it was built against.
 
@@ -153,12 +154,14 @@ git config core.hooksPath third_party/autana/scripts/git-hooks
 ## Release
 
 `project(loupe VERSION ...)` in `CMakeLists.txt` is the one version. Bump it, merge,
-then push the tag `v<version>` on that commit (`v<version>-rc.1` for a
-pre-release): `.github/workflows/release.yml` refuses a tag that names another
-version, runs the `release` workflow preset on Windows and Linux, unpacks each
-download into an empty folder and renders every sample in it with nothing on
-`PATH` (`tools/ci/package_smoke.sh`), and attaches the downloads to the tag's
-GitHub Release. Every pull request runs the same, without the release.
+then push the tag `v<version>` on that commit. `.github/workflows/build.yml`
+runs the `release` workflow preset on Windows and Linux, unpacks each download
+into an empty folder and renders every sample in it with nothing on `PATH`
+(`tools/ci/package_smoke.sh`). It then attaches the downloads to the tag's
+GitHub Release, and refuses a tag that names another version. Every pull
+request and nightly run builds and smoke-tests the downloads the same way,
+without publishing them. A tag `v<version>-rc.1` publishes a pre-release whose
+files and `--version` still name `<version>`.
 
 ## License
 
