@@ -171,11 +171,15 @@ class Work {
   public:
     Work() = default;
 
+    // A worktree that would not go is said, git's own words included, before
+    // the scratch folder and its log are removed.
     ~Work() {
-        if (!repo_.empty()) {
-            std::string ignored;
-            (void)loupe::git({"-C", utf8(repo_), "worktree", "remove", "--force", utf8(tree())},
-                             dir() / "worktree-remove.log", &ignored);
+        std::string why;
+        if (!repo_.empty()
+            && !loupe::git({"-C", utf8(repo_), "worktree", "remove", "--force", utf8(tree())},
+                           dir() / "worktree-remove.log", &why)) {
+            std::fprintf(stderr, "loupe: B's worktree %s was not removed (git worktree prune clears it): %s\n",
+                         utf8(tree()).c_str(), why.c_str());
         }
     }
 

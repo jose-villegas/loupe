@@ -80,6 +80,16 @@ set_asset_dir(const std::filesystem::path& folder) {
 #endif
 }
 
+// Every tunable back to its own default. The registry outlives a run, so a
+// --set of the run before would otherwise reach this one.
+void
+reset_tunables() {
+    tune_registry_t* registry = tune_shared();
+    for (const tune_entry_t* entry = registry->first; entry != nullptr; entry = entry->next) {
+        (void)tune_reset(registry, entry->name);
+    }
+}
+
 // The scene provider's command line for scene `id` and `options`: only the
 // flags given, as scene_viewer.sh passes them.
 std::vector<std::string>
@@ -121,6 +131,7 @@ Frames::open(const Options& options, std::string* why) {
     }
     state->argv.push_back(nullptr);
     int exit_code = 0;
+    reset_tunables();
     if (!render_host_open(&scene_provider, static_cast<int>(state->args.size()), state->argv.data(), &exit_code)) {
         *why = "the scene did not open; autana said why above";
         return nullptr;

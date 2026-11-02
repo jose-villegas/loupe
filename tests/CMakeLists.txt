@@ -83,6 +83,8 @@ if(LOUPE_PACK_TOOL)
     # The scene's own checkout: a folder, and its HEAD checked out as a worktree.
     get_filename_component(autana_dir "${AUTANA_DIR}" ABSOLUTE)
     path_frame(frame_compare "${sponza_toml}" "" "${autana_dir}" "--view meshlets --object atrium")
+    # A's --set must not reach B: B's frame is a fresh run's under its own flags.
+    path_frame(frame_compare_set "${sponza_toml}" "--set|render.cull=0" "${autana_dir}" "--view shaded")
     # HEAD's worktree clones its submodules, from the network.
     path_frame(frame_compare_head "${sponza_toml}" "" HEAD "")
     # --frames 3 at --dt 100 (tests/path_video.cmake).
