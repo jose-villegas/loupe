@@ -15,6 +15,9 @@ permissions:
 jobs:
   build:
     uses: ./.github/workflows/build.yml
+    # build.yml's publish job declares it, and a caller must grant it; that job runs on tags only.
+    permissions:
+      contents: write
     with:
       autana-ref: main
 
