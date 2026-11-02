@@ -4,6 +4,7 @@
 # share/ with its samples, .desktop file and icon, to copy into ~/.local or
 # /usr/local or run where it lands. LOUPE_SAMPLES adds every autana demo scene's pack.
 
+set(CPACK_PACKAGE_VENDOR "jose-villegas")
 if(WIN32)
     set(bin_dir .)
     set(scenes_dir scenes)
@@ -36,6 +37,9 @@ if(WIN32)
     endforeach()
     set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "!include \"${install_nsh}\"")
     set(CPACK_NSIS_EXTRA_UNINSTALL_COMMANDS "!include \"${uninstall_nsh}\"")
+    # CPack removes Software\<vendor>\Loupe after the commands above, and
+    # never the vendor's key; this hook runs after it.
+    set(CPACK_NSIS_DELETE_ICONS_EXTRA "DeleteRegKey /ifempty SHCTX \"Software\\${CPACK_PACKAGE_VENDOR}\"")
 else()
     include(GNUInstallDirs)
     set(bin_dir "${CMAKE_INSTALL_BINDIR}")
@@ -67,7 +71,6 @@ if(LOUPE_SAMPLES)
     install(DIRECTORY "${samples}/" DESTINATION "${scenes_dir}" FILES_MATCHING PATTERN "*.apak")
 endif()
 
-set(CPACK_PACKAGE_VENDOR "jose-villegas")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A frame debugger for the autana engine")
 set(CPACK_STRIP_FILES ON)
 # Writes the values above into CPackConfig.cmake as they are: the

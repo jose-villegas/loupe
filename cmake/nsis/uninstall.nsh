@@ -12,5 +12,3 @@ apak_done:
 DeleteRegValue SHCTX "Software\Classes\.apak" "Loupe.previous"
 DeleteRegKey /ifempty SHCTX "Software\Classes\.apak"
 System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
-; CPack removes the vendor's Loupe key but not the vendor's own.
-DeleteRegKey /ifempty SHCTX "Software\jose-villegas"

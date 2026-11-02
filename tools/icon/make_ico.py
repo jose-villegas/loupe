@@ -1,6 +1,7 @@
 """Writes assets/loupe.ico from assets/loupe.png: every size Windows asks
 for, for loupe.exe's icon, its shortcuts and its .apak files. Run it after
-changing the PNG and commit both.
+changing the PNG and commit both. Needs Pillow, which nothing else here
+does: pip install pillow==12.3.0
 
 usage: python tools/icon/make_ico.py
 """
