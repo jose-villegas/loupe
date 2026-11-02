@@ -24,6 +24,7 @@ parse(const std::vector<std::string>& args, loupe::Options* options) {
     std::vector<std::string> line = {"loupe"};
     line.insert(line.end(), args.begin(), args.end());
     std::vector<char*> argv;
+    argv.reserve(line.size());
     for (std::string& arg : line) {
         argv.push_back(arg.data());
     }
@@ -37,10 +38,22 @@ check(bool ok, const std::string& what) {
     return ok;
 }
 
-} // namespace
+// Says whether `c` parses, or is refused with its reason.
+bool
+check_case(const Case& c) {
+    std::string line = "loupe";
+    for (const std::string& arg : c.args) {
+        line += " " + arg;
+    }
+    loupe::Options options;
+    const std::string refusal = parse(c.args, &options);
+    return check(c.refusal.empty() ? refusal.empty() : refusal.find(c.refusal) != std::string::npos,
+                 line + (refusal.empty() ? ": parses" : ": " + refusal));
+}
 
-int
-main() {
+// Each command line parses, or is refused for its reason.
+bool
+check_refusals() {
     const std::string toml = "s.scene.toml";
     const bool tool = loupe::builds_packs();
     const std::string no_tool = "built without the pack tool";
@@ -49,6 +62,7 @@ main() {
         {.args = {"s.apak", "--frame", "2"}, .refusal = "--frame N writes -o"},
         {.args = {"s.apak", "--frame", "2", "-o", "f.png", "--video", "v.avi"}, .refusal = "--frame N writes -o"},
         {.args = {"s.apak", "--frame", "-1", "-o", "f.png"}, .refusal = "--frame is a frame index from 0"},
+        {.args = {"s.apak", "--dt", "0", "--frame", "1", "-o", "f.png"}, .refusal = "at a nonzero --dt"},
         {.args = {toml, "--b-args", "--view meshlets", "--video", "v.mp4"}, .refusal = "--b-args needs --compare"},
         {.args = {toml, "--compare", "HEAD", "--video", "v.mp4"}, .refusal = tool ? "" : no_tool},
         {.args = {toml, "--compare", "HEAD", "--frame", "1", "-o", "f.png"}, .refusal = tool ? "" : no_tool},
@@ -64,17 +78,17 @@ main() {
     };
     bool ok = true;
     for (const Case& c : cases) {
-        std::string line;
-        for (const std::string& arg : c.args) {
-            line += " " + arg;
-        }
-        loupe::Options options;
-        const std::string refusal = parse(c.args, &options);
-        ok &= check(c.refusal.empty() ? refusal.empty() : refusal.find(c.refusal) != std::string::npos,
-                    "loupe" + line + (refusal.empty() ? ": parses" : ": " + refusal));
+        ok &= check_case(c);
     }
+    return ok;
+}
 
-    // B's flags in place of A's renderer flags; the path and the output kept.
+// B takes --b-args' renderer flags in place of A's, and keeps the path and the output.
+bool
+check_b_options() {
+    const std::string toml = "s.scene.toml";
+    const bool tool = loupe::builds_packs();
+    bool ok = true;
     loupe::Options a;
     loupe::Options b;
     std::string why;
@@ -106,5 +120,14 @@ main() {
     a.b_args.reset();
     ok &= check(loupe::b_options(a, &b, &why) && b.objects == a.objects && b.view == a.view && b.sets == a.sets,
                 "without --b-args, B draws as A");
-    return ok ? 0 : 1;
+    return ok;
+}
+
+} // namespace
+
+int
+main() {
+    const bool refusals = check_refusals();
+    const bool b_options = check_b_options();
+    return refusals && b_options ? 0 : 1;
 }

@@ -14,7 +14,7 @@ constexpr const char TEST[] = "path_timing_test";
 constexpr loupe::PathFacts TOUR = {.path_ms = 36303, .own_dt_ms = 16, .fit = 2170};
 
 struct Case {
-    const char* what;
+    const char* what = "";
     loupe::PathFacts path;
     loupe::Options given;
     loupe::PathTiming want;

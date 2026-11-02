@@ -22,7 +22,7 @@ using Surface = std::unique_ptr<SDL_Surface, void (*)(SDL_Surface*)>;
 Surface
 load(const std::string& path) {
     const bool png = path.ends_with(".png");
-    Surface loaded(png ? SDL_LoadPNG(path.c_str()) : SDL_LoadBMP(path.c_str()), &SDL_DestroySurface);
+    const Surface loaded(png ? SDL_LoadPNG(path.c_str()) : SDL_LoadBMP(path.c_str()), &SDL_DestroySurface);
     Surface rgb(loaded ? SDL_ConvertSurface(loaded.get(), SDL_PIXELFORMAT_RGB24) : nullptr, &SDL_DestroySurface);
     if (rgb == nullptr) {
         std::fprintf(stderr, "%s: cannot load %s: %s\n", TEST, path.c_str(), SDL_GetError());

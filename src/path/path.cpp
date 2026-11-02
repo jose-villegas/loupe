@@ -315,15 +315,15 @@ b_side(const Options& options, Work& work, Side* b, Stop* failed) {
 // OUT's stem .csv beside it. A failed frame watch fails a run after every
 // frame is written, so a side whose video was written still stands.
 bool
-compare_video(const std::vector<Side>& sides, const PathTiming& timing, const fs::path& out, const fs::path& work,
+compare_video(const std::vector<Side>& sides, const PathTiming& timing, const fs::path& out, const Work& work,
               Stop* failed) {
     std::vector<std::string> videos;
     for (const auto& [name, side] : {std::pair{"a", &sides[0]}, std::pair{"b", &sides[1]}}) {
         Options run = side->options;
         run.frames = timing.frames;
         run.dt_ms = timing.dt_ms;
-        run.out_bmp = utf8(work / std::format("{}.bmp", name));
-        run.out_video = utf8(work / std::format("{}.avi", name));
+        run.out_bmp = utf8(work.dir() / std::format("{}.bmp", name));
+        run.out_video = utf8(work.dir() / std::format("{}.avi", name));
         std::fprintf(stderr, "loupe: drawing %s, %d frames at --dt %u\n", side->label.c_str(), timing.frames,
                      timing.dt_ms);
         std::string why;
@@ -336,7 +336,7 @@ compare_video(const std::vector<Side>& sides, const PathTiming& timing, const fs
     fs::create_directories(fs::absolute(out).parent_path(), ignored);
     const fs::path script = fs::path(LOUPE_AUTANA_DIR) / "launcher" / "tools" / "render" / "render_compare.py";
     const fs::path csv = fs::path(out).replace_extension(".csv");
-    const fs::path log = work / "render_compare.log";
+    const fs::path log = work.dir() / "render_compare.log";
     const bool ok = run_logged({LOUPE_PYTHON, utf8(script), "--out", utf8(out), "--csv", utf8(csv), "--video",
                                 videos[0], videos[1], "--label-a", sides[0].label, "--label-b", sides[1].label},
                                log);
@@ -354,7 +354,7 @@ compare_video(const std::vector<Side>& sides, const PathTiming& timing, const fs
 PathTiming
 path_timing(const PathFacts& path, const Options& given) {
     uint32_t dt = given.dt_ms.value_or(path.own_dt_ms);
-    if (!given.dt_ms && path.path_ms / dt + 1 > path.fit) {
+    if (!given.dt_ms && int64_t{path.path_ms / dt} + 1 > path.fit) {
         const int64_t gaps = std::max<int64_t>(path.fit - 1, 1);
         dt = static_cast<uint32_t>((path.path_ms + gaps - 1) / gaps);
     }
@@ -403,7 +403,7 @@ run_path(const Options& options) {
     }
 #if LOUPE_PACK_TOOL
     if (!options.frame) {
-        return compare_video(sides, timing, options.out_video, work.dir(), &failed) ? 0 : said();
+        return compare_video(sides, timing, options.out_video, work, &failed) ? 0 : said();
     }
 #endif
     for (size_t i = 0; i < sides.size(); i++) {
