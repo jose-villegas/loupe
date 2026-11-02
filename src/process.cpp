@@ -1,0 +1,158 @@
+#include "process.hpp"
+
+#include <cstddef>
+#include <optional>
+#include <system_error>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
+#include <fcntl.h>
+#include <spawn.h>
+#include <sys/wait.h>
+extern char** environ;
+#endif
+
+namespace fs = std::filesystem;
+
+namespace loupe {
+
+namespace {
+
+#if defined(_WIN32)
+// One argument as the C runtime splits a command line back into argv.
+std::string
+argv_quoted(const std::string& arg) {
+    std::string out = "\"";
+    size_t slashes = 0;
+    for (const char c : arg) {
+        if (c == '\\') {
+            slashes++;
+            continue;
+        }
+        out.append(c == '"' ? 2 * slashes + 1 : slashes, '\\');
+        slashes = 0;
+        out += c;
+    }
+    out.append(2 * slashes, '\\');
+    return out + "\"";
+}
+
+// `args` as one command line, quoted for the C runtime.
+std::string
+command_line(const std::vector<std::string>& args) {
+    std::string line;
+    for (const std::string& arg : args) {
+        line += (line.empty() ? "" : " ") + argv_quoted(arg);
+    }
+    return line;
+}
+
+// Starts `args` with `startup`, its handles inherited when `inherit`; the process, or none.
+std::optional<PROCESS_INFORMATION>
+start(const std::vector<std::string>& args, STARTUPINFOA& startup, bool inherit) {
+    std::string line = command_line(args);
+    startup.cb = sizeof startup;
+    PROCESS_INFORMATION process = {};
+    if (!CreateProcessA(args[0].c_str(), line.data(), nullptr, nullptr, inherit ? TRUE : FALSE, 0, nullptr, nullptr,
+                        &startup, &process)) {
+        return std::nullopt;
+    }
+    CloseHandle(process.hThread);
+    return process;
+}
+#else
+// `args` as the null-ended argv posix_spawn takes; pointers into `args`.
+std::vector<char*>
+argv_of(const std::vector<std::string>& args) {
+    std::vector<char*> argv;
+    argv.reserve(args.size() + 1);
+    for (const std::string& arg : args) {
+        argv.push_back(const_cast<char*>(arg.c_str()));
+    }
+    argv.push_back(nullptr);
+    return argv;
+}
+#endif
+
+} // namespace
+
+bool
+run_logged(const std::vector<std::string>& args, const fs::path& log) {
+#if defined(_WIN32)
+    SECURITY_ATTRIBUTES inherit = {sizeof inherit, nullptr, TRUE};
+    const HANDLE file = CreateFileA(log.string().c_str(), GENERIC_WRITE, FILE_SHARE_READ, &inherit, CREATE_ALWAYS,
+                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    STARTUPINFOA startup = {};
+    startup.dwFlags = STARTF_USESTDHANDLES;
+    startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    startup.hStdOutput = file;
+    startup.hStdError = file;
+    DWORD status = 1;
+    if (const std::optional<PROCESS_INFORMATION> process = start(args, startup, true)) {
+        WaitForSingleObject(process->hProcess, INFINITE);
+        GetExitCodeProcess(process->hProcess, &status);
+        CloseHandle(process->hProcess);
+    }
+    CloseHandle(file);
+    return status == 0;
+#else
+    std::vector<char*> argv = argv_of(args);
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addopen(&actions, 1, log.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    posix_spawn_file_actions_adddup2(&actions, 1, 2);
+    pid_t pid = 0;
+    int status = 0;
+    const bool ok = posix_spawn(&pid, args[0].c_str(), &actions, nullptr, argv.data(), environ) == 0
+                    && waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    posix_spawn_file_actions_destroy(&actions);
+    return ok;
+#endif
+}
+
+bool
+spawn(const std::vector<std::string>& args) {
+#if defined(_WIN32)
+    STARTUPINFOA startup = {};
+    const std::optional<PROCESS_INFORMATION> process = start(args, startup, false);
+    if (process) {
+        CloseHandle(process->hProcess);
+    }
+    return process.has_value();
+#else
+    std::vector<char*> argv = argv_of(args);
+    pid_t pid = 0;
+    return posix_spawn(&pid, args[0].c_str(), nullptr, nullptr, argv.data(), environ) == 0;
+#endif
+}
+
+fs::path
+exe_path() {
+#if defined(_WIN32)
+    std::wstring path(MAX_PATH, L'\0');
+    for (;;) {
+        const DWORD length = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+        if (length == 0) {
+            return {};
+        }
+        if (length < path.size()) {
+            path.resize(length);
+            return path;
+        }
+        path.resize(path.size() * 2);
+    }
+#else
+    std::error_code error;
+    const fs::path path = fs::read_symlink("/proc/self/exe", error);
+    return error ? fs::path() : path;
+#endif
+}
+
+} // namespace loupe

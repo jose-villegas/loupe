@@ -17,7 +17,7 @@ const int TARGETS[] = {STRAIGHT_TO - 1, 4 * EVERY + 2, 4 * EVERY, 2 * EVERY + 5,
 constexpr size_t SIZE_SLACK_PARTS = 8;
 // Past this, EVERY doubled that many times overflows an int.
 constexpr long long MAX_THINNINGS = 24;
-constexpr const char USAGE[] = "SCENE.scene.toml out.bmp HALVES THINNINGS";
+constexpr const char USAGE[] = "SCENE.apak out.bmp HALVES THINNINGS";
 
 // Judges each step: the kept checkpoints within the budget, and each one saved
 // about the size of the first, the one kept when the watch starts.

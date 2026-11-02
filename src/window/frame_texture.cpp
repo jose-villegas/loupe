@@ -16,9 +16,12 @@ constexpr uint8_t ALPHA_OPAQUE = 0xFF;
 
 } // namespace
 
-FrameTexture::FrameTexture(Gpu& gpu, const Frame& first) : texture_(gpu.add_texture(first.width, first.height)) {
+FrameTexture::FrameTexture(Gpu& gpu, const Frame& first)
+    : gpu_(gpu), texture_(gpu.add_texture(first.width, first.height)) {
     upload(first);
 }
+
+FrameTexture::~FrameTexture() { gpu_.drop_texture(texture_); }
 
 void
 FrameTexture::upload(const Frame& frame) {

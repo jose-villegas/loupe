@@ -64,7 +64,8 @@ jobs:
       - name: Build and test
         run: cmake --workflow --preset default
       # Also run before a push that changes C++ or CMake (README, Standards).
-      - name: Build and test under the sanitizers
+      # Built without the pack tool, so it proves loupe opens .apak files alone.
+      - name: Build and test under the sanitizers, without the pack tool
         env:
           PUSH_TEST_GATE: "true"
         run: cmake --workflow --preset sanitize

@@ -70,12 +70,12 @@ main(int argc, char** argv) {
     const std::string mode = argc >= 4 ? argv[3] : "";
     const bool is_straight = mode == "straight";
     if (argc != (is_straight ? 5 : 4) || (!is_straight && mode != "switched")) {
-        std::fprintf(stderr, "usage: view_test SCENE.scene.toml OUT_DIR straight VIEW | switched\n");
+        std::fprintf(stderr, "usage: view_test SCENE.apak OUT_DIR straight VIEW | switched\n");
         return 2;
     }
     const std::string out = argv[2];
     loupe::Options options;
-    options.scene_toml = argv[1];
+    options.scene = argv[1];
     options.out_bmp = std::format("{}/{}.bmp", out, mode);
     options.view = is_straight ? argv[4] : "";
     std::unique_ptr<loupe::Frames> frames = loupe::test::open_or_report("view_test", options);

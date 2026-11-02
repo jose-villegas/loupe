@@ -1,6 +1,7 @@
-# Renders SCENE with autana's scene_viewer.sh and with LOUPE on the same ARGS
-# (|-separated; a trailing --video asks both for a video too) and fails
-# unless every file they write is the same bytes.
+# Renders VIEWER_SCENE with autana's scene_viewer.sh and SCENE, the same scene
+# as a .scene.toml or its .apak, with LOUPE on the same ARGS (|-separated; a
+# trailing --video asks both for a video too) and fails unless every file
+# they write is the same bytes.
 string(REPLACE "|" ";" args "${ARGS}")
 set(video OFF)
 if(args MATCHES "(^|;)--video$")
@@ -15,11 +16,11 @@ foreach(side viewer loupe)
         list(APPEND outputs --video "${OUT}/${side}.avi")
     endif()
     if(side STREQUAL "viewer")
-        set(command "${SH}" "${AUTANA_DIR}/launcher/tools/render/scene_viewer.sh")
+        set(command "${SH}" "${AUTANA_DIR}/launcher/tools/render/scene_viewer.sh" "${VIEWER_SCENE}")
     else()
-        set(command "${LOUPE}")
+        set(command "${LOUPE}" "${SCENE}")
     endif()
-    execute_process(COMMAND ${command} "${SCENE}" ${args} ${outputs} RESULT_VARIABLE status)
+    execute_process(COMMAND ${command} ${args} ${outputs} RESULT_VARIABLE status)
     if(NOT status EQUAL 0)
         message(FATAL_ERROR "${side} exited with ${status}")
     endif()

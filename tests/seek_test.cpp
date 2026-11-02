@@ -23,7 +23,7 @@ const int RETIMED[] = {RETIMED_FROM + 1, RETIMED_TO};
 int
 main(int argc, char** argv) {
     std::unique_ptr<loupe::Frames> frames =
-        loupe::test::open_test(TEST, std::span(argv, static_cast<size_t>(argc)), 3, "SCENE.scene.toml out.bmp");
+        loupe::test::open_test(TEST, std::span(argv, static_cast<size_t>(argc)), 3, "SCENE.apak out.bmp");
     if (frames == nullptr) {
         return 1;
     }

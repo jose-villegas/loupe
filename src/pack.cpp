@@ -1,24 +1,13 @@
 #include "pack.hpp"
 
-#include "options.hpp"
-
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <string>
 #include <system_error>
 #include <vector>
 
-#if defined(_WIN32)
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-#else
-#include <fcntl.h>
-#include <spawn.h>
-#include <sys/wait.h>
-extern char** environ;
-#endif
+#include "process.hpp"
 
 namespace fs = std::filesystem;
 
@@ -26,6 +15,18 @@ namespace loupe {
 
 namespace {
 
+constexpr const char PACK_SUFFIX[] = ".apak";
+constexpr const char SCENE_SUFFIX[] = ".scene.toml";
+
+// `path`'s file name without `suffix`, or empty when it does not end in it.
+std::string
+stem_before(const fs::path& path, const char* suffix) {
+    const std::string name = path.filename().string();
+    const size_t length = std::char_traits<char>::length(suffix);
+    return name.size() > length && name.ends_with(suffix) ? name.substr(0, name.size() - length) : std::string();
+}
+
+#if LOUPE_PACK_TOOL
 constexpr uint64_t FNV_OFFSET = 14695981039346656037ull;
 constexpr uint64_t FNV_PRIME = 1099511628211ull;
 
@@ -39,87 +40,15 @@ path_hash(const std::string& text) {
     return hash;
 }
 
-#if defined(_WIN32)
-// One argument as the C runtime splits a command line back into argv.
-std::string
-argv_quoted(const std::string& arg) {
-    std::string out = "\"";
-    size_t slashes = 0;
-    for (const char c : arg) {
-        if (c == '\\') {
-            slashes++;
-            continue;
-        }
-        out.append(c == '"' ? 2 * slashes + 1 : slashes, '\\');
-        slashes = 0;
-        out += c;
-    }
-    out.append(2 * slashes, '\\');
-    return out + "\"";
-}
-#endif
-
-// Runs `args` with no shell between, its output into `log`; true when it exits 0.
-bool
-run_logged(const std::vector<std::string>& args, const fs::path& log) {
-#if defined(_WIN32)
-    std::string line;
-    for (const std::string& arg : args) {
-        line += (line.empty() ? "" : " ") + argv_quoted(arg);
-    }
-    SECURITY_ATTRIBUTES inherit = {sizeof inherit, nullptr, TRUE};
-    const HANDLE file = CreateFileA(log.string().c_str(), GENERIC_WRITE, FILE_SHARE_READ, &inherit, CREATE_ALWAYS,
-                                    FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (file == INVALID_HANDLE_VALUE) {
-        return false;
-    }
-    STARTUPINFOA startup = {};
-    startup.cb = sizeof startup;
-    startup.dwFlags = STARTF_USESTDHANDLES;
-    startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-    startup.hStdOutput = file;
-    startup.hStdError = file;
-    PROCESS_INFORMATION process = {};
-    DWORD status = 1;
-    if (CreateProcessA(args[0].c_str(), line.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &startup, &process)) {
-        WaitForSingleObject(process.hProcess, INFINITE);
-        GetExitCodeProcess(process.hProcess, &status);
-        CloseHandle(process.hThread);
-        CloseHandle(process.hProcess);
-    }
-    CloseHandle(file);
-    return status == 0;
-#else
-    std::vector<char*> argv;
-    argv.reserve(args.size() + 1);
-    for (const std::string& arg : args) {
-        argv.push_back(const_cast<char*>(arg.c_str()));
-    }
-    argv.push_back(nullptr);
-    posix_spawn_file_actions_t actions;
-    posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_addopen(&actions, 1, log.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    posix_spawn_file_actions_adddup2(&actions, 1, 2);
-    pid_t pid = 0;
-    int status = 0;
-    const bool ok = posix_spawn(&pid, args[0].c_str(), &actions, nullptr, argv.data(), environ) == 0
-                    && waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
-    posix_spawn_file_actions_destroy(&actions);
-    return ok;
-#endif
-}
-
-} // namespace
-
-std::optional<std::string>
-scene_pack(const std::string& scene_toml, std::string* why) {
+// Builds `scene_toml`'s pack `id`, one cache folder per scene file.
+std::optional<ScenePack>
+built_pack(const fs::path& scene_toml, const std::string& id, std::string* why) {
     std::error_code error;
     const fs::path scene = fs::canonical(scene_toml, error);
     if (error) {
-        *why = "no scene file: " + scene_toml;
+        *why = "no scene file: " + scene_toml.string();
         return std::nullopt;
     }
-    const std::string id = scene_id(scene_toml);
     char tag[17];
     std::snprintf(tag, sizeof tag, "%016llx", static_cast<unsigned long long>(path_hash(scene.generic_string())));
     const fs::path folder = fs::path(LOUPE_PACK_CACHE) / (id + "-" + tag);
@@ -134,7 +63,39 @@ scene_pack(const std::string& scene_toml, std::string* why) {
         *why = "build_pack.py failed; see " + (folder / "build_pack.log").string();
         return std::nullopt;
     }
-    return folder.string();
+    return ScenePack{.folder = folder, .id = id};
+}
+#endif
+
+} // namespace
+
+bool
+builds_packs() {
+    return LOUPE_PACK_TOOL != 0;
+}
+
+std::optional<ScenePack>
+resolve_scene(const fs::path& path, std::string* why) {
+    if (const std::string id = stem_before(path, PACK_SUFFIX); !id.empty()) {
+        std::error_code error;
+        const fs::path pack = fs::canonical(path, error);
+        if (error || !fs::is_regular_file(pack, error)) {
+            *why = "no scene pack: " + path.string();
+            return std::nullopt;
+        }
+        return ScenePack{.folder = pack.parent_path(), .id = id};
+    }
+    const std::string id = stem_before(path, SCENE_SUFFIX);
+    if (id.empty()) {
+        *why = "expected a .apak or .scene.toml file: " + path.string();
+        return std::nullopt;
+    }
+#if LOUPE_PACK_TOOL
+    return built_pack(path, id, why);
+#else
+    *why = "this loupe opens a scene's .apak; it was built without the pack tool a .scene.toml needs: " + path.string();
+    return std::nullopt;
+#endif
 }
 
 } // namespace loupe

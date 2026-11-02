@@ -8,13 +8,13 @@
 #include <format>
 #include <iterator>
 #include <optional>
+#include <string>
 #include <system_error>
+#include <vector>
 
 namespace loupe {
 
 namespace {
-
-constexpr const char SCENE_SUFFIX[] = ".scene.toml";
 
 // A flag that takes a whole number: its range, what an error calls it, and where it goes.
 struct CountFlag {
@@ -60,10 +60,15 @@ find_count_flag(const std::string& flag) {
     return found == std::end(COUNT_FLAGS) ? nullptr : found;
 }
 
-// False with `why` set when the window's own flags come with -o or --video, which open no window.
+// False with `why` set when -o or --video come without a scene, or with the
+// window's own flags: they open no window.
 bool
 window_flags_fit(const Options& options, std::string* why) {
     const bool windowed = options.out_bmp.empty() && options.out_video.empty();
+    if (!windowed && options.scene.empty()) {
+        *why = "-o and --video need a scene file";
+        return false;
+    }
     if (!windowed && (options.checkpoint_mb || options.ticks)) {
         *why = "--checkpoint-mb and --ticks are for the window, not for -o or --video";
         return false;
@@ -110,17 +115,20 @@ parse_count(const std::string& text, long long least, long long most, long long*
     return error == std::errc() && end == last && *value >= least && *value <= most;
 }
 
-std::string
-scene_id(const std::string& scene_toml) {
-    const std::string name = std::filesystem::path(scene_toml).filename().string();
-    return name.substr(0, name.size() - (sizeof SCENE_SUFFIX - 1));
-}
-
 const char*
 usage() {
-    return "usage: loupe SCENE.scene.toml [--object NAME ...] [--camera NAME] [--view NAME]\n"
+    return "usage: loupe [SCENE.apak | SCENE.scene.toml] [--object NAME ...] [--camera NAME] [--view NAME]\n"
            "             [--frames N] [--dt MS] [--set owner.name=value ...] [-o out.bmp] [--video out.avi]\n"
            "             [--checkpoint-mb MB] [--ticks N]\n";
+}
+
+std::vector<std::string>
+window_args(const std::filesystem::path& exe, const std::filesystem::path& scene, std::optional<size_t> checkpoint_mb) {
+    std::vector<std::string> args = {exe.string(), scene.string()};
+    if (checkpoint_mb) {
+        args.insert(args.end(), {"--checkpoint-mb", std::to_string(*checkpoint_mb)});
+    }
+    return args;
 }
 
 bool
@@ -128,11 +136,11 @@ parse_options(int argc, char** argv, Options* options, std::string* why) {
     for (int i = 1; i < argc; i++) {
         const std::string flag = argv[i];
         if (flag.empty() || flag[0] != '-') {
-            if (!options->scene_toml.empty()) {
+            if (!options->scene.empty()) {
                 *why = "one scene file only, not also " + flag;
                 return false;
             }
-            options->scene_toml = flag;
+            options->scene = flag;
             continue;
         }
         if (i + 1 >= argc) {
@@ -142,11 +150,6 @@ parse_options(int argc, char** argv, Options* options, std::string* why) {
         if (!apply_flag(flag, argv[++i], options, why)) {
             return false;
         }
-    }
-    if (!options->scene_toml.ends_with(SCENE_SUFFIX)) {
-        *why =
-            options->scene_toml.empty() ? "needs a scene file" : "expected a .scene.toml file: " + options->scene_toml;
-        return false;
     }
     return window_flags_fit(*options, why);
 }

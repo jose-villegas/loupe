@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <iterator>
 #include <map>
+#include <string>
 #include <vector>
 
 #include "engine/autana.hpp"
@@ -13,6 +15,7 @@
 namespace loupe {
 
 struct Frames::State {
+    std::string id; // the scene's
     std::vector<std::string> args;
     std::vector<char*> argv;
     bool open = false;
@@ -68,18 +71,19 @@ struct Frames::State {
 namespace {
 
 bool
-set_asset_dir(const std::string& folder) {
+set_asset_dir(const std::filesystem::path& folder) {
 #if defined(_WIN32)
-    return _putenv_s(ASSET_STORE_DIR_ENV, folder.c_str()) == 0;
+    return _putenv_s(ASSET_STORE_DIR_ENV, folder.string().c_str()) == 0;
 #else
     return setenv(ASSET_STORE_DIR_ENV, folder.c_str(), 1) == 0;
 #endif
 }
 
-// The scene provider's command line for `options`: only the flags given, as scene_viewer.sh passes them.
+// The scene provider's command line for scene `id` and `options`: only the
+// flags given, as scene_viewer.sh passes them.
 std::vector<std::string>
-provider_args(const Options& options) {
-    std::vector<std::string> args = {"loupe", "--scene", scene_id(options.scene_toml)};
+provider_args(const std::string& id, const Options& options) {
+    std::vector<std::string> args = {"loupe", "--scene", id};
     const auto add = [&args](const char* flag, const std::string& value) {
         if (!value.empty()) {
             args.insert(args.end(), {flag, value});
@@ -106,16 +110,17 @@ Frames::Frames(std::unique_ptr<State> state) : state_(std::move(state)) {}
 
 std::unique_ptr<Frames>
 Frames::open(const Options& options, std::string* why) {
-    const std::optional<std::string> pack = scene_pack(options.scene_toml, why);
+    const std::optional<ScenePack> pack = resolve_scene(options.scene, why);
     if (!pack) {
         return nullptr;
     }
-    if (!set_asset_dir(*pack)) {
+    if (!set_asset_dir(pack->folder)) {
         *why = "cannot set " ASSET_STORE_DIR_ENV;
         return nullptr;
     }
     auto state = std::make_unique<State>();
-    state->args = provider_args(options);
+    state->id = pack->id;
+    state->args = provider_args(pack->id, options);
     for (std::string& arg : state->args) {
         state->argv.push_back(arg.data());
     }
@@ -131,6 +136,11 @@ Frames::open(const Options& options, std::string* why) {
 }
 
 Frames::~Frames() { (void)close(); }
+
+const std::string&
+Frames::scene_id() const {
+    return state_->id;
+}
 
 int
 Frames::count() const {
