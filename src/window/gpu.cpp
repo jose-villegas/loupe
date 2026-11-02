@@ -377,6 +377,16 @@ Gpu::end_frame() {
         state_->render(draw_data);
         state_->present();
     }
+    // A dropped texture the backend has destroyed leaves ImGui, both its user
+    // list and the backend's, before the Gpu frees it.
+    std::erase_if(state_->textures, [](const std::unique_ptr<ImTextureData>& texture) {
+        const bool gone = texture->Status == ImTextureStatus_Destroyed && texture->WantDestroyNextFrame;
+        if (gone) {
+            ImGui::UnregisterUserTexture(texture.get());
+            ImGui::GetPlatformIO().Textures.find_erase(texture.get());
+        }
+        return gone;
+    });
 }
 
 ImTextureData&
@@ -386,6 +396,22 @@ Gpu::add_texture(int width, int height) {
     // The backend creates it at the next frame's end and frees it at shutdown.
     ImGui::RegisterUserTexture(texture.get());
     return *texture;
+}
+
+void
+Gpu::drop_texture(ImTextureData& texture) {
+    // ImGui asks the backend to destroy it next frame, once no frame in flight draws it.
+    texture.WantDestroyNextFrame = true;
+}
+
+void
+Gpu::set_title(const std::string& title) {
+    SDL_SetWindowTitle(state_->window, title.c_str());
+}
+
+SDL_Window*
+Gpu::sdl_window() const {
+    return state_->window;
 }
 
 } // namespace loupe::window

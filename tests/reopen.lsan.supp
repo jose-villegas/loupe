@@ -1,0 +1,4 @@
+# Leaks the reopen tests accept: autana allocates the framebuffer at every
+# render_host_open and frees none at close, so a second open in one process
+# loses the first. The window opens one scene a process and never meets it.
+leak:alloc_full_framebuffer

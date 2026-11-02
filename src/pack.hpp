@@ -1,13 +1,30 @@
-// A scene's asset pack, built by autana's own build_pack.py into the build's cache.
+// A scene's asset pack: a .apak as it is, or one autana's build_pack.py builds
+// from a .scene.toml into the build's cache, in builds with the pack tool.
 #pragma once
 
+#include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace loupe {
 
-// The folder holding the scene's pack, which build_pack.py brings up to date
-// on every call. None, with `why` set, when the pack cannot be built.
-std::optional<std::string> scene_pack(const std::string& scene_toml, std::string* why);
+// The two scene files loupe opens: autana's asset pack, and the scene it is built from.
+inline constexpr std::string_view PACK_SUFFIX = ".apak";
+inline constexpr std::string_view SCENE_SUFFIX = ".scene.toml";
+
+// What a run opens: <folder>/<id>.apak, the asset dir and scene id autana loads.
+struct ScenePack {
+    std::filesystem::path folder;
+    std::string id;
+};
+
+// True in builds with LOUPE_PACK_TOOL, which build a .scene.toml's pack.
+bool builds_packs();
+
+// A .apak opens as it is. A .scene.toml is built first, and brought up to date
+// on every call, where builds_packs(); elsewhere it is refused. None, with
+// `why` set, for a scene that cannot open.
+std::optional<ScenePack> resolve_scene(const std::filesystem::path& path, std::string* why);
 
 } // namespace loupe

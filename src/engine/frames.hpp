@@ -39,7 +39,7 @@ class Frames {
     // autana restores no state from before frame 1.
     static constexpr int FIRST_SEEKABLE = 1;
 
-    // The scene provider on `options`' scene file, its pack built first.
+    // The scene provider on `options`' scene, through resolve_scene.
     static std::unique_ptr<Frames> open(const Options& options, std::string* why);
     ~Frames();
     Frames(const Frames&) = delete;
@@ -47,6 +47,8 @@ class Frames {
     Frames(Frames&&) = delete;
     Frames& operator=(Frames&&) = delete;
 
+    // The scene's id: its pack's file name without .apak.
+    const std::string& scene_id() const;
     // The run's frame count and dt as it opened: the options', else the provider's defaults.
     int count() const;
     uint32_t dt_ms() const;

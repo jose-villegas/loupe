@@ -14,9 +14,9 @@
     },
     {
       "name": "sanitize",
-      "displayName": "UBSan, and ASan on Linux",
+      "displayName": "UBSan, and ASan on Linux; no pack tool, as an install",
       "inherits": "default",
-      "cacheVariables": { "AUTANA_CPP_SANITIZE": "ON" }
+      "cacheVariables": { "AUTANA_CPP_SANITIZE": "ON", "LOUPE_PACK_TOOL": "OFF" }
     },
     {
       "name": "tidy",

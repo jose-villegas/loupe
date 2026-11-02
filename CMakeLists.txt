@@ -6,8 +6,13 @@ set(AUTANA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/autana" CACHE PATH
 if(NOT EXISTS "${AUTANA_DIR}/launcher/tools/render/CMakeLists.txt")
     message(FATAL_ERROR "No autana at ${AUTANA_DIR}: run `git submodule update --init` or pass -DAUTANA_DIR=<path>")
 endif()
+# The pack tool builds a .scene.toml's pack with autana's build_pack.py, so
+# only a build with it needs Python; without it, loupe opens .apak files alone.
+option(LOUPE_PACK_TOOL "Open a .scene.toml by building its pack with autana's build_pack.py" ON)
 file(STRINGS "${AUTANA_DIR}/scripts/lib/python-min-version" python_min LIMIT_COUNT 1)
-find_package(Python3 ${python_min} REQUIRED COMPONENTS Interpreter)
+if(LOUPE_PACK_TOOL)
+    find_package(Python3 ${python_min} REQUIRED COMPONENTS Interpreter)
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -37,17 +42,30 @@ autana_cpp_checks()
 # scene manager's real definitions.
 add_library(loupe_core OBJECT
     src/engine/frames.cpp
+    src/library.cpp
     src/options.cpp
-    src/pack.cpp)
+    src/pack.cpp
+    src/paths.cpp
+    src/process.cpp)
 target_include_directories(loupe_core PUBLIC src)
+if(WIN32)
+    # Every executable that links loupe_core, tests too, runs with UTF-8 as its code page.
+    enable_language(RC)
+    target_sources(loupe_core PRIVATE src/windows/utf8.rc)
+endif()
 target_link_libraries(loupe_core PRIVATE autana::scene_provider)
-target_compile_definitions(loupe_core PRIVATE
-    "LOUPE_AUTANA_DIR=\"${AUTANA_DIR}\"" "LOUPE_PYTHON=\"${Python3_EXECUTABLE}\""
-    "LOUPE_PACK_CACHE=\"${CMAKE_BINARY_DIR}/packs\"")
+if(LOUPE_PACK_TOOL)
+    target_compile_definitions(loupe_core PRIVATE LOUPE_PACK_TOOL=1
+        "LOUPE_AUTANA_DIR=\"${AUTANA_DIR}\"" "LOUPE_PYTHON=\"${Python3_EXECUTABLE}\""
+        "LOUPE_PACK_CACHE=\"${CMAKE_BINARY_DIR}/packs\"")
+else()
+    target_compile_definitions(loupe_core PRIVATE LOUPE_PACK_TOOL=0)
+endif()
 
 # The window: SDL3, Vulkan through volk, Dear ImGui (third_party/CMakeLists.txt).
 # Only runs without -o or --video open it, so those still need no GPU.
 add_library(loupe_window OBJECT
+    src/window/files.cpp
     src/window/frame_texture.cpp
     src/window/gpu.cpp
     src/window/panels.cpp

@@ -1,0 +1,2 @@
+// The UTF-8 manifest, as resource 1 of type RT_MANIFEST (24): Windows reads it at process start.
+1 24 "utf8.manifest"

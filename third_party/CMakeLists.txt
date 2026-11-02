@@ -2,14 +2,14 @@
 # directory before autana_cpp_checks(), so Loupe's warning flags and clang-tidy
 # stay off their code, and SYSTEM keeps their headers out of Loupe's warnings.
 
-# SDL3: the window, its events and its Vulkan surface; one static library,
-# without the subsystems Loupe never opens.
+# SDL3: the window, its events, its Vulkan surface and the open-file dialog;
+# one static library, without the subsystems Loupe never opens.
 set(SDL_SHARED OFF CACHE BOOL "Build a shared SDL")
 set(SDL_STATIC ON CACHE BOOL "Build a static SDL")
 set(SDL_TEST_LIBRARY OFF CACHE BOOL "Build SDL3_test")
 set(SDL_EXAMPLES OFF CACHE BOOL "Build SDL's examples")
 set(SDL_INSTALL OFF CACHE BOOL "Install SDL")
-foreach(subsystem IN ITEMS AUDIO GPU RENDER CAMERA HAPTIC HIDAPI POWER SENSOR DIALOG TRAY)
+foreach(subsystem IN ITEMS AUDIO GPU RENDER CAMERA HAPTIC HIDAPI POWER SENSOR TRAY)
     set(SDL_${subsystem} OFF CACHE BOOL "SDL's ${subsystem} subsystem")
 endforeach()
 add_subdirectory(SDL SYSTEM)

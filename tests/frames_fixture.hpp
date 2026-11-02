@@ -31,7 +31,7 @@ open_or_report(const char* test, const Options& options) {
     return frames;
 }
 
-// For a test run as `TEST SCENE.scene.toml out.bmp ...` with `expected`
+// For a test run as `TEST SCENE.apak out.bmp ...` with `expected`
 // arguments: the scene, writing its BMP there, keeping every checkpoint. Null,
 // said on stderr with `usage`, for another count or a scene that does not open.
 inline std::unique_ptr<Frames>
@@ -41,7 +41,7 @@ open_test(const char* test, std::span<char*> args, size_t expected, const char* 
         return nullptr;
     }
     Options options;
-    options.scene_toml = args[1];
+    options.scene = args[1];
     options.out_bmp = args[2];
     std::unique_ptr<Frames> frames = open_or_report(test, options);
     if (frames != nullptr) {

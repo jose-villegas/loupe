@@ -5,6 +5,7 @@
 #include <string>
 
 struct ImTextureData;
+struct SDL_Window;
 
 namespace loupe::window {
 
@@ -25,6 +26,10 @@ class Gpu {
     // A width x height RGBA texture ImGui can draw, uploaded by ImGui's Vulkan
     // backend and freed with the Gpu; ImTextureDataQueueUpload() sends changes.
     ImTextureData& add_texture(int width, int height);
+    // Frees a texture add_texture() made, once ImGui's Vulkan backend has let it go.
+    void drop_texture(ImTextureData& texture);
+    void set_title(const std::string& title);
+    SDL_Window* sdl_window() const;
 
   private:
     struct State;

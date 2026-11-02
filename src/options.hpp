@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
@@ -15,7 +16,8 @@ constexpr size_t DEFAULT_CHECKPOINT_MB = 1024;
 
 // A flag left out keeps the provider's own default.
 struct Options {
-    std::string scene_toml;
+    // A .apak or a .scene.toml (resolve_scene); none opens the window on its start panel.
+    std::filesystem::path scene;
     std::vector<std::string> objects; // --object, repeatable
     std::string camera;               // --camera
     std::string view;                 // --view
@@ -33,8 +35,11 @@ struct Options {
 // False with `why` set for a command line it cannot run.
 bool parse_options(int argc, char** argv, Options* options, std::string* why);
 const char* usage();
-// The scene's id, its file name without .scene.toml, as autana's packs name it.
-std::string scene_id(const std::string& scene_toml);
+// The command line that opens the window on `scene` picked from the start
+// panel: the provider's defaults, and the window's checkpoint budget when
+// one was given; `exe` is the loupe to start.
+std::vector<std::string> window_args(const std::filesystem::path& exe, const std::filesystem::path& scene,
+                                     std::optional<size_t> checkpoint_mb);
 // A whole decimal number from `least` to `most`; false for anything else.
 bool parse_count(const std::string& text, long long least, long long most, long long* value);
 

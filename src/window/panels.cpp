@@ -2,10 +2,48 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <cstddef>
 
 #include "imgui.h"
+#include "paths.hpp"
 
 namespace loupe::window {
+
+namespace {
+
+// One selectable row per scene under `heading`, labelled by `label`; a click picks it.
+template <typename Label>
+void
+scene_list(const char* heading, const std::vector<std::filesystem::path>& scenes, Label label, Start& start) {
+    ImGui::SeparatorText(heading);
+    if (scenes.empty()) {
+        ImGui::TextDisabled("none");
+    }
+    ImGui::PushID(heading);
+    for (size_t i = 0; i < scenes.size(); i++) {
+        ImGui::PushID(static_cast<int>(i));
+        if (ImGui::Selectable(label(scenes[i]).c_str())) {
+            start.picked = scenes[i];
+        }
+        ImGui::PopID();
+    }
+    ImGui::PopID();
+}
+
+} // namespace
+
+void
+draw_start(const Library& library, const std::string& refusal, Start& start) {
+    if (ImGui::Button("Open...")) {
+        start.browse = true;
+    }
+    if (!refusal.empty()) {
+        ImGui::TextWrapped("%s", refusal.c_str());
+    }
+    scene_list(
+        "Samples", library.samples, [](const std::filesystem::path& scene) { return utf8(scene.stem()); }, start);
+    scene_list("Recent", library.recent, [](const std::filesystem::path& scene) { return utf8(scene); }, start);
+}
 
 void
 draw_timeline(const Frames& frames, Timeline& timeline) {

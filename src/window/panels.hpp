@@ -2,10 +2,13 @@
 // (run_window.cpp) applies it to Frames.
 #pragma once
 
+#include <filesystem>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "engine/frames.hpp"
+#include "library.hpp"
 #include "window/frame_texture.hpp"
 
 namespace loupe::window {
@@ -16,6 +19,16 @@ struct Timeline {
     std::optional<int> seek_to;
 };
 
+struct Start {
+    // A sample or recent scene to open.
+    std::optional<std::filesystem::path> picked;
+    // Open... was pressed: show the open-file dialog.
+    bool browse = false;
+};
+
+// The window without a scene: the samples, the recent scenes and Open...;
+// `refusal` says why the last scene picked did not open.
+void draw_start(const Library& library, const std::string& refusal, Start& start);
 // Play or pause, a step back and forward, and a scrubber over the run's frames.
 void draw_timeline(const Frames& frames, Timeline& timeline);
 // The debug-view picker; true when `view` changed.
