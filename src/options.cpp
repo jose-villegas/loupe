@@ -12,6 +12,8 @@
 #include <system_error>
 #include <vector>
 
+#include "paths.hpp"
+
 namespace loupe {
 
 namespace {
@@ -124,7 +126,7 @@ usage() {
 
 std::vector<std::string>
 window_args(const std::filesystem::path& exe, const std::filesystem::path& scene, std::optional<size_t> checkpoint_mb) {
-    std::vector<std::string> args = {exe.string(), scene.string()};
+    std::vector<std::string> args = {utf8(exe), utf8(scene)};
     if (checkpoint_mb) {
         args.insert(args.end(), {"--checkpoint-mb", std::to_string(*checkpoint_mb)});
     }

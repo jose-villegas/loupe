@@ -1,6 +1,6 @@
 // The start panel's library: the sample packs in both folders it looks in,
 // and a recent list that keeps the last RECENT_KEPT scenes opened, most
-// recent first, each once, without the files gone since.
+// recent first, each once, without the files gone since; none without a config folder.
 #include <cstdio>
 #include <filesystem>
 #include <format>
@@ -70,5 +70,8 @@ main(int argc, char** argv) {
         expected.push_back(scenes[i]);
     }
     ok &= check(found.recent == expected, "recent, most recent first, each once, without the gone");
+    // Without a config folder, nothing is remembered, and nothing lands in the working directory.
+    const loupe::Folders none = {.exe_dir = folders.exe_dir, .config = {}};
+    ok &= check(!loupe::remember(none, scenes[1]) && loupe::library(none).recent.empty(), "no config folder");
     return ok ? 0 : 1;
 }

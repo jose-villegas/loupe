@@ -14,6 +14,7 @@
 #include "engine/frames.hpp"
 #include "imgui.h"
 #include "library.hpp"
+#include "paths.hpp"
 #include "process.hpp"
 #include "window/files.hpp"
 #include "window/frame_texture.hpp"
@@ -141,9 +142,8 @@ draw_shown(Shown& shown, bool* ok) {
 class Window {
   public:
     Window(window::Gpu& gpu, const Options& options);
-    // Opens `scene` with `options`' run in place of what the window showed, or
-    // says on the start panel why it did not open.
-    void switch_to(const std::filesystem::path& scene, const Options& options);
+    // Opens the command line's scene, or says on the start panel why it did not open.
+    void open(const Options& options);
     // One tick's panels, then the scene they asked for; false once another
     // loupe took the window over.
     bool tick();
@@ -153,27 +153,23 @@ class Window {
   private:
     // Closes the open scene, if any, back to the start panel.
     void close();
-    // Starts loupe again on `scene`: autana keeps a run's asset packs mounted
-    // after it closes, so only a process's first run is a fresh one.
+    // Starts loupe again on `scene`, picked on the start panel, with the
+    // provider's defaults: autana keeps a run's asset packs mounted after it
+    // closes, so only a process's first run is a fresh one.
     bool relaunch(const std::filesystem::path& scene);
 
     window::Gpu& gpu_;
     ScratchImage scratch_;
-    // A scene picked on the start panel opens with the provider's defaults, as
-    // its command-line flags were for another scene.
-    Options picked_;
+    std::optional<size_t> checkpoint_mb_;
     Folders folders_;
     Library library_;
     std::string refusal_;
     std::optional<Shown> shown_;
-    bool opened_ = false; // a scene was opened in this process, or tried
     bool ok_ = true;
 };
 
 Window::Window(window::Gpu& gpu, const Options& options)
-    : gpu_(gpu), folders_(window::folders()), library_(library(folders_)) {
-    picked_.checkpoint_mb = options.checkpoint_mb;
-}
+    : gpu_(gpu), checkpoint_mb_(options.checkpoint_mb), folders_(window::folders()), library_(library(folders_)) {}
 
 bool
 Window::tick() {
@@ -197,13 +193,7 @@ Window::tick() {
         window::browse(gpu_.sdl_window());
     }
     const std::optional<std::filesystem::path> scene = start.picked ? start.picked : window::browsed();
-    if (scene && opened_) {
-        return !relaunch(*scene);
-    }
-    if (scene) {
-        switch_to(*scene, picked_);
-    }
-    return true;
+    return !scene || !relaunch(*scene);
 }
 
 bool
@@ -223,28 +213,25 @@ Window::close() {
 }
 
 void
-Window::switch_to(const std::filesystem::path& scene, const Options& options) {
-    close();
-    opened_ = true;
+Window::open(const Options& options) {
     Options run = options;
     run.out_bmp = scratch_.path();
     std::string why;
-    std::unique_ptr<Frames> frames = open_scene(run, scene, &why);
+    std::unique_ptr<Frames> frames = open_scene(run, options.scene, &why);
     if (frames == nullptr) {
-        refusal_ = std::format("{}: {}", utf8(scene), why);
+        refusal_ = std::format("{}: {}", utf8(options.scene), why);
         std::fprintf(stderr, "loupe: %s\n", refusal_.c_str());
         ok_ = false;
         return;
     }
-    refusal_.clear();
-    (void)remember(folders_, scene);
+    (void)remember(folders_, options.scene);
     gpu_.set_title(std::format("{}: {}", TITLE, frames->scene_id()));
     shown_.emplace(gpu_, std::move(frames));
 }
 
 bool
 Window::relaunch(const std::filesystem::path& scene) {
-    if (!spawn(window_args(exe_path(), scene, picked_.checkpoint_mb))) {
+    if (!spawn(window_args(exe_path(), scene, checkpoint_mb_))) {
         refusal_ = std::format("{}: loupe could not start again on it", utf8(scene));
         return false;
     }
@@ -263,7 +250,7 @@ run_window(const Options& options) {
     }
     Window window(*gpu, options);
     if (!options.scene.empty()) {
-        window.switch_to(options.scene, options);
+        window.open(options);
     }
     for (int tick = 0; (!options.ticks || tick < *options.ticks) && gpu->begin_frame() && window.tick(); tick++) {}
     return window.finish();

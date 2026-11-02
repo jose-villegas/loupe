@@ -5,6 +5,7 @@
 #include <cstddef>
 
 #include "imgui.h"
+#include "paths.hpp"
 
 namespace loupe::window {
 

@@ -11,6 +11,7 @@
 
 #include "engine/autana.hpp"
 #include "pack.hpp"
+#include "paths.hpp"
 
 namespace loupe {
 
@@ -73,7 +74,7 @@ namespace {
 bool
 set_asset_dir(const std::filesystem::path& folder) {
 #if defined(_WIN32)
-    return _putenv_s(ASSET_STORE_DIR_ENV, folder.string().c_str()) == 0;
+    return _putenv_s(ASSET_STORE_DIR_ENV, utf8(folder).c_str()) == 0;
 #else
     return setenv(ASSET_STORE_DIR_ENV, folder.c_str(), 1) == 0;
 #endif

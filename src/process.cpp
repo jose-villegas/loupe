@@ -16,6 +16,8 @@
 extern char** environ;
 #endif
 
+#include "paths.hpp"
+
 namespace fs = std::filesystem;
 
 namespace loupe {
@@ -84,7 +86,7 @@ bool
 run_logged(const std::vector<std::string>& args, const fs::path& log) {
 #if defined(_WIN32)
     SECURITY_ATTRIBUTES inherit = {sizeof inherit, nullptr, TRUE};
-    const HANDLE file = CreateFileA(log.string().c_str(), GENERIC_WRITE, FILE_SHARE_READ, &inherit, CREATE_ALWAYS,
+    const HANDLE file = CreateFileA(utf8(log).c_str(), GENERIC_WRITE, FILE_SHARE_READ, &inherit, CREATE_ALWAYS,
                                     FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) {
         return false;

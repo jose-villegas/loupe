@@ -377,11 +377,13 @@ Gpu::end_frame() {
         state_->render(draw_data);
         state_->present();
     }
-    // A dropped texture the backend has destroyed leaves ImGui and the Gpu.
+    // A dropped texture the backend has destroyed leaves ImGui, both its user
+    // list and the backend's, before the Gpu frees it.
     std::erase_if(state_->textures, [](const std::unique_ptr<ImTextureData>& texture) {
         const bool gone = texture->Status == ImTextureStatus_Destroyed && texture->WantDestroyNextFrame;
         if (gone) {
             ImGui::UnregisterUserTexture(texture.get());
+            ImGui::GetPlatformIO().Textures.find_erase(texture.get());
         }
         return gone;
     });

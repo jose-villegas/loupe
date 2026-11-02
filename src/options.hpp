@@ -37,7 +37,7 @@ bool parse_options(int argc, char** argv, Options* options, std::string* why);
 const char* usage();
 // The command line that opens the window on `scene` picked from the start
 // panel: the provider's defaults, and the window's checkpoint budget when
-// one was given; `exe` is argv[0].
+// one was given; `exe` is the loupe to start.
 std::vector<std::string> window_args(const std::filesystem::path& exe, const std::filesystem::path& scene,
                                      std::optional<size_t> checkpoint_mb);
 // A whole decimal number from `least` to `most`; false for anything else.

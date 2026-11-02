@@ -1,5 +1,8 @@
 #include "library.hpp"
 
+#include "pack.hpp"
+#include "paths.hpp"
+
 #include <algorithm>
 #include <fstream>
 #include <string>
@@ -12,7 +15,6 @@ namespace loupe {
 namespace {
 
 constexpr const char RECENT_FILE[] = "recent.txt";
-constexpr const char PACK_EXTENSION[] = ".apak";
 
 // The .apak files in `folder`, by name; none when there is no such folder.
 std::vector<fs::path>
@@ -20,7 +22,7 @@ packs_in(const fs::path& folder) {
     std::vector<fs::path> packs;
     std::error_code error;
     for (const fs::directory_entry& entry : fs::directory_iterator(folder, error)) {
-        if (entry.is_regular_file(error) && entry.path().extension() == PACK_EXTENSION) {
+        if (entry.is_regular_file(error) && entry.path().extension() == PACK_SUFFIX) {
             packs.push_back(entry.path());
         }
     }
@@ -28,10 +30,14 @@ packs_in(const fs::path& folder) {
     return packs;
 }
 
-// <config>/recent.txt's scenes, one UTF-8 path a line, most recent first.
+// <config>/recent.txt's scenes, one UTF-8 path a line, most recent first;
+// none without a config folder.
 std::vector<fs::path>
 read_recent(const fs::path& config) {
     std::vector<fs::path> recent;
+    if (config.empty()) {
+        return recent;
+    }
     std::ifstream in(config / RECENT_FILE, std::ios::binary);
     std::string line;
     while (std::getline(in, line)) {
@@ -46,17 +52,6 @@ read_recent(const fs::path& config) {
 }
 
 } // namespace
-
-std::string
-utf8(const fs::path& path) {
-    const std::u8string text = path.u8string();
-    return {text.begin(), text.end()};
-}
-
-fs::path
-from_utf8(std::string_view text) {
-    return {std::u8string(text.begin(), text.end())};
-}
 
 Library
 library(const Folders& folders) {
@@ -77,6 +72,9 @@ library(const Folders& folders) {
 bool
 remember(const Folders& folders, const fs::path& scene) {
     const fs::path& config = folders.config;
+    if (config.empty()) {
+        return false;
+    }
     std::error_code error;
     const fs::path absolute = fs::absolute(scene, error).lexically_normal();
     if (error) {

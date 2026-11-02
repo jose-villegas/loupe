@@ -5,8 +5,13 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace loupe {
+
+// The two scene files loupe opens: autana's asset pack, and the scene it is built from.
+inline constexpr std::string_view PACK_SUFFIX = ".apak";
+inline constexpr std::string_view SCENE_SUFFIX = ".scene.toml";
 
 // What a run opens: <folder>/<id>.apak, the asset dir and scene id autana loads.
 struct ScenePack {

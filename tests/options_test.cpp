@@ -1,5 +1,5 @@
-// The command line the window starts loupe again with, for a scene picked
-// after another, parses back to a window on that scene with the provider's
+// The command line the window starts loupe with, for a scene picked on the
+// start panel, parses back to a window on that scene with the provider's
 // defaults and the checkpoint budget it was given, if any.
 #include <cstddef>
 #include <cstdio>

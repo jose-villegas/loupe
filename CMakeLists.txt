@@ -45,8 +45,14 @@ add_library(loupe_core OBJECT
     src/library.cpp
     src/options.cpp
     src/pack.cpp
+    src/paths.cpp
     src/process.cpp)
 target_include_directories(loupe_core PUBLIC src)
+if(WIN32)
+    # Every executable that links loupe_core, tests too, runs with UTF-8 as its code page.
+    enable_language(RC)
+    target_sources(loupe_core PRIVATE src/windows/utf8.rc)
+endif()
 target_link_libraries(loupe_core PRIVATE autana::scene_provider)
 if(LOUPE_PACK_TOOL)
     target_compile_definitions(loupe_core PRIVATE LOUPE_PACK_TOOL=1

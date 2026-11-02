@@ -4,10 +4,13 @@
 
 #include <cstdio>
 #include <mutex>
+#include <string>
+#include <string_view>
 #include <utility>
 
-#include "library.hpp"
 #include "pack.hpp"
+#include "paths.hpp"
+#include "process.hpp"
 
 namespace loupe::window {
 
@@ -17,10 +20,18 @@ namespace {
 constexpr const char CONFIG_ORG[] = "autana";
 constexpr const char CONFIG_APP[] = "loupe";
 
-// SDL reads the filters until the callback, so they live as long as the program.
-// Extensions without the dot, ";" between them.
-constexpr SDL_DialogFileFilter PACKS[] = {{.name = "Scene packs", .pattern = "apak"}};
-constexpr SDL_DialogFileFilter PACKS_AND_SCENES[] = {{.name = "Scenes", .pattern = "apak;toml"}};
+// SDL's filter pattern: extensions without the dot, ";" between them.
+constexpr std::string_view SCENE_EXTENSION = ".toml";
+
+// The scene files this build opens, as one dialog filter. SDL reads it until
+// the callback, so it lives as long as the program.
+const SDL_DialogFileFilter&
+scene_filter() {
+    static const std::string pattern =
+        std::string(PACK_SUFFIX.substr(1)) + (builds_packs() ? ";" + std::string(SCENE_EXTENSION.substr(1)) : "");
+    static const SDL_DialogFileFilter filter = {.name = "Scenes", .pattern = pattern.c_str()};
+    return filter;
+}
 
 // What the dialog's thread hands the window's.
 struct Pending {
@@ -53,12 +64,7 @@ browse(SDL_Window* window) {
         }
         pending.showing = true;
     }
-    if (builds_packs()) {
-        SDL_ShowOpenFileDialog(on_picked, nullptr, window, PACKS_AND_SCENES, SDL_arraysize(PACKS_AND_SCENES), nullptr,
-                               false);
-    } else {
-        SDL_ShowOpenFileDialog(on_picked, nullptr, window, PACKS, SDL_arraysize(PACKS), nullptr, false);
-    }
+    SDL_ShowOpenFileDialog(on_picked, nullptr, window, &scene_filter(), 1, nullptr, false);
 }
 
 std::optional<std::filesystem::path>
@@ -69,10 +75,7 @@ browsed() {
 
 Folders
 folders() {
-    Folders found;
-    if (const char* base = SDL_GetBasePath()) {
-        found.exe_dir = from_utf8(base);
-    }
+    Folders found = {.exe_dir = exe_path().parent_path(), .config = {}};
     if (char* pref = SDL_GetPrefPath(CONFIG_ORG, CONFIG_APP)) {
         found.config = from_utf8(pref);
         SDL_free(pref);

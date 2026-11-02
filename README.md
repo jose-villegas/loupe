@@ -45,8 +45,9 @@ build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml
 
 Run without a scene, the window opens on a start panel: the sample packs beside
 `loupe` (`scenes/`, or `../share/loupe/scenes/` when installed), the last 10
-scenes opened, and Open... for any other. Scenes, in a scene's window, closes it
-and goes back to the panel. The recent list is `recent.txt` in
+scenes opened, and Open... for any other. A scene picked there opens in a new
+`loupe` with the scene's own defaults, and this window closes. Scenes, in a
+scene's window, closes the scene and goes back to the panel. The recent list is `recent.txt` in
 `%APPDATA%\autana\loupe` on Windows and `~/.local/share/autana/loupe` on Linux.
 
 The window shows the engine's frame at the largest whole zoom that fits. Play
@@ -88,8 +89,9 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `parity_*` | `loupe` on the scene's `.apak` (and, with the pack tool, its `.scene.toml`) writes the same bytes as autana's scene viewer for the same arguments |
 | `scene_toml_refused` | without the pack tool, a `.scene.toml` exits 1 saying why |
 | `wrong_version_refused` | a pack of another format version exits 1 with autana's reason |
-| `relaunch_args` | the command line the window starts loupe again with, on a scene picked after another, parses back to the same run |
-| `spawn` | loupe can start its own executable again without waiting on it, arguments intact |
+| `reopen_*` | a scene opened again after another closed, in one process, draws what it drew opened first; `reopen_same_name` is expected to fail while autana keeps a closed run's pack mounted, which is why a scene picked on the start panel starts loupe again |
+| `relaunch_args` | the command line the window starts loupe with, on a scene picked on the start panel, parses back to that scene, the defaults and the checkpoint budget |
+| `spawn` | loupe starts a copy of itself in a folder named outside any one Windows code page without waiting on it, and paths reach the copy's C file calls intact (on Windows, through the UTF-8 code page manifest, `src/windows/utf8.manifest`) |
 | `library` | the start panel's samples, and a recent list kept most recent first, each once, at most 10 |
 | `seek` | a seek back through a checkpoint draws the bytes stepping straight there drew |
 | `thinning_*` | under a checkpoint budget the checkpoints stay within it, their interval doubles, and seeks still draw the straight bytes |

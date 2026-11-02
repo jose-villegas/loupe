@@ -83,6 +83,26 @@ add_test(NAME view_switch COMMAND "${CMAKE_COMMAND}" "-DVIEW_TEST=$<TARGET_FILE:
          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/view_switch" -P "${CMAKE_CURRENT_SOURCE_DIR}/view_test.cmake")
 on_packs(view_switch)
 
+# A scene opened again after another closed, in one process, draws what it drew
+# opened first, both ways round.
+add_executable(reopen_test reopen_test.cpp)
+target_link_libraries(reopen_test PRIVATE loupe_core)
+foreach(order IN ITEMS "sponza;water" "water;sponza")
+    list(GET order 0 first)
+    list(GET order 1 second)
+    add_test(NAME reopen_${first} COMMAND reopen_test "${CMAKE_CURRENT_BINARY_DIR}/reopen_${first}" "${${first}}"
+                                          "${${second}}" "${${first}}")
+    on_packs(reopen_${first})
+endforeach()
+# But autana keeps a scene's pack mounted after its run closes, so a pack of the
+# same name opened later is never read: here the next-version pack opens as the
+# first one. That is why the window starts loupe again for a scene picked on the
+# start panel. Expected to fail until autana releases the pack at close.
+add_test(NAME reopen_same_name COMMAND reopen_test "${CMAKE_CURRENT_BINARY_DIR}/reopen_same_name" "${sponza}"
+                                       --refused "${next_pack}" "${sponza}")
+set_tests_properties(reopen_same_name PROPERTIES FIXTURES_REQUIRED "packs;next_version" RESOURCE_LOCK sponza
+                                                 WILL_FAIL TRUE)
+
 # The command line the window relaunches loupe with parses back to the run it came from.
 add_executable(options_test options_test.cpp)
 target_link_libraries(options_test PRIVATE loupe_core)
@@ -90,7 +110,7 @@ add_test(NAME relaunch_args COMMAND options_test)
 # What the relaunch starts loupe with: its own executable, in a process it does not wait on.
 add_executable(process_test process_test.cpp)
 target_link_libraries(process_test PRIVATE loupe_core)
-add_test(NAME spawn COMMAND process_test "${CMAKE_CURRENT_BINARY_DIR}/spawn.txt")
+add_test(NAME spawn COMMAND process_test "${CMAKE_CURRENT_BINARY_DIR}/spawn")
 
 add_executable(library_test library_test.cpp)
 target_link_libraries(library_test PRIVATE loupe_core)
