@@ -97,11 +97,13 @@ endforeach()
 # But autana keeps a scene's pack mounted after its run closes, so a pack of the
 # same name opened later is never read: here the next-version pack opens as the
 # first one. That is why the window starts loupe again for a scene picked on the
-# start panel. Expected to fail until autana releases the pack at close.
+# start panel. Passes on that one line and no other failure, until autana
+# releases the pack at close.
 add_test(NAME reopen_same_name COMMAND reopen_test "${CMAKE_CURRENT_BINARY_DIR}/reopen_same_name" "${sponza}"
                                        --refused "${next_pack}" "${sponza}")
 set_tests_properties(reopen_same_name PROPERTIES FIXTURES_REQUIRED "packs;next_version" RESOURCE_LOCK sponza
-                                                 WILL_FAIL TRUE)
+                                                 PASS_REGULAR_EXPRESSION "opened, not refused"
+                                                 FAIL_REGULAR_EXPRESSION " failed|DIFFERS")
 
 # The command line the window relaunches loupe with parses back to the run it came from.
 add_executable(options_test options_test.cpp)

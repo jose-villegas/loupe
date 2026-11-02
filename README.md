@@ -89,7 +89,7 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `parity_*` | `loupe` on the scene's `.apak` (and, with the pack tool, its `.scene.toml`) writes the same bytes as autana's scene viewer for the same arguments |
 | `scene_toml_refused` | without the pack tool, a `.scene.toml` exits 1 saying why |
 | `wrong_version_refused` | a pack of another format version exits 1 with autana's reason |
-| `reopen_*` | a scene opened again after another closed, in one process, draws what it drew opened first; `reopen_same_name` is expected to fail while autana keeps a closed run's pack mounted, which is why a scene picked on the start panel starts loupe again |
+| `reopen_*` | a scene opened again after another closed, in one process, draws what it drew opened first; `reopen_same_name` passes only on the line showing a next-version pack opened as the first one, while autana keeps a closed run's pack mounted, which is why a scene picked on the start panel starts loupe again |
 | `relaunch_args` | the command line the window starts loupe with, on a scene picked on the start panel, parses back to that scene, the defaults and the checkpoint budget |
 | `spawn` | loupe starts a copy of itself in a folder named outside any one Windows code page without waiting on it, and paths reach the copy's C file calls intact (on Windows, through the UTF-8 code page manifest, `src/windows/utf8.manifest`) |
 | `library` | the start panel's samples, and a recent list kept most recent first, each once, at most 10 |
