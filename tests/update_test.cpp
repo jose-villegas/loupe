@@ -1,6 +1,5 @@
-// Self-update (src/update): SHA-256 on FIPS 180-4's examples; the JSON reader
-// on GitHub's saved answers, refusing broken text; each copy's download found
-// in a saved release; which offers are newer; the setting; a check that stages
+// Self-update (src/update): the system's SHA-256 on FIPS 180-4's examples,
+// as files; each copy's download found in GitHub's saved answers; which offers are newer; the setting; a check that stages
 // a verified download, deletes a corrupted one and never asks for a local
 // build; and a running portable copy swapped for a staged one, then settled
 // at its next start.
@@ -22,9 +21,10 @@
 #include <thread>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "paths.hpp"
 #include "process.hpp"
-#include "update/json.hpp"
 #include "update/sha256.hpp"
 #include "update/update.hpp"
 
@@ -94,42 +94,40 @@ release_json(const std::string& tag, const std::string& name, const std::string&
            + "\", \"browser_download_url\": \"https://example.invalid/" + name + "\"}]}";
 }
 
+// The system's SHA-256 of files holding FIPS 180-4's examples.
 bool
-check_sha256() {
-    bool ok = check(loupe::update::sha256("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-                    "SHA-256 of nothing");
-    ok &= check(loupe::update::sha256("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
-                "SHA-256 of abc");
-    ok &= check(loupe::update::sha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
-                    == "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
-                "SHA-256 over two blocks");
-    ok &= check(loupe::update::sha256(std::string(1000000, 'a'))
-                    == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
-                "SHA-256 of a million a");
+check_sha256(const fs::path& out) {
+    bool ok = true;
+    const std::pair<std::string, std::string> examples[] = {
+        {"", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},
+        {"abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"},
+        {"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+         "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"},
+        {std::string(1000000, 'a'), "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"}};
+#if defined(_WIN32)
+    const fs::path file = out / "sha256" / "example file";
+#else
+    // A backslash in its name, which sha256sum escapes.
+    const fs::path file = out / "sha256" / "example \\ file";
+#endif
+    for (const auto& [text, digest] : examples) {
+        write(file, text);
+        ok &= check(loupe::update::sha256_file(file) == digest, "SHA-256 of " + text.substr(0, 8) + "...");
+    }
+    ok &= check(loupe::update::sha256_file(out / "sha256" / "missing").empty(), "none for a missing file");
     return ok;
 }
 
-bool
-check_json(const fs::path& fixtures) {
-    const std::optional<loupe::update::Json> main =
-        loupe::update::parse_json(loupe::read_text(fixtures / "release_main.json"));
-    bool ok = check(main.has_value(), "the main build's release parses");
-    const std::string body = main && main->get("body") != nullptr ? main->get("body")->string() : "";
-    ok &= check(body.ends_with("\xe2\x80\x99s Changed\n* Caf\xc3\xa9 \xf0\x9f\x98\x80 (#13)"),
-                "escapes, a surrogate pair among them, read as UTF-8");
-    ok &= check(main && main->get("prerelease") != nullptr && main->get("prerelease")->boolean, "true reads as true");
-    for (const std::string& broken : std::vector<std::string>{"", "{", "[1,]", "{\"a\":1}x", "\"\\ud800\"",
-                                                              "\"tab\there\"", "{\"a\" 1}", std::string(100, '[')}) {
-        ok &= check(!loupe::update::parse_json(broken), "refuses " + broken.substr(0, 12));
-    }
-    return ok;
+// GitHub's saved answer in `file`, parsed.
+nlohmann::json
+answer(const fs::path& file) {
+    return nlohmann::json::parse(loupe::read_text(file), nullptr, false);
 }
 
 bool
 check_offers(const fs::path& fixtures) {
-    const std::optional<loupe::update::Json> latest =
-        loupe::update::parse_json(loupe::read_text(fixtures / "release_latest.json"));
-    bool ok = check(latest.has_value(), "the latest release parses");
+    const nlohmann::json latest = answer(fixtures / "release_latest.json");
+    bool ok = check(!latest.is_discarded(), "the latest release parses");
     std::string why;
 
     struct Want {
@@ -147,8 +145,7 @@ check_offers(const fs::path& fixtures) {
                              Want{.suffix = "-linux-x86_64.tar.gz",
                                   .name = "loupe-0.1.0-linux-x86_64.tar.gz",
                                   .sha256 = "e9b07b8736ff82f0be7a4348a2d8ceb771cf1c3cffa7cdb3094fc8387ed25382"}}) {
-        const std::optional<loupe::update::Offer> offer =
-            latest ? loupe::update::parse_offer(*latest, want.suffix, &why) : std::nullopt;
+        const std::optional<loupe::update::Offer> offer = loupe::update::parse_offer(latest, want.suffix, &why);
         ok &= check(offer && offer->tag == "v0.1.0" && offer->version == "0.1.0" && offer->name == want.name
                         && offer->sha256 == want.sha256
                         && offer->url
@@ -156,19 +153,20 @@ check_offers(const fs::path& fixtures) {
                                       + want.name,
                     std::string("the latest release offers ") + want.name);
     }
-    const std::optional<loupe::update::Json> main =
-        loupe::update::parse_json(loupe::read_text(fixtures / "release_main.json"));
     const std::optional<loupe::update::Offer> offer =
-        main ? loupe::update::parse_offer(*main, "-windows-portable.zip", &why) : std::nullopt;
+        loupe::update::parse_offer(answer(fixtures / "release_main.json"), "-windows-portable.zip", &why);
     ok &= check(offer && offer->tag == "main-build" && offer->version.empty()
                     && offer->name == "loupe-main-windows-portable.zip",
                 "the main build offers its unversioned portable zip");
-    ok &= check(latest && !loupe::update::parse_offer(*latest, "-macos.dmg", &why)
-                    && why.find("-macos.dmg") != std::string::npos,
+    ok &= check(!loupe::update::parse_offer(latest, "-macos.dmg", &why) && why.find("-macos.dmg") != std::string::npos,
                 "no download for this system is refused: " + why);
-    const std::optional<loupe::update::Json> undigested = loupe::update::parse_json(
-        R"({"tag_name": "v1.0.0", "assets": [{"name": "a.zip", "browser_download_url": "u"}]})");
-    ok &= check(undigested && !loupe::update::parse_offer(*undigested, ".zip", &why), "no digest is refused: " + why);
+    const nlohmann::json undigested =
+        nlohmann::json::parse(R"({"tag_name": "v1.0.0", "assets": [{"name": "a.zip", "browser_download_url": "u"}]})");
+    ok &= check(!loupe::update::parse_offer(undigested, ".zip", &why), "no digest is refused: " + why);
+    const nlohmann::json odd = nlohmann::json::parse(R"({"tag_name": 1, "assets": {"name": "a.zip"}})");
+    ok &= check(!loupe::update::parse_offer(odd, ".zip", &why)
+                    && !loupe::update::parse_offer(nlohmann::json(), ".zip", &why),
+                "fields of another type are refused, not thrown: " + why);
     return ok;
 }
 
@@ -604,8 +602,7 @@ main(int argc, char** argv) {
     const std::string name = "loupe-9.9.9" + std::string(loupe::update::asset_suffix(kind));
     const fs::path archive = make_archive(name, out / "staging_archive", "");
     bool ok = !archive.empty();
-    ok &= check_sha256();
-    ok &= check_json(fixtures);
+    ok &= check_sha256(out);
     ok &= check_offers(fixtures);
     ok &= check_newer();
     ok &= check_setting(out);

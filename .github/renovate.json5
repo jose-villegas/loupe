@@ -1,5 +1,5 @@
 // Bump pull requests for every pin Loupe holds: the submodules (autana, and
-// the window's SDL3, Vulkan-Headers, volk and Dear ImGui), the GitHub Actions
+// the window's SDL3, Vulkan-Headers, volk and Dear ImGui, and nlohmann/json), the GitHub Actions
 // and the CI tools in tools/ci/requirements.txt. Validated by
 // .github/workflows/standards.yml.
 {
@@ -48,6 +48,13 @@
       versioning: 'regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$',
       groupName: 'Dear ImGui',
       groupSlug: 'imgui',
+    },
+    {
+      matchManagers: ['git-submodules'],
+      matchDepNames: ['third_party/json'],
+      versioning: 'regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$',
+      groupName: 'nlohmann/json',
+      groupSlug: 'json',
     },
     {
       // volk is generated from the headers of the same SDK release, so they move together.

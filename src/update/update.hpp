@@ -15,7 +15,8 @@
 #include <string_view>
 #include <thread>
 
-#include "update/json.hpp"
+#include <nlohmann/json_fwd.hpp>
+
 #include "version.hpp"
 
 namespace loupe::update {
@@ -49,7 +50,7 @@ struct Offer {
 std::string_view asset_suffix(const Copy& copy);
 // `release`, GitHub's JSON for one release, as an offer of its asset named
 // with `suffix`; none, with `why`, when it has no such asset or no digest.
-std::optional<Offer> parse_offer(const Json& release, std::string_view suffix, std::string* why);
+std::optional<Offer> parse_offer(const nlohmann::json& release, std::string_view suffix, std::string* why);
 // Whether `offer` replaces `id` on `follow`'s channel: a release of a higher
 // version, or a main build of another commit. Never on Off.
 bool is_newer(const Offer& offer, const BuildId& id, Follow follow);

@@ -11,6 +11,8 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "options.hpp"
 #include "paths.hpp"
 #include "process.hpp"
@@ -460,32 +462,39 @@ asset_suffix(const Copy& copy) {
     return LOUPE_PORTABLE_SUFFIX;
 }
 
+// `object`'s string named `key`; empty when it has none.
+std::string
+text(const nlohmann::json& object, const char* key) {
+    const auto it = object.is_object() ? object.find(key) : object.end();
+    return it != object.end() && it->is_string() ? it->get<std::string>() : std::string();
+}
+
 std::optional<Offer>
-parse_offer(const Json& release, std::string_view suffix, std::string* why) {
+parse_offer(const nlohmann::json& release, std::string_view suffix, std::string* why) {
     Offer offer;
-    offer.tag = release.get("tag_name") != nullptr ? release.get("tag_name")->string() : "";
-    const Json* assets = release.get("assets");
-    if (offer.tag.empty() || assets == nullptr || assets->kind != Json::Kind::Array) {
+    offer.tag = text(release, "tag_name");
+    const auto assets = release.is_object() ? release.find("assets") : release.end();
+    if (offer.tag.empty() || assets == release.end() || !assets->is_array()) {
         *why = "the release has no tag or no assets";
         return std::nullopt;
     }
     if (offer.tag.starts_with('v')) {
         offer.version = offer.tag.substr(1, offer.tag.find('-') - 1);
     }
-    for (const Json& asset : assets->items) {
-        const std::string name = asset.get("name") != nullptr ? asset.get("name")->string() : "";
+    for (const nlohmann::json& asset : *assets) {
+        const std::string name = text(asset, "name");
         if (!name.ends_with(suffix)) {
             continue;
         }
-        const std::string digest = asset.get("digest") != nullptr ? asset.get("digest")->string() : "";
-        const Json* url = asset.get("browser_download_url");
+        const std::string digest = text(asset, "digest");
+        const std::string url = text(asset, "browser_download_url");
         if (!digest.starts_with(DIGEST_PREFIX) || digest.size() != std::string_view(DIGEST_PREFIX).size() + SHA256_HEX
-            || url == nullptr || url->string().empty()) {
+            || url.empty()) {
             *why = std::format("{} has no SHA-256 digest or no download URL", name);
             return std::nullopt;
         }
         offer.name = name;
-        offer.url = url->string();
+        offer.url = url;
         offer.sha256 = digest.substr(std::string_view(DIGEST_PREFIX).size());
         return offer;
     }
@@ -546,11 +555,11 @@ check(const Copy& copy, Follow follow, const Fetch& fetch) {
     if (!fetch(release_url, JSON_TYPE, files.release, &why)) {
         return std::format("cannot ask {}: {}", release_url, why);
     }
-    const std::optional<Json> release = parse_json(read_text(files.release));
-    if (!release) {
+    const nlohmann::json release = nlohmann::json::parse(read_text(files.release), nullptr, false);
+    if (release.is_discarded()) {
         return std::format("{} answered no JSON", release_url);
     }
-    std::optional<Offer> offer = parse_offer(*release, asset_suffix(copy), &why);
+    std::optional<Offer> offer = parse_offer(release, asset_suffix(copy), &why);
     if (!offer) {
         return why;
     }

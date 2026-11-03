@@ -64,7 +64,6 @@ add_library(loupe_core OBJECT
     src/process.cpp
     src/scratch.cpp
     src/tools.cpp
-    src/update/json.cpp
     src/update/sha256.cpp
     src/update/update.cpp
     src/version.cpp)
@@ -93,6 +92,11 @@ if(WIN32)
     target_sources(loupe_core PRIVATE src/windows/utf8.rc)
 endif()
 target_link_libraries(loupe_core PRIVATE autana::scene_provider)
+target_link_libraries(loupe_core PUBLIC nlohmann_json::nlohmann_json)
+if(WIN32)
+    # SHA-256 through the system's CNG (sha256.cpp).
+    target_link_libraries(loupe_core PUBLIC bcrypt)
+endif()
 # The pack tool's own programs, and where it keeps packs; --compare also
 # checks out revisions with git and lays the sides out with autana's
 # render_compare.py. Only src/tools.cpp runs them.
