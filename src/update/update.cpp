@@ -229,6 +229,7 @@ aside(const fs::path& file) {
 bool
 write_journal(const Files& files, const std::vector<Swapped>& swap, bool done) {
     std::vector<std::string> lines;
+    lines.reserve(swap.size() + 1);
     for (const Swapped& swapped : swap) {
         lines.push_back((swapped.had_one ? "1 " : "0 ") + utf8(swapped.target));
     }
@@ -357,6 +358,7 @@ swap_portable(const Copy& copy, const Files& files, const fs::path& archive, std
     }
     std::ranges::sort(sources);
     std::vector<Swapped> swap;
+    swap.reserve(sources.size());
     for (const fs::path& source : sources) {
         const fs::path target = root / fs::relative(source, top);
         swap.push_back({.target = target, .had_one = fs::exists(target, error)});
