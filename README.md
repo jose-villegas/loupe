@@ -34,6 +34,7 @@ need no Python and no compiler; the window needs a Vulkan driver.
 
 The Linux build is made on Ubuntu 24.04 with GCC's runtime linked in, so it
 needs only glibc 2.39 or newer, X11 or Wayland, and a Vulkan driver.
+
 The [main build](https://github.com/jose-villegas/loupe/releases/tag/main-build)
 pre-release holds the same downloads built from the latest push to `main`,
 named `main` in place of the version (`loupe-main-windows-portable.zip`), so
@@ -52,6 +53,28 @@ loupe 0.1.0 (1a2b3c4d5, main build, portable), autana 262e7d0ab
 | `main build` | the channel it was built for: `release` from a version tag, `main build` from `main`, `local build` from anywhere else (`-DLOUPE_CHANNEL=None`, the default) |
 | `portable` | `installed` for the setup's copy, else `portable` |
 | `262e7d0ab` | the autana commit it was built against |
+
+### Updates
+
+A downloaded Loupe keeps itself current. About's **Updates** picks what it
+follows; each copy starts on its own channel, and a local build never updates.
+
+| Updates | Takes |
+|---|---|
+| Off | nothing |
+| Official releases | the latest release, when its version is higher than this copy's |
+| Main builds | the main build, when it is of another commit than this copy |
+
+Each time the window opens, Loupe asks GitHub once, in the background. A newer
+build is downloaded and checked against GitHub's SHA-256 digest of the file,
+then kept in Loupe's settings folder (`%APPDATA%\autana\loupe` or
+`~/.local/share/autana/loupe`) until the window closes. Then it takes this
+copy's place: a portable copy's files are replaced, the running `loupe` renamed
+aside until the next start; an installed copy runs the new setup silently,
+which asks Windows for permission once. The next start's About says what it was
+updated to. It downloads and unpacks with the system's own `curl` and `tar`,
+nothing ever pops up, and every step is logged to `update.log` in the settings
+folder. Runs with `-o`, `--video` or `--ticks` never update.
 
 ## Build
 
@@ -170,6 +193,7 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `view_switch` | a debug view picked mid-run, and kept through a seek back, draws what it drew when picked from the start |
 | `window_smoke`, `window_start` | the window opens, on a scene and on the start panel, and draws 10 ticks offscreen on Mesa's lavapipe under the Khronos validation layer, with no validation error; skipped where either is missing |
 | `version` | `--version` names the project version, Loupe's commit, the configured channel and the autana commit |
+| `update` | SHA-256 on the standard's examples; GitHub's saved release answers give each system's download; which offers are newer; the setting; a check stages only a verified newer download and a local build never asks; a running copy, beside its samples and in `bin/`, is swapped for a staged one and says so at its next start |
 | `build_id` | `--version`'s line for each channel, and a copy counts as installed only with the setup's uninstaller beside it |
 | `include_gate` | only `src/engine/autana.hpp` includes autana's headers |
 

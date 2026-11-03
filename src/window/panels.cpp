@@ -34,24 +34,42 @@ scene_list(const char* heading, const std::vector<std::filesystem::path>& scenes
 
 } // namespace
 
-void
-draw_menu(const std::string& version) {
-    bool about = false;
+bool
+draw_menu(About& about) {
+    bool open = false;
     if (ImGui::BeginMenuBar()) {
-        about = ImGui::MenuItem(ABOUT);
+        open = ImGui::MenuItem(ABOUT);
         ImGui::EndMenuBar();
     }
     // Opened outside the menu bar, whose ID scope the modal is not in.
-    if (about) {
+    if (open) {
         ImGui::OpenPopup(ABOUT);
     }
+    bool changed = false;
     if (ImGui::BeginPopupModal(ABOUT, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted(version.c_str());
+        ImGui::TextUnformatted(about.version.c_str());
+        if (!about.updated.empty()) {
+            ImGui::TextUnformatted(about.updated.c_str());
+        }
+        ImGui::SeparatorText("Updates");
+        if (about.can_update) {
+            int follow = static_cast<int>(about.follow);
+            changed |= ImGui::RadioButton("Off", &follow, static_cast<int>(update::Follow::Off));
+            ImGui::SameLine();
+            changed |= ImGui::RadioButton("Official releases", &follow, static_cast<int>(update::Follow::Releases));
+            ImGui::SameLine();
+            changed |= ImGui::RadioButton("Main builds", &follow, static_cast<int>(update::Follow::Main));
+            about.follow = static_cast<update::Follow>(follow);
+            ImGui::TextDisabled("Checked at each start, applied when Loupe closes");
+        } else {
+            ImGui::TextDisabled("A local build does not update");
+        }
         if (ImGui::Button("Close")) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
     }
+    return changed;
 }
 
 void

@@ -64,6 +64,8 @@ add_library(loupe_core OBJECT
     src/process.cpp
     src/scratch.cpp
     src/tools.cpp
+    src/update/sha256.cpp
+    src/update/update.cpp
     src/version.cpp)
 target_include_directories(loupe_core PUBLIC src)
 # The version, the channel and the commits, for version.cpp. The commits are
@@ -78,12 +80,19 @@ add_dependencies(loupe_core commits)
 target_include_directories(loupe_core PRIVATE "${CMAKE_BINARY_DIR}/generated")
 set_property(SOURCE src/version.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_VERSION=\"${PROJECT_VERSION}\""
              "LOUPE_CHANNEL=${LOUPE_CHANNEL}")
+# Where updates come from: the repository's releases, and the rolling
+# pre-release every push to main replaces (build.yml's publish job; tests/CMakeLists.txt checks they agree).
+set(LOUPE_REPO jose-villegas/loupe)
+set(LOUPE_MAIN_TAG main-build)
+set_property(SOURCE src/update/update.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_REPO=\"${LOUPE_REPO}\""
+             "LOUPE_MAIN_TAG=\"${LOUPE_MAIN_TAG}\"")
 if(WIN32)
     # Every executable that links loupe_core, tests too, runs with UTF-8 as its code page.
     enable_language(RC)
     target_sources(loupe_core PRIVATE src/windows/utf8.rc)
 endif()
 target_link_libraries(loupe_core PRIVATE autana::scene_provider)
+target_link_libraries(loupe_core PUBLIC nlohmann_json::nlohmann_json mbedtls_sha256)
 # The pack tool's own programs, and where it keeps packs; --compare also
 # checks out revisions with git and lays the sides out with autana's
 # render_compare.py. Only src/tools.cpp runs them.

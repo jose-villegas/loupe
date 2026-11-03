@@ -193,3 +193,15 @@ set(channel_words_Main "main build")
 add_test(NAME version COMMAND loupe --version)
 set_tests_properties(version PROPERTIES PASS_REGULAR_EXPRESSION
     "^loupe ${PROJECT_VERSION} \\([0-9a-f]+, ${channel_words_${LOUPE_CHANNEL}}, portable\\), autana [0-9a-f]+\n$")
+
+# Self-update: the digest, the JSON reader, the offers in saved releases, the
+# setting, staging, and a running copy swapped for a staged one.
+add_executable(update_test update_test.cpp)
+target_link_libraries(update_test PRIVATE loupe_core)
+add_test(NAME update COMMAND update_test "${CMAKE_CURRENT_SOURCE_DIR}/update" "${CMAKE_CURRENT_BINARY_DIR}/update")
+# The main build's tag is the one build.yml publishes.
+file(READ "${PROJECT_SOURCE_DIR}/.github/workflows/build.yml" build_yml)
+string(FIND "${build_yml}" "publish_main.sh ${LOUPE_MAIN_TAG} " published)
+if(published EQUAL -1)
+    message(FATAL_ERROR "build.yml does not publish the main build as ${LOUPE_MAIN_TAG} (LOUPE_MAIN_TAG)")
+endif()

@@ -27,3 +27,14 @@ target_include_directories(imgui SYSTEM PUBLIC "${imgui}" "${imgui}/backends")
 target_compile_definitions(imgui PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK IMGUI_DISABLE_OBSOLETE_FUNCTIONS
                                         IMGUI_DISABLE_DEMO_WINDOWS)
 target_link_libraries(imgui PUBLIC SDL3::SDL3-static volk::volk)
+
+# nlohmann/json: GitHub's release answers, for the self-update.
+set(JSON_BuildTests OFF CACHE BOOL "Build nlohmann/json's tests")
+set(JSON_Install OFF CACHE BOOL "Install nlohmann/json")
+add_subdirectory(json SYSTEM)
+
+# Mbed TLS (the LTS line): only its SHA-256, for the self-update's digests.
+set(mbedtls "${CMAKE_CURRENT_SOURCE_DIR}/mbedtls")
+add_library(mbedtls_sha256 STATIC "${mbedtls}/library/sha256.c" "${mbedtls}/library/platform_util.c")
+target_include_directories(mbedtls_sha256 SYSTEM PUBLIC "${mbedtls}/include")
+target_include_directories(mbedtls_sha256 PRIVATE "${mbedtls}/library")

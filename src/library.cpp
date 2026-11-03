@@ -4,7 +4,6 @@
 #include "paths.hpp"
 
 #include <algorithm>
-#include <fstream>
 #include <string>
 #include <system_error>
 #include <utility>
@@ -39,12 +38,7 @@ read_recent(const fs::path& config) {
     if (config.empty()) {
         return recent;
     }
-    std::ifstream in(config / RECENT_FILE, std::ios::binary);
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.ends_with('\r')) {
-            line.pop_back();
-        }
+    for (const std::string& line : read_lines(config / RECENT_FILE)) {
         if (!line.empty()) {
             recent.push_back(from_utf8(line));
         }
@@ -89,13 +83,12 @@ remember(const Folders& folders, const fs::path& scene) {
             recent.push_back(std::move(path));
         }
     }
-    fs::create_directories(config, error);
-    std::ofstream out(config / RECENT_FILE, std::ios::binary | std::ios::trunc);
+    std::vector<std::string> lines;
+    lines.reserve(recent.size());
     for (const fs::path& path : recent) {
-        const std::u8string text = path.u8string();
-        out << std::string(text.begin(), text.end()) << '\n';
+        lines.push_back(utf8(path));
     }
-    return out.good();
+    return write_lines(config / RECENT_FILE, lines);
 }
 
 } // namespace loupe

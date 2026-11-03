@@ -6,6 +6,7 @@
 #include <string>
 #include <system_error>
 
+#include "engine/autana.hpp"
 #include "paths.hpp"
 #include "tools.hpp"
 
@@ -15,25 +16,18 @@ namespace loupe {
 
 namespace {
 
+// One cache folder per scene file, wherever two scenes share a name.
+uint64_t
+path_hash(const std::string& text) {
+    return name_hash64_n(NAME_HASH64_OFFSET_BASIS, text.data(), text.size());
+}
+
 // `path`'s file name without `suffix`, or empty when it does not end in it.
 std::string
 stem_before(const fs::path& path, std::string_view suffix) {
     const std::string name = utf8(path.filename());
     return name.size() > suffix.size() && name.ends_with(suffix) ? name.substr(0, name.size() - suffix.size())
                                                                  : std::string();
-}
-
-constexpr uint64_t FNV_OFFSET = 14695981039346656037ull;
-constexpr uint64_t FNV_PRIME = 1099511628211ull;
-
-// One cache folder per scene file, wherever two scenes share a name.
-uint64_t
-path_hash(const std::string& text) {
-    uint64_t hash = FNV_OFFSET;
-    for (const unsigned char c : text) {
-        hash = (hash ^ c) * FNV_PRIME;
-    }
-    return hash;
 }
 
 // Builds `scene_toml`'s pack `id`, one cache folder per scene file.
