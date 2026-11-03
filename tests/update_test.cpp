@@ -1,0 +1,374 @@
+// Self-update (src/update): SHA-256 on FIPS 180-4's examples; the JSON reader
+// on GitHub's saved answers, refusing broken text; each copy's download found
+// in a saved release; which offers are newer; the setting; a check that stages
+// a verified download, deletes a corrupted one and never asks for a local
+// build; and a running portable copy swapped for a staged one, then settled
+// at its next start.
+//
+// usage: update_test FIXTURES OUT_DIR, which runs a copy of itself as
+// update_test --swap CONFIG for the swap.
+#include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include "paths.hpp"
+#include "process.hpp"
+#include "update/json.hpp"
+#include "update/sha256.hpp"
+#include "update/update.hpp"
+
+namespace fs = std::filesystem;
+using loupe::update::Follow;
+
+namespace {
+
+constexpr const char TEST[] = "update_test";
+constexpr const char OWN_VERSION[] = "0.1.0";
+constexpr const char OWN_COMMIT[] = "aaaaaaaaa";
+constexpr const char NEW_COMMIT[] = "bbbbbbbbb";
+constexpr const char NEW_EXE[] = "the new build";
+
+bool
+check(bool ok, const std::string& what) {
+    std::fprintf(stderr, "%s: %s %s\n", TEST, ok ? "ok" : "FAILED", what.c_str());
+    return ok;
+}
+
+void
+write(const fs::path& file, const std::string& text) {
+    fs::create_directories(file.parent_path());
+    std::ofstream(file, std::ios::binary) << text;
+}
+
+loupe::update::Copy
+copy_of(loupe::Channel channel, const fs::path& exe, const fs::path& config) {
+    return {.id = {.version = OWN_VERSION,
+                   .commit = OWN_COMMIT,
+                   .autana_commit = "262e7d0ab",
+                   .built_for = channel,
+                   .installed = false},
+            .exe = exe,
+            .config = config};
+}
+
+// GitHub stood in for by files: each URL ending in a key answers with its
+// file; every request is counted.
+struct FakeGitHub {
+    std::vector<std::pair<std::string, fs::path>> answers;
+    int asked = 0;
+
+    loupe::update::Fetch
+    fetch() {
+        return [this](const std::string& url, const std::string&, const fs::path& out, std::string* why) {
+            asked++;
+            for (const auto& [ending, file] : answers) {
+                if (url.ends_with(ending)) {
+                    std::error_code error;
+                    fs::create_directories(out.parent_path(), error);
+                    return fs::copy_file(file, out, fs::copy_options::overwrite_existing, error);
+                }
+            }
+            *why = "404 " + url;
+            return false;
+        };
+    }
+};
+
+// One release offering `name` with `digest`, as GitHub's JSON.
+std::string
+release_json(const std::string& tag, const std::string& name, const std::string& digest) {
+    return "{\"tag_name\": \"" + tag + "\", \"assets\": [{\"name\": \"" + name + "\", \"digest\": \"sha256:" + digest
+           + "\", \"browser_download_url\": \"https://example.invalid/" + name + "\"}]}";
+}
+
+bool
+check_sha256() {
+    bool ok = check(loupe::update::sha256("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                    "SHA-256 of nothing");
+    ok &= check(loupe::update::sha256("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+                "SHA-256 of abc");
+    ok &= check(loupe::update::sha256("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")
+                    == "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
+                "SHA-256 over two blocks");
+    ok &= check(loupe::update::sha256(std::string(1000000, 'a'))
+                    == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0",
+                "SHA-256 of a million a");
+    return ok;
+}
+
+bool
+check_json(const fs::path& fixtures) {
+    const std::optional<loupe::update::Json> main =
+        loupe::update::parse_json(loupe::read_text(fixtures / "release_main.json"));
+    bool ok = check(main.has_value(), "the main build's release parses");
+    const std::string body = main && main->get("body") != nullptr ? main->get("body")->string() : "";
+    ok &= check(body.ends_with("\xe2\x80\x99s Changed\n* Caf\xc3\xa9 \xf0\x9f\x98\x80 (#13)"),
+                "escapes, a surrogate pair among them, read as UTF-8");
+    ok &= check(main && main->get("prerelease") != nullptr && main->get("prerelease")->boolean, "true reads as true");
+    for (const std::string& broken : std::vector<std::string>{"", "{", "[1,]", "{\"a\":1}x", "\"\\ud800\"",
+                                                              "\"tab\there\"", "{\"a\" 1}", std::string(100, '[')}) {
+        ok &= check(!loupe::update::parse_json(broken), "refuses " + broken.substr(0, 12));
+    }
+    return ok;
+}
+
+bool
+check_offers(const fs::path& fixtures) {
+    const std::optional<loupe::update::Json> latest =
+        loupe::update::parse_json(loupe::read_text(fixtures / "release_latest.json"));
+    bool ok = check(latest.has_value(), "the latest release parses");
+    std::string why;
+
+    struct Want {
+        const char* suffix;
+        const char* name;
+        const char* sha256;
+    };
+
+    for (const Want& want : {Want{.suffix = "-windows-portable.zip",
+                                  .name = "loupe-0.1.0-windows-portable.zip",
+                                  .sha256 = "d7be7fa69f2512717b870ce118efea06a091c60ab22694c0c7ce0ae5a3026ee1"},
+                             Want{.suffix = "-windows-setup.exe",
+                                  .name = "loupe-0.1.0-windows-setup.exe",
+                                  .sha256 = "5c97739a21ca55dc5be30501f65b1ea8d56f383f9b8f98d090d4d437b6d4d64c"},
+                             Want{.suffix = "-linux-x86_64.tar.gz",
+                                  .name = "loupe-0.1.0-linux-x86_64.tar.gz",
+                                  .sha256 = "e9b07b8736ff82f0be7a4348a2d8ceb771cf1c3cffa7cdb3094fc8387ed25382"}}) {
+        const std::optional<loupe::update::Offer> offer =
+            latest ? loupe::update::parse_offer(*latest, want.suffix, &why) : std::nullopt;
+        ok &= check(offer && offer->tag == "v0.1.0" && offer->version == "0.1.0" && offer->name == want.name
+                        && offer->sha256 == want.sha256
+                        && offer->url
+                               == std::string("https://github.com/jose-villegas/loupe/releases/download/v0.1.0/")
+                                      + want.name,
+                    std::string("the latest release offers ") + want.name);
+    }
+    const std::optional<loupe::update::Json> main =
+        loupe::update::parse_json(loupe::read_text(fixtures / "release_main.json"));
+    const std::optional<loupe::update::Offer> offer =
+        main ? loupe::update::parse_offer(*main, "-windows-portable.zip", &why) : std::nullopt;
+    ok &= check(offer && offer->tag == "main-build" && offer->version.empty()
+                    && offer->name == "loupe-main-windows-portable.zip",
+                "the main build offers its unversioned portable zip");
+    ok &= check(latest && !loupe::update::parse_offer(*latest, "-macos.dmg", &why)
+                    && why.find("-macos.dmg") != std::string::npos,
+                "no download for this system is refused: " + why);
+    const std::optional<loupe::update::Json> undigested = loupe::update::parse_json(
+        R"({"tag_name": "v1.0.0", "assets": [{"name": "a.zip", "browser_download_url": "u"}]})");
+    ok &= check(undigested && !loupe::update::parse_offer(*undigested, ".zip", &why), "no digest is refused: " + why);
+    return ok;
+}
+
+bool
+check_newer() {
+    const loupe::BuildId own = {
+        .version = OWN_VERSION, .commit = OWN_COMMIT, .autana_commit = "", .built_for = loupe::Channel::Main};
+
+    struct Case {
+        const char* version;
+        const char* commit;
+        Follow follow;
+        bool newer;
+    };
+
+    bool ok = true;
+    for (const Case& c : {
+             Case{.version = "0.2.0", .commit = "", .follow = Follow::Releases, .newer = true},
+             Case{.version = "0.10.0", .commit = "", .follow = Follow::Releases, .newer = true},
+             Case{.version = "0.1.0", .commit = "", .follow = Follow::Releases, .newer = false},
+             Case{.version = "0.0.9", .commit = "", .follow = Follow::Releases, .newer = false},
+             Case{.version = "garbage", .commit = "", .follow = Follow::Releases, .newer = false},
+             Case{.version = "",
+                  .commit = "aaaaaaaaa0123456789012345678901234567890",
+                  .follow = Follow::Main,
+                  .newer = false},
+             Case{.version = "",
+                  .commit = "bbbbbbbbb0123456789012345678901234567890",
+                  .follow = Follow::Main,
+                  .newer = true},
+             Case{.version = "", .commit = "", .follow = Follow::Main, .newer = false},
+             Case{.version = "9.0.0", .commit = "bbbbbbbbb", .follow = Follow::Off, .newer = false},
+         }) {
+        const loupe::update::Offer offer = {
+            .tag = "", .version = c.version, .commit = c.commit, .name = "", .url = "", .sha256 = ""};
+        ok &= check(loupe::update::is_newer(offer, own, c.follow) == c.newer,
+                    std::string(c.version) + c.commit + (c.newer ? " is newer" : " is not newer"));
+    }
+    return ok;
+}
+
+bool
+check_setting(const fs::path& out) {
+    const fs::path config = out / "setting";
+    write(config / "settings.txt", "other=1\n");
+    const loupe::update::Copy main = copy_of(loupe::Channel::Main, {}, config);
+    bool ok = check(loupe::update::follow(main) == Follow::Main, "a main build follows main by default");
+    ok &= check(loupe::update::follow(copy_of(loupe::Channel::Releases, {}, config)) == Follow::Releases,
+                "a release follows releases by default");
+    ok &= check(loupe::update::set_follow(main, Follow::Off) && loupe::update::follow(main) == Follow::Off,
+                "Off is kept");
+    ok &= check(loupe::update::set_follow(main, Follow::Releases) && loupe::update::follow(main) == Follow::Releases,
+                "Releases replaces Off");
+    ok &= check(loupe::read_text(config / "settings.txt").starts_with("other=1\n"), "other settings stay");
+    ok &= check(loupe::update::follow(copy_of(loupe::Channel::None, {}, config)) == Follow::Off,
+                "a local build follows nothing, whatever the file says");
+    return ok;
+}
+
+// The archive `name` of `top`'s folder in `dir`, by the system's tar.
+bool
+pack(const fs::path& dir, const std::string& top, const fs::path& archive) {
+#if defined(_WIN32)
+    const std::vector<std::string> how = {"-a", "-cf"};
+#else
+    const std::vector<std::string> how = {"-czf"};
+#endif
+    std::vector<std::string> args = {loupe::utf8(loupe::system_program("tar"))};
+    args.insert(args.end(), how.begin(), how.end());
+    args.insert(args.end(), {loupe::utf8(archive), "-C", loupe::utf8(dir), top});
+    return loupe::run_logged(args, archive.parent_path() / "tar.log");
+}
+
+// A check stages only a newer, verified download, and a local build never asks.
+bool
+check_staging(const fs::path& out, const std::string& name, const fs::path& archive) {
+    bool ok = true;
+    const fs::path config = out / "staging";
+    FakeGitHub github;
+    const std::string digest = loupe::update::sha256_file(archive);
+    write(out / "good.json", release_json("v9.9.9", name, digest));
+    write(out / "old.json", release_json("v0.0.1", name, digest));
+    write(out / "bad.json", release_json("v9.9.9", name, std::string(64, '0')));
+    write(out / "commit.txt", std::string(NEW_COMMIT) + "0123456789012345678901234567890\n");
+    github.answers = {{"/" + name, archive}};
+
+    const loupe::update::Copy local = copy_of(loupe::Channel::None, out / "loupe", config);
+    ok &= check(loupe::update::check(local, Follow::Releases, github.fetch()) == "a local build never updates"
+                    && github.asked == 0,
+                "a local build never asks GitHub");
+    const loupe::update::Copy release = copy_of(loupe::Channel::Releases, out / "loupe", config);
+    ok &= check(loupe::update::check(release, Follow::Off, github.fetch()) == "updates are off" && github.asked == 0,
+                "Off never asks GitHub");
+
+    github.answers.emplace_back("/releases/latest", out / "old.json");
+    std::string said = loupe::update::check(release, Follow::Releases, github.fetch());
+    ok &= check(said.starts_with("up to date") && github.asked == 1, "an older release downloads nothing: " + said);
+
+    github.answers.back().second = out / "bad.json";
+    said = loupe::update::check(release, Follow::Releases, github.fetch());
+    std::string why;
+    ok &= check(said.find("deleted") != std::string::npos && !loupe::update::apply_staged(release, &why) && why.empty(),
+                "a download that is not GitHub's digest is deleted, not staged: " + said);
+    std::error_code error;
+    for (const fs::directory_entry& entry : fs::recursive_directory_iterator(config, error)) {
+        ok &= check(!entry.is_regular_file() || loupe::update::sha256_file(entry.path()) != digest,
+                    "nothing of it is left: " + loupe::utf8(entry.path().filename()));
+    }
+
+    // The main build's commit decides; then a newer one stages, once.
+    github.answers.back() = {"/releases/tags/main-build", out / "good.json"};
+    github.answers.emplace_back("/commits/v9.9.9", out / "commit.txt");
+    github.asked = 0;
+    said = loupe::update::check(release, Follow::Main, github.fetch());
+    ok &= check(said.starts_with("staged") && github.asked == 3, "another commit of main is staged: " + said);
+    said = loupe::update::check(release, Follow::Main, github.fetch());
+    ok &=
+        check(said.find("already staged") != std::string::npos && github.asked == 5, "and not fetched again: " + said);
+    return ok;
+}
+
+// The archive `name`, of a release of this copy's kind, in `dir`: the new
+// executable in `bin` (empty for beside the samples) and two samples, all in
+// one folder as CPack makes them.
+fs::path
+make_archive(const std::string& name, const fs::path& dir, const std::string& bin) {
+    const fs::path top = dir / "archive" / "loupe-9.9.9";
+    write(top / bin / loupe::exe_path().filename(), NEW_EXE);
+    write(top / "scenes" / "a.apak", "new");
+    write(top / "scenes" / "b.apak", "new");
+    const fs::path archive = dir / name;
+    return check(pack(dir / "archive", "loupe-9.9.9", archive), "the test archive is made in " + loupe::utf8(dir))
+               ? archive
+               : fs::path();
+}
+
+// A running copy of this test, its executable in `bin` (empty for its root
+// folder), swapped for a staged build of the same layout.
+bool
+check_swap(const fs::path& out, const std::string& name, const std::string& bin) {
+    const fs::path dir = out / ("swap" + bin);
+    const fs::path archive = make_archive(name, dir, bin);
+    const fs::path config = dir / "config";
+    const fs::path root = dir / "copy";
+    const fs::path exe = root / bin / loupe::exe_path().filename();
+    fs::create_directories(exe.parent_path());
+    fs::copy_file(loupe::exe_path(), exe, fs::copy_options::overwrite_existing);
+    write(root / "scenes" / "a.apak", "old");
+    const loupe::update::Copy copy = copy_of(loupe::Channel::Releases, exe, config);
+    FakeGitHub github;
+    write(dir / "swap.json", release_json("v9.9.9", name, loupe::update::sha256_file(archive)));
+    github.answers = {{"/" + name, archive}, {"/releases/latest", dir / "swap.json"}};
+    const std::string said = loupe::update::check(copy, Follow::Releases, github.fetch());
+    const std::string layout = bin.empty() ? " beside its samples" : " in " + bin;
+    bool ok = check(said.starts_with("staged"), "staged for the swap" + layout + ": " + said);
+
+    ok &= check(loupe::run_logged({loupe::utf8(exe), "--swap", loupe::utf8(config)}, dir / "swap.log"),
+                "the running copy" + layout + " swaps itself (" + loupe::utf8(dir / "swap.log") + ")");
+    const fs::path aside = fs::path(exe) += ".old";
+    ok &= check(loupe::read_text(exe) == NEW_EXE, "the new build is in its place");
+    ok &= check(fs::exists(aside), "the old one is set aside");
+    ok &= check(loupe::read_text(root / "scenes" / "a.apak") == "new" && fs::exists(root / "scenes" / "b.apak"),
+                "the other files are the archive's, in the copy's root folder");
+
+    loupe::update::Copy swapped = copy;
+    swapped.id.commit = NEW_COMMIT;
+    const std::optional<std::string> settled = loupe::update::settle(swapped);
+    ok &= check(settled && *settled == std::string("Updated to ") + OWN_VERSION + " (" + NEW_COMMIT + ")",
+                "the next start says it was updated: " + settled.value_or("nothing"));
+    ok &= check(!fs::exists(aside), "and removes the old one");
+    ok &= check(!loupe::update::settle(swapped), "once");
+    return ok;
+}
+
+// The child: this process, a staged copy's running executable, swaps itself.
+int
+swap_self(const fs::path& config) {
+    std::string why;
+    const bool swapped =
+        loupe::update::apply_staged(copy_of(loupe::Channel::Releases, loupe::exe_path(), config), &why);
+    std::fprintf(stderr, "%s --swap: %s\n", TEST, swapped ? "swapped" : why.c_str());
+    return swapped ? 0 : 1;
+}
+
+} // namespace
+
+int
+main(int argc, char** argv) {
+    if (argc == 3 && std::string(argv[1]) == "--swap") {
+        return swap_self(loupe::from_utf8(argv[2]));
+    }
+    if (argc != 3) {
+        std::fprintf(stderr, "usage: %s FIXTURES OUT_DIR\n", TEST);
+        return 2;
+    }
+    const fs::path fixtures = loupe::from_utf8(argv[1]);
+    const fs::path out = fs::absolute(loupe::from_utf8(argv[2]));
+    fs::remove_all(out);
+
+    const loupe::update::Copy kind = copy_of(loupe::Channel::Releases, {}, {});
+    const std::string name = "loupe-9.9.9" + std::string(loupe::update::asset_suffix(kind));
+    const fs::path archive = make_archive(name, out / "staging_archive", "");
+    bool ok = !archive.empty();
+    ok &= check_sha256();
+    ok &= check_json(fixtures);
+    ok &= check_offers(fixtures);
+    ok &= check_newer();
+    ok &= check_setting(out);
+    ok &= check_staging(out, name, archive);
+    ok &= check_swap(out, name, "");
+    ok &= check_swap(out, name, "bin");
+    return ok ? 0 : 1;
+}

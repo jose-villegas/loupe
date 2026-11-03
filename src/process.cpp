@@ -1,7 +1,9 @@
 #include "process.hpp"
 
 #include <cstddef>
+#include <cstdlib>
 #include <optional>
+#include <string_view>
 #include <system_error>
 
 #if defined(_WIN32)
@@ -9,6 +11,8 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+// After windows.h, which it needs.
+#include <shellapi.h>
 #else
 #include <fcntl.h>
 #include <spawn.h>
@@ -138,6 +142,54 @@ exe_path() {
     std::error_code error;
     const fs::path path = fs::read_symlink("/proc/self/exe", error);
     return error ? fs::path() : path;
+#endif
+}
+
+fs::path
+system_program(const std::string& name) {
+#if defined(_WIN32)
+    std::wstring dir(MAX_PATH, L'\0');
+    const UINT length = GetSystemDirectoryW(dir.data(), static_cast<UINT>(dir.size()));
+    if (length == 0 || length >= dir.size()) {
+        return {};
+    }
+    dir.resize(length);
+    const fs::path program = fs::path(dir) / (name + ".exe");
+#else
+    const char* path = std::getenv("PATH");
+    fs::path program;
+    std::error_code error;
+    for (std::string_view rest = path != nullptr ? path : ""; program.empty() && !rest.empty();) {
+        const size_t colon = rest.find(':');
+        const fs::path candidate = fs::path(rest.substr(0, colon)) / name;
+        if (!candidate.parent_path().empty() && fs::is_regular_file(candidate, error)) {
+            program = candidate;
+        }
+        rest = colon == std::string_view::npos ? std::string_view() : rest.substr(colon + 1);
+    }
+#endif
+    std::error_code missing;
+    return fs::is_regular_file(program, missing) ? program : fs::path();
+}
+
+bool
+start_unwaited(const fs::path& program, const std::vector<std::string>& args) {
+#if defined(_WIN32)
+    const std::wstring parameters = from_utf8(command_line(args)).wstring();
+    const std::wstring file = program.wstring();
+    SHELLEXECUTEINFOW info = {};
+    info.cbSize = sizeof info;
+    info.fMask = SEE_MASK_NOASYNC;
+    info.lpFile = file.c_str();
+    info.lpParameters = parameters.c_str();
+    info.nShow = SW_SHOWNORMAL;
+    return ShellExecuteExW(&info) != FALSE;
+#else
+    std::vector<std::string> line = {program.string()};
+    line.insert(line.end(), args.begin(), args.end());
+    std::vector<char*> argv = argv_of(line);
+    pid_t pid = 0;
+    return posix_spawn(&pid, line[0].c_str(), nullptr, nullptr, argv.data(), environ) == 0;
 #endif
 }
 

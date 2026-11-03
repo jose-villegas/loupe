@@ -1,0 +1,50 @@
+{
+  "tag_name": "main-build",
+  "name": "Loupe main",
+  "draft": false,
+  "prerelease": true,
+  "created_at": "2026-11-02T21:42:52Z",
+  "published_at": "2026-11-02T22:02:40Z",
+  "body": "The build of main at 0123456789abcdef0123456789abcdef01234567, replaced on every push to main.\n\n## What\u2019s Changed\n* Caf\u00e9 \ud83d\ude00 (#13)",
+  "assets": [
+    {
+      "name": "loupe-main-linux-x86_64.tar.gz",
+      "content_type": "application/x-gtar",
+      "state": "uploaded",
+      "size": 4866844,
+      "digest": "sha256:e9b07b8736ff82f0be7a4348a2d8ceb771cf1c3cffa7cdb3094fc8387ed25382",
+      "created_at": "2026-11-02T22:02:38Z",
+      "browser_download_url": "https://github.com/jose-villegas/loupe/releases/download/main-build/loupe-main-linux-x86_64.tar.gz",
+      "uploader": {
+        "login": "github-actions[bot]",
+        "id": 41898282
+      }
+    },
+    {
+      "name": "loupe-main-windows-portable.zip",
+      "content_type": "application/zip",
+      "state": "uploaded",
+      "size": 4694379,
+      "digest": "sha256:d7be7fa69f2512717b870ce118efea06a091c60ab22694c0c7ce0ae5a3026ee1",
+      "created_at": "2026-11-02T22:02:38Z",
+      "browser_download_url": "https://github.com/jose-villegas/loupe/releases/download/main-build/loupe-main-windows-portable.zip",
+      "uploader": {
+        "login": "github-actions[bot]",
+        "id": 41898282
+      }
+    },
+    {
+      "name": "loupe-main-windows-setup.exe",
+      "content_type": "application/octet-stream",
+      "state": "uploaded",
+      "size": 3817402,
+      "digest": "sha256:5c97739a21ca55dc5be30501f65b1ea8d56f383f9b8f98d090d4d437b6d4d64c",
+      "created_at": "2026-11-02T22:02:38Z",
+      "browser_download_url": "https://github.com/jose-villegas/loupe/releases/download/main-build/loupe-main-windows-setup.exe",
+      "uploader": {
+        "login": "github-actions[bot]",
+        "id": 41898282
+      }
+    }
+  ]
+}

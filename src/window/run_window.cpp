@@ -13,7 +13,9 @@
 #include "imgui.h"
 #include "library.hpp"
 #include "paths.hpp"
+#include "process.hpp"
 #include "scratch.hpp"
+#include "update/update.hpp"
 #include "version.hpp"
 #include "window/files.hpp"
 #include "window/frame_texture.hpp"
@@ -132,7 +134,10 @@ class Window {
     Scratch scratch_;
     std::optional<size_t> checkpoint_mb_;
     Folders folders_;
-    std::string version_;
+    update::Copy copy_;
+    // Only a window someone uses updates; a scripted run (--ticks) never does.
+    bool updates_ = false;
+    window::About about_;
     Library library_;
     std::string refusal_;
     std::optional<Shown> shown_;
@@ -141,7 +146,17 @@ class Window {
 
 Window::Window(window::Gpu& gpu, const Options& options)
     : gpu_(gpu), checkpoint_mb_(options.checkpoint_mb), folders_(window::folders()),
-      version_(version_line(build_id(folders_.exe_dir))), library_(library(folders_)) {}
+      copy_{.id = build_id(folders_.exe_dir), .exe = exe_path(), .config = folders_.config},
+      updates_(!options.ticks && copy_.id.built_for != Channel::None && !copy_.config.empty()),
+      library_(library(folders_)) {
+    about_.version = version_line(copy_.id);
+    about_.can_update = updates_;
+    if (updates_) {
+        about_.updated = update::settle(copy_).value_or("");
+        about_.follow = update::follow(copy_);
+        update::check_in_background(copy_, about_.follow);
+    }
+}
 
 void
 Window::tick() {
@@ -149,7 +164,9 @@ Window::tick() {
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::Begin(TITLE, nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_MenuBar);
-    window::draw_menu(version_);
+    if (window::draw_menu(about_) && !update::set_follow(copy_, about_.follow)) {
+        std::fprintf(stderr, "loupe: cannot save the update setting in %s\n", utf8(copy_.config).c_str());
+    }
     window::Start start;
     bool back = false;
     if (shown_) {
@@ -177,6 +194,12 @@ Window::tick() {
 bool
 Window::finish() {
     close();
+    std::string why;
+    if (updates_ && update::follow(copy_) != update::Follow::Off) {
+        update::log(copy_, update::apply_staged(copy_, &why) ? "swapped the staged build in"
+                           : why.empty()                     ? "nothing staged"
+                                                             : why);
+    }
     return ok_;
 }
 

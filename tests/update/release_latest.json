@@ -1,0 +1,50 @@
+{
+  "tag_name": "v0.1.0",
+  "name": "Loupe 0.1.0",
+  "draft": false,
+  "prerelease": false,
+  "created_at": "2026-11-02T21:42:52Z",
+  "published_at": "2026-11-02T22:02:40Z",
+  "body": "## What's Changed\n* Open a scene in a window: timeline, view picker, frame (#4)\n* Open a .apak directly, and start on a scene picker without a scene (#5)\n* Release downloads: a portable zip and a Linux tarball with every demo scene (#6)\n* Windows installer: NSIS setup with shortcuts, .apak association and uninstaller (#7)\n* --frame and --compare: a camera path's frame, and an A | B compare from the command line (#8)\n* README: layer diagram without overlapping labels (#9)\n\n\n**Full Changelog**: https://github.com/jose-villegas/loupe/commits/v0.1.0\n",
+  "assets": [
+    {
+      "name": "loupe-0.1.0-linux-x86_64.tar.gz",
+      "content_type": "application/x-gtar",
+      "state": "uploaded",
+      "size": 4866844,
+      "digest": "sha256:e9b07b8736ff82f0be7a4348a2d8ceb771cf1c3cffa7cdb3094fc8387ed25382",
+      "created_at": "2026-11-02T22:02:38Z",
+      "browser_download_url": "https://github.com/jose-villegas/loupe/releases/download/v0.1.0/loupe-0.1.0-linux-x86_64.tar.gz",
+      "uploader": {
+        "login": "github-actions[bot]",
+        "id": 41898282
+      }
+    },
+    {
+      "name": "loupe-0.1.0-windows-portable.zip",
+      "content_type": "application/zip",
+      "state": "uploaded",
+      "size": 4694379,
+      "digest": "sha256:d7be7fa69f2512717b870ce118efea06a091c60ab22694c0c7ce0ae5a3026ee1",
+      "created_at": "2026-11-02T22:02:38Z",
+      "browser_download_url": "https://github.com/jose-villegas/loupe/releases/download/v0.1.0/loupe-0.1.0-windows-portable.zip",
+      "uploader": {
+        "login": "github-actions[bot]",
+        "id": 41898282
+      }
+    },
+    {
+      "name": "loupe-0.1.0-windows-setup.exe",
+      "content_type": "application/octet-stream",
+      "state": "uploaded",
+      "size": 3817402,
+      "digest": "sha256:5c97739a21ca55dc5be30501f65b1ea8d56f383f9b8f98d090d4d437b6d4d64c",
+      "created_at": "2026-11-02T22:02:38Z",
+      "browser_download_url": "https://github.com/jose-villegas/loupe/releases/download/v0.1.0/loupe-0.1.0-windows-setup.exe",
+      "uploader": {
+        "login": "github-actions[bot]",
+        "id": 41898282
+      }
+    }
+  ]
+}

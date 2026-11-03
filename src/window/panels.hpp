@@ -9,6 +9,7 @@
 
 #include "engine/frames.hpp"
 #include "library.hpp"
+#include "update/update.hpp"
 #include "window/frame_texture.hpp"
 
 namespace loupe::window {
@@ -26,8 +27,17 @@ struct Start {
     bool browse = false;
 };
 
-// The menu bar: About, which shows `version`, the build's version_line().
-void draw_menu(const std::string& version);
+// What About shows and sets: the build's version_line(), "Updated to ..."
+// after a swap, and what the copy follows, which a local build cannot change.
+struct About {
+    std::string version;
+    std::string updated;
+    bool can_update = false;
+    update::Follow follow = update::Follow::Off;
+};
+
+// The menu bar: About. True when the viewer picked another `about.follow`.
+bool draw_menu(About& about);
 // The window without a scene: the samples, the recent scenes and Open...;
 // `refusal` says why the last scene picked did not open.
 void draw_start(const Library& library, const std::string& refusal, Start& start);
