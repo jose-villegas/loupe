@@ -320,7 +320,7 @@ open_whole_path(const Options& options, std::string* why) {
         return frames;
     }
     const std::optional<uint32_t> path_ms = frames->path_ms();
-    if (!path_ms) {
+    if (!path_ms || frames->dt_ms() == 0) {
         return frames;
     }
     // The run's length is fixed at open, and the path's is known only once open.

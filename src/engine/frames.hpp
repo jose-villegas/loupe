@@ -95,11 +95,12 @@ class Frames {
     std::unique_ptr<State> state_;
 };
 
-// The frames from a camera path's start to its end, `dt_ms` apart.
+// The frames from a camera path's start to its end, `dt_ms` (> 0) apart.
 int frames_on_path(uint32_t path_ms, uint32_t dt_ms);
 
 // `options`' run over the whole camera path when --frames is not given and the
-// path outlasts the provider's own short run; `options` as given otherwise.
+// path outlasts the provider's own short run; `options` as given otherwise,
+// and for a still run (--dt 0), which has no path to cover.
 // Null, with `why` set, when it cannot open.
 std::unique_ptr<Frames> open_whole_path(const Options& options, std::string* why);
 

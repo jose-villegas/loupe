@@ -20,11 +20,13 @@ namespace loupe::test {
 // Frame index to the bytes stepping straight to it drew.
 using Straight = std::map<int, std::vector<uint8_t>>;
 
-// The run `options` asks for; null, said on stderr under `test`'s name, when it cannot open.
+// The run `options` asks for, opened by `open`; null, said on stderr under
+// `test`'s name, when it cannot open.
 inline std::unique_ptr<Frames>
-open_or_report(const char* test, const Options& options) {
+open_or_report(const char* test, const Options& options,
+               std::unique_ptr<Frames> (*open)(const Options&, std::string*) = &Frames::open) {
     std::string why;
-    std::unique_ptr<Frames> frames = Frames::open(options, &why);
+    std::unique_ptr<Frames> frames = open(options, &why);
     if (frames == nullptr) {
         std::fprintf(stderr, "%s: %s\n", test, why.c_str());
     }
