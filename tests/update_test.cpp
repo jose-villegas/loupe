@@ -13,9 +13,11 @@
 // update_test --swap CONFIG for the swap and update_test --touch FILE.
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <thread>
 #include <vector>
@@ -36,6 +38,8 @@ constexpr const char OWN_VERSION[] = "0.1.0";
 constexpr const char OWN_COMMIT[] = "aaaaaaaaa";
 constexpr const char NEW_COMMIT[] = "bbbbbbbbb";
 constexpr const char NEW_EXE[] = "the new build";
+// The variable naming where this test, run as a setup with /S, writes its own path.
+constexpr const char SETUP_OUT[] = "UPDATE_TEST_SETUP_OUT";
 
 bool
 check(bool ok, const std::string& what) {
@@ -444,6 +448,118 @@ check_held(const fs::path& out) {
     return ok;
 }
 
+// A stage applies only on the build that staged it: a newer one put in by
+// hand meanwhile closes without going back to it.
+bool
+check_staged_by(const fs::path& out, const std::string& name, const fs::path& archive) {
+    const fs::path config = out / "staged_by";
+    FakeGitHub github;
+    write(config / "new.json", release_json("v9.9.9", name, loupe::update::sha256_file(archive)));
+    github.answers = {{"/" + name, archive}, {"/releases/latest", config / "new.json"}};
+    const loupe::update::Copy copy = copy_of(loupe::Channel::Releases, out / "staged_by" / "loupe", config);
+    bool ok = check(loupe::update::check(copy, Follow::Releases, github.fetch()).starts_with("staged"), "staged");
+    loupe::update::Copy by_hand = copy;
+    by_hand.id.version = "0.2.0";
+    by_hand.id.commit = NEW_COMMIT;
+    std::string why;
+    const bool applied = loupe::update::apply_staged(by_hand, Follow::Releases, &why);
+    ok &= check(!applied && why.find("cleared") != std::string::npos,
+                "a build put in by hand does not apply what another staged: " + why);
+    ok &= check(!loupe::update::apply_staged(copy, Follow::Releases, &why) && why.empty(), "and it is gone");
+    return ok;
+}
+
+// A swap killed part way: the next start puts every file back. The archive's
+// last file is big, so the swap is still copying it when it is killed.
+bool
+check_crash(const fs::path& out, const std::string& name) {
+    const fs::path dir = out / "crash";
+    const fs::path top = dir / "archive" / "loupe-9.9.9";
+    const fs::path exe_name = loupe::exe_path().filename();
+    write(top / exe_name, NEW_EXE);
+    write(top / "LICENSE", "new");
+    {
+        constexpr size_t MIB = size_t{1} << 20;
+        constexpr int BIG_MIB = 1024;
+        std::ofstream big(top / "zz_big", std::ios::binary);
+        const std::string chunk(MIB, 'x');
+        for (int i = 0; i < BIG_MIB; i++) {
+            big << chunk;
+        }
+    }
+    const fs::path archive = dir / name;
+    bool ok = check(pack(dir / "archive", "loupe-9.9.9", archive), "the big archive is made");
+    fs::remove_all(dir / "archive");
+    const fs::path root = dir / "copy";
+    const fs::path exe = root / exe_name;
+    write(exe, "old exe");
+    write(root / "LICENSE", "old");
+    const fs::path config = dir / "config";
+    const loupe::update::Copy copy = copy_of(loupe::Channel::Releases, exe, config);
+    FakeGitHub github;
+    write(dir / "release.json", release_json("v9.9.9", name, loupe::update::sha256_file(archive)));
+    github.answers = {{"/" + name, archive}, {"/releases/latest", dir / "release.json"}};
+    ok &= check(loupe::update::check(copy, Follow::Releases, github.fetch()).starts_with("staged"), "staged");
+
+    std::stop_source stop;
+    bool finished = false;
+    std::jthread swap([&] {
+        finished = loupe::run_logged({loupe::utf8(loupe::exe_path()), "--apply", loupe::utf8(config), loupe::utf8(exe)},
+                                     dir / "apply.log", stop.get_token());
+    });
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+    while (!fs::exists(root / "zz_big") && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    stop.request_stop();
+    swap.join();
+    ok &= check(!finished && loupe::read_text(exe) == NEW_EXE, "the swap is killed part way, the new build in place");
+
+    (void)loupe::update::settle(copy);
+    ok &= check(loupe::read_text(exe) == "old exe" && loupe::read_text(root / "LICENSE") == "old"
+                    && !fs::exists(root / "zz_big"),
+                "the next start puts every file back");
+    std::error_code error;
+    for (const fs::directory_entry& entry : fs::recursive_directory_iterator(root, error)) {
+        ok &= check(entry.path().filename() == exe_name || entry.path().filename() == "LICENSE",
+                    "and leaves nothing else: " + loupe::utf8(entry.path()));
+    }
+    fs::remove_all(dir, error);
+    return ok;
+}
+
+#if defined(_WIN32)
+// The setup a check staged runs from a new folder of its own, nothing beside it.
+bool
+check_setup_folder(const fs::path& out) {
+    const fs::path dir = out / "setup";
+    loupe::update::Copy copy = copy_of(loupe::Channel::Releases, dir / "loupe" / "loupe.exe", dir / "config");
+    copy.id.installed = true;
+    const std::string name = "loupe-9.9.9" + std::string(loupe::update::asset_suffix(copy));
+    const fs::path setup = dir / name;
+    fs::create_directories(dir);
+    fs::copy_file(loupe::exe_path(), setup);
+    FakeGitHub github;
+    write(dir / "release.json", release_json("v9.9.9", name, loupe::update::sha256_file(setup)));
+    github.answers = {{"/" + name, setup}, {"/releases/latest", dir / "release.json"}};
+    bool ok = check(loupe::update::check(copy, Follow::Releases, github.fetch()).starts_with("staged"), "staged");
+    const fs::path ran = dir / "ran.txt";
+    _putenv_s(SETUP_OUT, loupe::utf8(ran).c_str());
+    std::string why;
+    ok &= check(loupe::update::apply_staged(copy, Follow::Releases, &why), "the setup starts: " + why);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!fs::exists(ran) && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    const fs::path folder = loupe::from_utf8(loupe::read_text(ran)).parent_path();
+    std::error_code error;
+    const auto beside = std::distance(fs::directory_iterator(folder, error), fs::directory_iterator());
+    ok &= check(!folder.empty() && !fs::equivalent(folder, dir / "config" / "update" / "staged", error) && beside == 1,
+                "from a folder of its own, nothing beside it: " + loupe::utf8(folder));
+    return ok;
+}
+#endif
+
 // The child: this process, a staged copy's running executable, swaps itself.
 int
 swap_self(const fs::path& config) {
@@ -460,6 +576,17 @@ int
 main(int argc, char** argv) {
     if (argc == 3 && std::string(argv[1]) == "--swap") {
         return swap_self(loupe::from_utf8(argv[2]));
+    }
+    if (argc == 4 && std::string(argv[1]) == "--apply") {
+        std::string why;
+        const loupe::update::Copy copy =
+            copy_of(loupe::Channel::Releases, loupe::from_utf8(argv[3]), loupe::from_utf8(argv[2]));
+        return loupe::update::apply_staged(copy, Follow::Releases, &why) ? 0 : 1;
+    }
+    if (argc == 2 && std::string(argv[1]) == "/S") {
+        const char* ran = std::getenv(SETUP_OUT);
+        write(loupe::from_utf8(ran != nullptr ? ran : ""), loupe::utf8(loupe::exe_path()));
+        return 0;
     }
     if (argc == 3 && std::string(argv[1]) == "--touch") {
         write(loupe::from_utf8(argv[2]), "");
@@ -488,5 +615,10 @@ main(int argc, char** argv) {
     ok &= check_stale(out, name, archive);
     ok &= check_rollback(out, name);
     ok &= check_held(out);
+    ok &= check_staged_by(out, name, archive);
+    ok &= check_crash(out, name);
+#if defined(_WIN32)
+    ok &= check_setup_folder(out);
+#endif
     return ok ? 0 : 1;
 }

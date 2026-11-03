@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <format>
 #include <fstream>
+#include <random>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -34,14 +35,21 @@ constexpr size_t SHA256_HEX = 64;
 // What a portable swap renames each file it replaces to: put back when the
 // swap fails, removed when it succeeds; the running executable's at the next start.
 constexpr const char ASIDE_SUFFIX[] = ".old";
+// What a running executable is renamed to when a swap is undone at start,
+// since it cannot be removed while it runs; removed at the next start.
+constexpr const char DISCARD_SUFFIX[] = ".discard";
+// The last line of a swap's journal once every file is in place.
+constexpr const char SWAP_DONE[] = "done";
+// The temporary folders a setup is run from, each new and named at random.
+constexpr const char SETUP_FOLDER_PREFIX[] = "loupe-setup-";
 
 // The words settings.txt spells each Follow with.
 constexpr const char* FOLLOW_WORDS[] = {"off", "releases", "main"};
 
-// <config>/update/'s files: the answers and the download on their way, and
-// the staged build with its record (stage_record()).
+// <config>/update/'s files: the answers and the download on their way, the
+// staged build with its record (stage_record()), and a swap's journal.
 struct Files {
-    fs::path dir, release, commit, part, staged, record, applied, unpacked, tool_log;
+    fs::path dir, release, commit, part, staged, record, applied, unpacked, journal, tool_log;
 };
 
 Files
@@ -55,6 +63,7 @@ files_of(const Copy& copy) {
             .record = dir / "staged.txt",
             .applied = dir / "applied.txt",
             .unpacked = dir / "unpacked",
+            .journal = dir / "swap.txt",
             .tool_log = dir / "tool.log"};
 }
 
@@ -124,11 +133,19 @@ describe(const Offer& offer) {
 }
 
 // A staged build's record, one line each: its file's name, its SHA-256, the
-// channel it was staged on, its tag, version and commit.
-enum RecordLine : uint8_t { NAME, SHA256, FOLLOWED, TAG, VERSION, COMMIT, RECORD_LINES };
+// channel it was staged on, its tag, version and commit, and the commit of
+// the copy that staged it.
+enum RecordLine : uint8_t { NAME, SHA256, FOLLOWED, TAG, VERSION, COMMIT, STAGED_BY, RECORD_LINES };
+
+// A staged build as its record tells it.
+struct Staged {
+    Offer offer;
+    std::string followed;
+    std::string staged_by;
+};
 
 std::vector<std::string>
-stage_record(const Offer& offer, Follow follow) {
+stage_record(const Offer& offer, Follow follow, const std::string& staged_by) {
     std::vector<std::string> record(RECORD_LINES);
     record[NAME] = offer.name;
     record[SHA256] = offer.sha256;
@@ -136,23 +153,25 @@ stage_record(const Offer& offer, Follow follow) {
     record[TAG] = offer.tag;
     record[VERSION] = offer.version;
     record[COMMIT] = offer.commit;
+    record[STAGED_BY] = staged_by;
     return record;
 }
 
-// The staged build's offer and the channel it was staged on; none when nothing is staged.
-std::optional<std::pair<Offer, std::string>>
-staged_offer(const Files& files) {
+// The staged build; none when nothing is staged.
+std::optional<Staged>
+staged_build(const Files& files) {
     const std::vector<std::string> record = lines_of(files.record);
     if (record.size() != RECORD_LINES) {
         return std::nullopt;
     }
-    return std::pair{Offer{.tag = record[TAG],
-                           .version = record[VERSION],
-                           .commit = record[COMMIT],
-                           .name = record[NAME],
-                           .url = "",
-                           .sha256 = record[SHA256]},
-                     record[FOLLOWED]};
+    return Staged{.offer = {.tag = record[TAG],
+                            .version = record[VERSION],
+                            .commit = record[COMMIT],
+                            .name = record[NAME],
+                            .url = "",
+                            .sha256 = record[SHA256]},
+                  .followed = record[FOLLOWED],
+                  .staged_by = record[STAGED_BY]};
 }
 
 void
@@ -162,11 +181,14 @@ clear_stage(const Files& files) {
     fs::remove_all(files.staged, error);
 }
 
-// `offer`'s download into the staging folder, verified; what happened.
+// `offer`'s download into the staging folder for `copy`, verified; what happened.
 std::string
-stage(const Files& files, const Offer& offer, Follow follow, const Fetch& fetch) {
-    const std::optional<std::pair<Offer, std::string>> staged = staged_offer(files);
-    if (staged && staged->first.sha256 == offer.sha256 && staged->second == FOLLOW_WORDS[static_cast<size_t>(follow)]) {
+stage(const Copy& copy, const Files& files, const Offer& offer, Follow follow, const Fetch& fetch) {
+    const std::optional<Staged> staged = staged_build(files);
+    if (staged && staged->offer.sha256 == offer.sha256
+        && staged->followed == FOLLOW_WORDS[static_cast<size_t>(follow)]) {
+        // Staged again by this copy, which may not be the one that staged it.
+        write_lines(files.record, stage_record(offer, follow, copy.id.commit));
         return std::format("{} is already staged", describe(offer));
     }
     std::string why;
@@ -183,82 +205,106 @@ stage(const Files& files, const Offer& offer, Follow follow, const Fetch& fetch)
     clear_stage(files);
     fs::create_directories(files.staged, error);
     fs::rename(files.part, files.staged / offer.name, error);
-    if (error || !write_lines(files.record, stage_record(offer, follow))) {
+    if (error || !write_lines(files.record, stage_record(offer, follow, copy.id.commit))) {
         return std::format("cannot stage {} in {}", offer.name, utf8(files.staged));
     }
     return std::format("staged {}: {}", describe(offer), offer.name);
 }
 
-// Files a swap has replaced so far, to put back when a later one fails.
-class Replaced {
-  public:
-    Replaced() = default;
-    Replaced(const Replaced&) = delete;
-    Replaced& operator=(const Replaced&) = delete;
-    Replaced(Replaced&&) = delete;
-    Replaced& operator=(Replaced&&) = delete;
+// One file a swap puts in place, and whether there was one to set aside.
+struct Swapped {
+    fs::path target;
+    bool had_one;
+};
 
-    // Unless kept: every new file removed, every replaced one renamed back.
-    ~Replaced() {
-        std::error_code error;
-        for (auto it = done_.rbegin(); !kept_ && it != done_.rend(); ++it) {
-            fs::remove(it->target, error);
-            if (it->had_one) {
-                fs::rename(aside(it->target), it->target, error);
-            }
+fs::path
+aside(const fs::path& file) {
+    return fs::path(file) += ASIDE_SUFFIX;
+}
+
+// A swap's journal, written before its first file and again, ended by
+// SWAP_DONE, after its last: what settle() finishes or undoes after a crash.
+bool
+write_journal(const Files& files, const std::vector<Swapped>& swap, bool done) {
+    std::vector<std::string> lines;
+    for (const Swapped& swapped : swap) {
+        lines.push_back((swapped.had_one ? "1 " : "0 ") + utf8(swapped.target));
+    }
+    if (done) {
+        lines.emplace_back(SWAP_DONE);
+    }
+    return write_lines(files.journal, lines);
+}
+
+// The swap a journal holds, and whether it was done; none when there is no journal.
+std::optional<std::pair<std::vector<Swapped>, bool>>
+read_journal(const Files& files) {
+    std::error_code error;
+    if (!fs::exists(files.journal, error)) {
+        return std::nullopt;
+    }
+    std::vector<Swapped> swap;
+    bool done = false;
+    for (const std::string& line : lines_of(files.journal)) {
+        done = line == SWAP_DONE;
+        if (!done && line.size() > 2) {
+            swap.push_back({.target = from_utf8(line.substr(2)), .had_one = line[0] == '1'});
         }
     }
+    return std::pair{swap, done};
+}
 
-    // `source` in place of `target`, which is renamed aside first; false with `why`.
-    bool
-    put(const fs::path& source, const fs::path& target, std::string* why) {
-        std::error_code error;
-        const bool had_one = fs::exists(target, error);
-        fs::create_directories(target.parent_path(), error);
-        if (had_one) {
-            fs::remove(aside(target), error);
-            fs::rename(target, aside(target), error);
-            if (error) {
-                *why = std::format("cannot rename {} aside: {}", utf8(target), error.message());
-                return false;
-            }
-        }
-        done_.push_back({.target = target, .had_one = had_one});
-        if (!fs::copy_file(source, target, error)) {
-            *why = std::format("cannot write {}: {}", utf8(target), error.message());
+// `source` in place of `swapped`'s target, which is renamed aside first; false with `why`.
+bool
+put(const fs::path& source, const Swapped& swapped, std::string* why) {
+    std::error_code error;
+    fs::create_directories(swapped.target.parent_path(), error);
+    if (swapped.had_one) {
+        fs::remove(aside(swapped.target), error);
+        fs::rename(swapped.target, aside(swapped.target), error);
+        if (error) {
+            *why = std::format("cannot rename {} aside: {}", utf8(swapped.target), error.message());
             return false;
         }
-        fs::permissions(target, fs::status(source, error).permissions(), error);
-        return true;
     }
+    if (!fs::copy_file(source, swapped.target, error)) {
+        *why = std::format("cannot write {}: {}", utf8(swapped.target), error.message());
+        return false;
+    }
+    fs::permissions(swapped.target, fs::status(source, error).permissions(), error);
+    return true;
+}
 
-    // Keeps the new files; the replaced ones are removed, but for the running
-    // executable `running`, which settle() removes at the next start.
-    void
-    keep(const fs::path& running) {
-        kept_ = true;
-        std::error_code error;
-        for (const Done& done : done_) {
-            if (done.target != running) {
-                fs::remove(aside(done.target), error);
-            }
+// Every target as it was before the swap, last first: a new file removed (a
+// running one renamed out of the way) and the one set aside put back. A
+// target whose old file was never set aside was not reached.
+void
+undo(const std::vector<Swapped>& swap) {
+    std::error_code error;
+    for (auto it = swap.rbegin(); it != swap.rend(); ++it) {
+        if (it->had_one && !fs::exists(aside(it->target), error)) {
+            continue;
+        }
+        if (!fs::remove(it->target, error) && fs::exists(it->target, error)) {
+            fs::rename(it->target, fs::path(it->target) += DISCARD_SUFFIX, error);
+        }
+        if (it->had_one) {
+            fs::rename(aside(it->target), it->target, error);
         }
     }
+}
 
-  private:
-    static fs::path
-    aside(const fs::path& file) {
-        return fs::path(file) += ASIDE_SUFFIX;
+// The files set aside removed, but for the running executable `running`,
+// which settle() removes at the next start.
+void
+finish(const std::vector<Swapped>& swap, const fs::path& running) {
+    std::error_code error;
+    for (const Swapped& swapped : swap) {
+        if (swapped.target != running) {
+            fs::remove(aside(swapped.target), error);
+        }
     }
-
-    struct Done {
-        fs::path target;
-        bool had_one;
-    };
-
-    std::vector<Done> done_;
-    bool kept_ = false;
-};
+}
 
 // The file in `dir`'s tree named as `copy`'s executable; empty when there is none.
 fs::path
@@ -275,7 +321,8 @@ find_exe(const fs::path& dir, const Copy& copy) {
 
 // The archive unpacked in the update folder, then each of the copy's files,
 // the running executable among them, renamed aside and replaced; when one
-// cannot be, every one is put back, so the copy is whole either way.
+// cannot be, every one is put back, so the copy is whole either way. A crash
+// part way leaves the journal, and settle() puts them back at the next start.
 bool
 swap_portable(const Copy& copy, const Files& files, const fs::path& archive, std::string* why) {
     std::error_code error;
@@ -307,21 +354,61 @@ swap_portable(const Copy& copy, const Files& files, const fs::path& archive, std
         }
     }
     std::ranges::sort(sources);
-    bool swapped = true;
-    {
-        Replaced replaced;
-        for (const fs::path& source : sources) {
-            if (!replaced.put(source, root / fs::relative(source, top), why)) {
-                swapped = false;
-                break;
-            }
-        }
-        if (swapped) {
-            replaced.keep(copy.exe);
-        }
+    std::vector<Swapped> swap;
+    for (const fs::path& source : sources) {
+        const fs::path target = root / fs::relative(source, top);
+        swap.push_back({.target = target, .had_one = fs::exists(target, error)});
     }
+    bool swapped = write_journal(files, swap, false);
+    if (!swapped) {
+        *why = std::format("cannot write {}", utf8(files.journal));
+    }
+    for (size_t i = 0; swapped && i < swap.size(); i++) {
+        swapped = put(sources[i], swap[i], why);
+    }
+    if (swapped && !write_journal(files, swap, true)) {
+        swapped = false;
+        *why = std::format("cannot write {}", utf8(files.journal));
+    }
+    if (swapped) {
+        finish(swap, copy.exe);
+    } else {
+        undo(swap);
+    }
+    fs::remove(files.journal, error);
     fs::remove_all(files.unpacked, error);
     return swapped;
+}
+
+// A new, empty folder of a random name under the system's temporary one; empty
+// when none could be made.
+fs::path
+fresh_folder() {
+    std::random_device random;
+    std::error_code error;
+    constexpr int TRIES = 8;
+    for (int i = 0; i < TRIES; i++) {
+        const uint64_t name = (uint64_t{random()} << 32) | random();
+        const fs::path folder = fs::temp_directory_path(error) / std::format("{}{:016x}", SETUP_FOLDER_PREFIX, name);
+        if (!error && fs::create_directory(folder, error)) {
+            return folder;
+        }
+    }
+    return {};
+}
+
+// The staged setup copied into a fresh folder, so nothing beside it there
+// (a DLL it would load) was put by anyone else, then run as hashed: no one
+// can change it between the two.
+bool
+run_setup(const fs::path& file, const std::string& sha256) {
+    const fs::path folder = fresh_folder();
+    std::error_code error;
+    if (folder.empty() || !fs::copy_file(file, folder / file.filename(), error)) {
+        return false;
+    }
+    const fs::path setup = folder / file.filename();
+    return run_verified(setup, sha256, [&setup] { return start_unwaited(setup, {"/S"}); });
 }
 
 } // namespace
@@ -479,7 +566,7 @@ check(const Copy& copy, Follow follow, const Fetch& fetch) {
         clear_stage(files);
         return std::format("up to date: {} offers {}", release_url, describe(*offer));
     }
-    return stage(files, *offer, follow, fetch);
+    return stage(copy, files, *offer, follow, fetch);
 }
 
 std::jthread
@@ -499,12 +586,19 @@ apply_staged(const Copy& copy, Follow follow, std::string* why) {
         return false;
     }
     const Files files = files_of(copy);
-    const std::optional<std::pair<Offer, std::string>> staged = staged_offer(files);
+    const std::optional<Staged> staged = staged_build(files);
     if (!staged) {
         return false;
     }
-    const Offer& offer = staged->first;
-    if (staged->second != FOLLOW_WORDS[static_cast<size_t>(follow)] || !is_newer(offer, copy.id, follow)) {
+    const Offer& offer = staged->offer;
+    // Staged by another build: this one may be newer than it, put in by hand.
+    if (staged->staged_by != copy.id.commit) {
+        *why = std::format("the staged {} was staged by {}, not this copy's {}: cleared", describe(offer),
+                           staged->staged_by, copy.id.commit);
+        clear_stage(files);
+        return false;
+    }
+    if (staged->followed != FOLLOW_WORDS[static_cast<size_t>(follow)] || !is_newer(offer, copy.id, follow)) {
         *why = std::format("the staged {} is not newer on what this copy follows now: cleared", describe(offer));
         clear_stage(files);
         return false;
@@ -515,11 +609,8 @@ apply_staged(const Copy& copy, Follow follow, std::string* why) {
         *why = std::format("cannot write {}", utf8(files.applied));
         return false;
     }
-    // A setup runs elevated, so it runs only as hashed: no one can change the
-    // file between the two.
-    const bool applied = copy.id.installed
-                             ? run_verified(file, offer.sha256, [&file] { return start_unwaited(file, {"/S"}); })
-                             : sha256_file(file) == offer.sha256 && swap_portable(copy, files, file, why);
+    const bool applied = copy.id.installed ? run_setup(file, offer.sha256)
+                                           : sha256_file(file) == offer.sha256 && swap_portable(copy, files, file, why);
     std::error_code error;
     if (!applied) {
         fs::remove(files.applied, error);
@@ -539,13 +630,29 @@ apply_staged(const Copy& copy, Follow follow, std::string* why) {
 std::optional<std::string>
 settle(const Copy& copy) {
     std::error_code error;
-    if (!copy.exe.empty()) {
-        fs::remove(fs::path(copy.exe) += ASIDE_SUFFIX, error);
+    for (const fs::directory_entry& entry : fs::directory_iterator(fs::temp_directory_path(error), error)) {
+        if (entry.path().filename().string().starts_with(SETUP_FOLDER_PREFIX)) {
+            fs::remove_all(entry.path(), error);
+        }
     }
     if (copy.config.empty()) {
         return std::nullopt;
     }
     const Files files = files_of(copy);
+    // A swap cut short: done, its files set aside are removed; else every file is put back.
+    const std::optional<std::pair<std::vector<Swapped>, bool>> journal = read_journal(files);
+    if (journal && journal->second) {
+        finish(journal->first, {});
+    } else if (journal) {
+        undo(journal->first);
+        fs::remove(files.applied, error);
+        log(copy, "a swap that did not finish was undone");
+    }
+    fs::remove(files.journal, error);
+    if (!copy.exe.empty()) {
+        fs::remove(aside(copy.exe), error);
+        fs::remove(fs::path(copy.exe) += DISCARD_SUFFIX, error);
+    }
     const std::vector<std::string> applied = lines_of(files.applied);
     if (applied.empty()) {
         return std::nullopt;
