@@ -232,14 +232,16 @@ class Replaced {
         return true;
     }
 
-    // Keeps the new files; the replaced ones are removed, but for a running
-    // executable, which settle() removes at the next start.
+    // Keeps the new files; the replaced ones are removed, but for the running
+    // executable `running`, which settle() removes at the next start.
     void
-    keep() {
+    keep(const fs::path& running) {
         kept_ = true;
         std::error_code error;
         for (const Done& done : done_) {
-            fs::remove(aside(done.target), error);
+            if (done.target != running) {
+                fs::remove(aside(done.target), error);
+            }
         }
     }
 
@@ -315,7 +317,7 @@ swap_portable(const Copy& copy, const Files& files, const fs::path& archive, std
             }
         }
         if (swapped) {
-            replaced.keep();
+            replaced.keep(copy.exe);
         }
     }
     fs::remove_all(files.unpacked, error);
