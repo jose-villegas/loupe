@@ -206,7 +206,7 @@ start_unwaited(const fs::path& program, const std::vector<std::string>& args) {
     const std::wstring file = program.wstring();
     SHELLEXECUTEINFOW info = {};
     info.cbSize = sizeof info;
-    info.fMask = SEE_MASK_NOASYNC;
+    info.fMask = SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI;
     info.lpFile = file.c_str();
     info.lpParameters = parameters.c_str();
     info.nShow = SW_SHOWNORMAL;

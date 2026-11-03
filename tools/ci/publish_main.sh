@@ -20,26 +20,32 @@ if [ "$head" != "$commit" ]; then
     exit 0
 fi
 
-if gh api "repos/$repo/git/refs/tags/$tag" >/dev/null 2>&1; then
-    gh api -X PATCH "repos/$repo/git/refs/tags/$tag" -f sha="$commit" -F force=true >/dev/null
-else
-    gh api "repos/$repo/git/refs" -f ref="refs/tags/$tag" -f sha="$commit" >/dev/null
-fi
-
-latest=$(gh release view --repo "$repo" --json tagName --jq .tagName)
-{
-    echo "The build of main at $commit, replaced on every push to main."
-    echo
-    sh "$(dirname "$0")/release_notes.sh" "$tag" "$repo" "$latest"
-} >"$dist.notes.md"
+# The files go up before the tag moves: a check that finds the tag at COMMIT
+# finds COMMIT's files with it.
+notes() {
+    latest=$(gh release view --repo "$repo" --json tagName --jq .tagName)
+    {
+        echo "The build of main at $commit, replaced on every push to main."
+        echo
+        sh "$(dirname "$0")/release_notes.sh" "$tag" "$repo" "$latest"
+    } >"$dist.notes.md"
+}
 
 if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
-    gh release edit "$tag" --repo "$repo" --prerelease --notes-file "$dist.notes.md"
     gh release upload "$tag" "$dist"/* --repo "$repo" --clobber
     gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name' | while read -r asset; do
         [ -f "$dist/$asset" ] || gh release delete-asset "$tag" "$asset" --repo "$repo" --yes
     done
+    gh api -X PATCH "repos/$repo/git/refs/tags/$tag" -f sha="$commit" -F force=true >/dev/null
+    notes
+    gh release edit "$tag" --repo "$repo" --prerelease --notes-file "$dist.notes.md"
 else
+    if gh api "repos/$repo/git/refs/tags/$tag" >/dev/null 2>&1; then
+        gh api -X PATCH "repos/$repo/git/refs/tags/$tag" -f sha="$commit" -F force=true >/dev/null
+    else
+        gh api "repos/$repo/git/refs" -f ref="refs/tags/$tag" -f sha="$commit" >/dev/null
+    fi
+    notes
     gh release create "$tag" "$dist"/* --repo "$repo" --verify-tag --prerelease \
         --title "Loupe main" --notes-file "$dist.notes.md"
 fi
