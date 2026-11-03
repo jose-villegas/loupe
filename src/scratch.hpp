@@ -2,13 +2,15 @@
 #pragma once
 
 #include <filesystem>
+#include <string_view>
 
 namespace loupe {
 
-// A new, empty folder, removed with everything in it when this goes.
+// A new, empty folder named `prefix` and random hex, removed with everything
+// in it when this goes unless kept.
 class Scratch {
   public:
-    Scratch();
+    explicit Scratch(std::string_view prefix = "loupe-");
     ~Scratch();
     Scratch(const Scratch&) = delete;
     Scratch& operator=(const Scratch&) = delete;
@@ -21,8 +23,15 @@ class Scratch {
         return path_;
     }
 
+    // Leaves the folder in place when this goes.
+    void
+    keep() {
+        kept_ = true;
+    }
+
   private:
     std::filesystem::path path_;
+    bool kept_ = false;
 };
 
 } // namespace loupe

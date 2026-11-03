@@ -6,7 +6,6 @@
 #include <cstdint>
 #include <format>
 #include <fstream>
-#include <random>
 #include <system_error>
 #include <utility>
 #include <vector>
@@ -16,6 +15,7 @@
 #include "options.hpp"
 #include "paths.hpp"
 #include "process.hpp"
+#include "scratch.hpp"
 #include "update/sha256.hpp"
 
 namespace fs = std::filesystem;
@@ -40,8 +40,6 @@ constexpr const char ASIDE_SUFFIX[] = ".old";
 // What a running executable is renamed to when a swap is undone at start,
 // since it cannot be removed while it runs; removed at the next start.
 constexpr const char DISCARD_SUFFIX[] = ".discard";
-// The last line of a swap's journal once every file is in place.
-constexpr const char SWAP_DONE[] = "done";
 // The temporary folders a setup is run from, each new and named at random.
 constexpr const char SETUP_FOLDER_PREFIX[] = "loupe-setup-";
 
@@ -62,43 +60,28 @@ files_of(const Copy& copy) {
             .commit = dir / "commit.txt",
             .part = dir / "download.part",
             .staged = dir / "staged",
-            .record = dir / "staged.txt",
+            .record = dir / "staged.json",
             .applied = dir / "applied.txt",
             .unpacked = dir / "unpacked",
-            .journal = dir / "swap.txt",
+            .journal = dir / "swap.json",
             .tool_log = dir / "tool.log"};
 }
 
-std::vector<std::string>
-lines_of(const fs::path& file) {
-    std::vector<std::string> lines;
-    std::ifstream in(file, std::ios::binary);
-    std::string line;
-    while (std::getline(in, line)) {
-        if (line.ends_with('\r')) {
-            line.pop_back();
-        }
-        lines.push_back(line);
+// `file` parsed; discarded when it is missing or not JSON.
+nlohmann::json
+read_json(const fs::path& file) {
+    try {
+        return nlohmann::json::parse(read_text(file), nullptr, false);
+    } catch (const nlohmann::json::exception&) {
+        return nlohmann::json(nlohmann::json::value_t::discarded);
     }
-    return lines;
 }
 
-bool
-write_lines(const fs::path& file, const std::vector<std::string>& lines) {
-    std::error_code error;
-    fs::create_directories(file.parent_path(), error);
-    const fs::path temp = fs::path(file) += ".tmp";
-    {
-        std::ofstream out(temp, std::ios::binary | std::ios::trunc);
-        for (const std::string& line : lines) {
-            out << line << '\n';
-        }
-        if (!out.good()) {
-            return false;
-        }
-    }
-    fs::rename(temp, file, error);
-    return !error;
+// `object`'s string named `key`; empty when it has none.
+std::string
+text(const nlohmann::json& object, const char* key) {
+    const auto it = object.is_object() ? object.find(key) : object.end();
+    return it != object.end() && it->is_string() ? it->get<std::string>() : std::string();
 }
 
 Follow
@@ -134,46 +117,38 @@ describe(const Offer& offer) {
     return offer.version.empty() ? std::format("{} at {}", offer.tag, offer.commit.substr(0, 9)) : offer.version;
 }
 
-// A staged build's record, one line each: its file's name, its SHA-256, the
-// channel it was staged on, its tag, version and commit, and the commit of
-// the copy that staged it.
-enum RecordLine : uint8_t { NAME, SHA256, FOLLOWED, TAG, VERSION, COMMIT, STAGED_BY, RECORD_LINES };
-
-// A staged build as its record tells it.
+// A staged build as its record, staged.json, tells it: the offer, the channel
+// it was staged on, and the commit of the copy that staged it.
 struct Staged {
     Offer offer;
     std::string followed;
     std::string staged_by;
 };
 
-std::vector<std::string>
-stage_record(const Offer& offer, Follow follow, const std::string& staged_by) {
-    std::vector<std::string> record(RECORD_LINES);
-    record[NAME] = offer.name;
-    record[SHA256] = offer.sha256;
-    record[FOLLOWED] = FOLLOW_WORDS[static_cast<size_t>(follow)];
-    record[TAG] = offer.tag;
-    record[VERSION] = offer.version;
-    record[COMMIT] = offer.commit;
-    record[STAGED_BY] = staged_by;
-    return record;
+bool
+write_stage_record(const Files& files, const Offer& offer, Follow follow, const std::string& staged_by) {
+    const nlohmann::json record = {
+        {"name", offer.name},    {"sha256", offer.sha256},   {"followed", FOLLOW_WORDS[static_cast<size_t>(follow)]},
+        {"tag", offer.tag},      {"version", offer.version}, {"commit", offer.commit},
+        {"staged_by", staged_by}};
+    return write_lines(files.record, {record.dump(2)});
 }
 
 // The staged build; none when nothing is staged.
 std::optional<Staged>
 staged_build(const Files& files) {
-    const std::vector<std::string> record = lines_of(files.record);
-    if (record.size() != RECORD_LINES) {
+    const nlohmann::json record = read_json(files.record);
+    if (!record.is_object() || text(record, "name").empty() || text(record, "sha256").empty()) {
         return std::nullopt;
     }
-    return Staged{.offer = {.tag = record[TAG],
-                            .version = record[VERSION],
-                            .commit = record[COMMIT],
-                            .name = record[NAME],
+    return Staged{.offer = {.tag = text(record, "tag"),
+                            .version = text(record, "version"),
+                            .commit = text(record, "commit"),
+                            .name = text(record, "name"),
                             .url = "",
-                            .sha256 = record[SHA256]},
-                  .followed = record[FOLLOWED],
-                  .staged_by = record[STAGED_BY]};
+                            .sha256 = text(record, "sha256")},
+                  .followed = text(record, "followed"),
+                  .staged_by = text(record, "staged_by")};
 }
 
 void
@@ -190,7 +165,7 @@ stage(const Copy& copy, const Files& files, const Offer& offer, Follow follow, c
     if (staged && staged->offer.sha256 == offer.sha256
         && staged->followed == FOLLOW_WORDS[static_cast<size_t>(follow)]) {
         // Staged again by this copy, which may not be the one that staged it.
-        write_lines(files.record, stage_record(offer, follow, copy.id.commit));
+        write_stage_record(files, offer, follow, copy.id.commit);
         return std::format("{} is already staged", describe(offer));
     }
     std::string why;
@@ -207,7 +182,7 @@ stage(const Copy& copy, const Files& files, const Offer& offer, Follow follow, c
     clear_stage(files);
     fs::create_directories(files.staged, error);
     fs::rename(files.part, files.staged / offer.name, error);
-    if (error || !write_lines(files.record, stage_record(offer, follow, copy.id.commit))) {
+    if (error || !write_stage_record(files, offer, follow, copy.id.commit)) {
         return std::format("cannot stage {} in {}", offer.name, utf8(files.staged));
     }
     return std::format("staged {}: {}", describe(offer), offer.name);
@@ -224,19 +199,15 @@ aside(const fs::path& file) {
     return fs::path(file) += ASIDE_SUFFIX;
 }
 
-// A swap's journal, written before its first file and again, ended by
-// SWAP_DONE, after its last: what settle() finishes or undoes after a crash.
+// A swap's journal, swap.json, written before its first file and again,
+// marked done, after its last: what settle() finishes or undoes after a crash.
 bool
 write_journal(const Files& files, const std::vector<Swapped>& swap, bool done) {
-    std::vector<std::string> lines;
-    lines.reserve(swap.size() + 1);
+    nlohmann::json targets = nlohmann::json::array();
     for (const Swapped& swapped : swap) {
-        lines.push_back((swapped.had_one ? "1 " : "0 ") + utf8(swapped.target));
+        targets.push_back({{"target", utf8(swapped.target)}, {"had_one", swapped.had_one}});
     }
-    if (done) {
-        lines.emplace_back(SWAP_DONE);
-    }
-    return write_lines(files.journal, lines);
+    return write_lines(files.journal, {nlohmann::json{{"files", targets}, {"done", done}}.dump(2)});
 }
 
 // The swap a journal holds, and whether it was done; none when there is no journal.
@@ -246,15 +217,17 @@ read_journal(const Files& files) {
     if (!fs::exists(files.journal, error)) {
         return std::nullopt;
     }
+    const nlohmann::json journal = read_json(files.journal);
+    const auto targets = journal.is_object() ? journal.find("files") : journal.end();
     std::vector<Swapped> swap;
-    bool done = false;
-    for (const std::string& line : lines_of(files.journal)) {
-        done = line == SWAP_DONE;
-        if (!done && line.size() > 2) {
-            swap.push_back({.target = from_utf8(line.substr(2)), .had_one = line[0] == '1'});
+    for (const nlohmann::json& file : targets != journal.end() && targets->is_array() ? *targets : nlohmann::json()) {
+        const auto had_one = file.is_object() ? file.find("had_one") : file.end();
+        if (!text(file, "target").empty() && had_one != file.end() && had_one->is_boolean()) {
+            swap.push_back({.target = from_utf8(text(file, "target")), .had_one = had_one->get<bool>()});
         }
     }
-    return std::pair{swap, done};
+    const auto done = journal.is_object() ? journal.find("done") : journal.end();
+    return std::pair{swap, done != journal.end() && done->is_boolean() && done->get<bool>()};
 }
 
 // `source` in place of `swapped`'s target, which is renamed aside first; false with `why`.
@@ -384,35 +357,18 @@ swap_portable(const Copy& copy, const Files& files, const fs::path& archive, std
     return swapped;
 }
 
-// A new, empty folder of a random name under the system's temporary one; empty
-// when none could be made.
-fs::path
-fresh_folder() {
-    std::random_device random;
-    std::error_code error;
-    constexpr int TRIES = 8;
-    for (int i = 0; i < TRIES; i++) {
-        const uint64_t name = (uint64_t{random()} << 32) | random();
-        const fs::path folder = fs::temp_directory_path(error) / std::format("{}{:016x}", SETUP_FOLDER_PREFIX, name);
-        if (!error && fs::create_directory(folder, error)) {
-            return folder;
-        }
-    }
-    return {};
-}
-
 // The staged setup copied into a fresh folder, so nothing beside it there
 // (a DLL it would load) was put by anyone else, then run as hashed: no one
 // can change it between the two.
 bool
 run_setup(const fs::path& file, const std::string& sha256) {
-    const fs::path folder = fresh_folder();
+    // Kept: the setup runs on after Loupe has closed; settle() removes it.
+    Scratch folder(SETUP_FOLDER_PREFIX);
+    folder.keep();
+    const fs::path setup = folder.path() / file.filename();
     std::error_code error;
-    if (folder.empty() || !fs::copy_file(file, folder / file.filename(), error)) {
-        return false;
-    }
-    const fs::path setup = folder / file.filename();
-    return run_verified(setup, sha256, [&setup] { return start_unwaited(setup, {"/S"}); });
+    return !folder.path().empty() && fs::copy_file(file, setup, error)
+           && run_verified(setup, sha256, [&setup] { return start_unwaited(setup, {"/S"}); });
 }
 
 } // namespace
@@ -423,7 +379,7 @@ follow(const Copy& copy) {
     if (own == Follow::Off || copy.config.empty()) {
         return Follow::Off;
     }
-    for (const std::string& line : lines_of(copy.config / SETTINGS_FILE)) {
+    for (const std::string& line : read_lines(copy.config / SETTINGS_FILE)) {
         if (!line.starts_with(FOLLOW_KEY)) {
             continue;
         }
@@ -443,7 +399,7 @@ set_follow(const Copy& copy, Follow follow) {
     }
     const fs::path file = copy.config / SETTINGS_FILE;
     std::vector<std::string> lines;
-    for (std::string& line : lines_of(file)) {
+    for (std::string& line : read_lines(file)) {
         if (!line.starts_with(FOLLOW_KEY)) {
             lines.push_back(std::move(line));
         }
@@ -462,13 +418,6 @@ asset_suffix(const Copy& copy) {
     (void)copy;
 #endif
     return LOUPE_PORTABLE_SUFFIX;
-}
-
-// `object`'s string named `key`; empty when it has none.
-std::string
-text(const nlohmann::json& object, const char* key) {
-    const auto it = object.is_object() ? object.find(key) : object.end();
-    return it != object.end() && it->is_string() ? it->get<std::string>() : std::string();
 }
 
 std::optional<Offer>
@@ -536,7 +485,7 @@ curl(const fs::path& log, const std::stop_token& stop) {
             *why = "stopped: Loupe closed";
             return false;
         }
-        const std::vector<std::string> said = lines_of(log);
+        const std::vector<std::string> said = read_lines(log);
         *why = said.empty() ? "curl failed" : said.back();
         return false;
     };
@@ -557,7 +506,7 @@ check(const Copy& copy, Follow follow, const Fetch& fetch) {
     if (!fetch(release_url, JSON_TYPE, files.release, &why)) {
         return std::format("cannot ask {}: {}", release_url, why);
     }
-    const nlohmann::json release = nlohmann::json::parse(read_text(files.release), nullptr, false);
+    const nlohmann::json release = read_json(files.release);
     if (release.is_discarded()) {
         return std::format("{} answered no JSON", release_url);
     }
@@ -570,7 +519,7 @@ check(const Copy& copy, Follow follow, const Fetch& fetch) {
         if (!fetch(commit_url, SHA_TYPE, files.commit, &why)) {
             return std::format("cannot ask {}: {}", commit_url, why);
         }
-        const std::vector<std::string> commit = lines_of(files.commit);
+        const std::vector<std::string> commit = read_lines(files.commit);
         offer->commit = commit.empty() ? "" : commit[0];
     }
     if (!is_newer(*offer, copy.id, follow)) {
@@ -664,7 +613,7 @@ settle(const Copy& copy) {
         fs::remove(aside(copy.exe), error);
         fs::remove(fs::path(copy.exe) += DISCARD_SUFFIX, error);
     }
-    const std::vector<std::string> applied = lines_of(files.applied);
+    const std::vector<std::string> applied = read_lines(files.applied);
     if (applied.empty()) {
         return std::nullopt;
     }
