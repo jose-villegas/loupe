@@ -31,9 +31,15 @@ check_lines() {
     };
 
     const Case cases[] = {
-        {Channel::None, false, "loupe 0.1.0 (1a2b3c4d5, local build, portable), autana 262e7d0ab"},
-        {Channel::Releases, true, "loupe 0.1.0 (1a2b3c4d5, release, installed), autana 262e7d0ab"},
-        {Channel::Main, false, "loupe 0.1.0 (1a2b3c4d5, main build, portable), autana 262e7d0ab"},
+        {.channel = Channel::None,
+         .installed = false,
+         .line = "loupe 0.1.0 (1a2b3c4d5, local build, portable), autana 262e7d0ab"},
+        {.channel = Channel::Releases,
+         .installed = true,
+         .line = "loupe 0.1.0 (1a2b3c4d5, release, installed), autana 262e7d0ab"},
+        {.channel = Channel::Main,
+         .installed = false,
+         .line = "loupe 0.1.0 (1a2b3c4d5, main build, portable), autana 262e7d0ab"},
     };
     bool ok = true;
     for (const Case& c : cases) {

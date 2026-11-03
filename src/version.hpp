@@ -2,6 +2,7 @@
 // whether it was installed, and the autana it was built against.
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 
@@ -10,7 +11,7 @@ namespace loupe {
 // Where a build's updates come from (the LOUPE_CHANNEL CMake option): the
 // GitHub release of each v<version> tag, or the rolling build of main. None
 // for a local or test build, which never updates.
-enum class Channel { None, Releases, Main };
+enum class Channel : uint8_t { None, Releases, Main };
 
 struct BuildId {
     std::string version;       // 0.1.0, the project version
