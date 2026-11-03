@@ -113,10 +113,20 @@ check_sha256(const fs::path& out) {
     return ok;
 }
 
+// `text` parsed; discarded when it is not JSON.
+nlohmann::json
+parsed(const std::string& text) {
+    try {
+        return nlohmann::json::parse(text, nullptr, false);
+    } catch (const nlohmann::json::exception&) {
+        return nlohmann::json(nlohmann::json::value_t::discarded);
+    }
+}
+
 // GitHub's saved answer in `file`, parsed.
 nlohmann::json
 answer(const fs::path& file) {
-    return nlohmann::json::parse(loupe::read_text(file), nullptr, false);
+    return parsed(loupe::read_text(file));
 }
 
 bool
@@ -156,9 +166,9 @@ check_offers(const fs::path& fixtures) {
     ok &= check(!loupe::update::parse_offer(latest, "-macos.dmg", &why) && why.find("-macos.dmg") != std::string::npos,
                 "no download for this system is refused: " + why);
     const nlohmann::json undigested =
-        nlohmann::json::parse(R"({"tag_name": "v1.0.0", "assets": [{"name": "a.zip", "browser_download_url": "u"}]})");
+        parsed(R"({"tag_name": "v1.0.0", "assets": [{"name": "a.zip", "browser_download_url": "u"}]})");
     ok &= check(!loupe::update::parse_offer(undigested, ".zip", &why), "no digest is refused: " + why);
-    const nlohmann::json odd = nlohmann::json::parse(R"({"tag_name": 1, "assets": {"name": "a.zip"}})");
+    const nlohmann::json odd = parsed(R"({"tag_name": 1, "assets": {"name": "a.zip"}})");
     ok &= check(!loupe::update::parse_offer(odd, ".zip", &why)
                     && !loupe::update::parse_offer(nlohmann::json(), ".zip", &why),
                 "fields of another type are refused, not thrown: " + why);
@@ -233,6 +243,17 @@ pack(const fs::path& dir, const std::string& top, const fs::path& archive) {
     args.insert(args.end(), how.begin(), how.end());
     args.insert(args.end(), {loupe::utf8(archive), "-C", loupe::utf8(dir), top});
     return loupe::run_logged(args, archive.parent_path() / "tar.log");
+}
+
+// `copy`'s check against a GitHub whose latest release, 9.9.9, offers
+// `archive` as `name`; whether it staged it.
+bool
+staged_offer(const loupe::update::Copy& copy, const std::string& name, const fs::path& archive) {
+    FakeGitHub github;
+    const fs::path answer = copy.config / "offer.json";
+    write(answer, release_json("v9.9.9", name, loupe::update::sha256_file(archive)));
+    github.answers = {{"/" + name, archive}, {"/releases/latest", answer}};
+    return loupe::update::check(copy, Follow::Releases, github.fetch()).starts_with("staged");
 }
 
 // A check stages only a newer, verified download, and a local build never asks.
@@ -312,12 +333,8 @@ check_swap(const fs::path& out, const std::string& name, const std::string& bin)
     fs::copy_file(loupe::exe_path(), exe, fs::copy_options::overwrite_existing);
     write(root / "scenes" / "a.apak", "old");
     const loupe::update::Copy copy = copy_of(loupe::Channel::Releases, exe, config);
-    FakeGitHub github;
-    write(dir / "swap.json", release_json("v9.9.9", name, loupe::update::sha256_file(archive)));
-    github.answers = {{"/" + name, archive}, {"/releases/latest", dir / "swap.json"}};
-    const std::string said = loupe::update::check(copy, Follow::Releases, github.fetch());
     const std::string layout = bin.empty() ? " beside its samples" : " in " + bin;
-    bool ok = check(said.starts_with("staged"), "staged for the swap" + layout + ": " + said);
+    bool ok = check(staged_offer(copy, name, archive), "staged for the swap" + layout);
 
     ok &= check(loupe::run_logged({loupe::utf8(exe), "--swap", loupe::utf8(config)}, dir / "swap.log"),
                 "the running copy" + layout + " swaps itself (" + loupe::utf8(dir / "swap.log") + ")");
@@ -389,10 +406,7 @@ check_rollback(const fs::path& out, const std::string& name) {
     write(root / "LICENSE", "old");
     write(root / "zblock", "old");
     const loupe::update::Copy copy = copy_of(loupe::Channel::Releases, exe, dir / "config");
-    FakeGitHub github;
-    write(dir / "release.json", release_json("v9.9.9", name, loupe::update::sha256_file(archive)));
-    github.answers = {{"/" + name, archive}, {"/releases/latest", dir / "release.json"}};
-    ok &= check(loupe::update::check(copy, Follow::Releases, github.fetch()).starts_with("staged"), "staged");
+    ok &= check(staged_offer(copy, name, archive), "staged");
     std::string why;
     const bool applied = loupe::update::apply_staged(copy, Follow::Releases, &why);
     ok &= check(!applied && !why.empty(), "the swap fails: " + why);
@@ -446,11 +460,8 @@ check_held(const fs::path& out) {
 bool
 check_staged_by(const fs::path& out, const std::string& name, const fs::path& archive) {
     const fs::path config = out / "staged_by";
-    FakeGitHub github;
-    write(config / "new.json", release_json("v9.9.9", name, loupe::update::sha256_file(archive)));
-    github.answers = {{"/" + name, archive}, {"/releases/latest", config / "new.json"}};
     const loupe::update::Copy copy = copy_of(loupe::Channel::Releases, out / "staged_by" / "loupe", config);
-    bool ok = check(loupe::update::check(copy, Follow::Releases, github.fetch()).starts_with("staged"), "staged");
+    bool ok = check(staged_offer(copy, name, archive), "staged");
     loupe::update::Copy by_hand = copy;
     by_hand.id.version = "0.2.0";
     by_hand.id.commit = NEW_COMMIT;
@@ -489,10 +500,7 @@ check_crash(const fs::path& out, const std::string& name) {
     write(root / "LICENSE", "old");
     const fs::path config = dir / "config";
     const loupe::update::Copy copy = copy_of(loupe::Channel::Releases, exe, config);
-    FakeGitHub github;
-    write(dir / "release.json", release_json("v9.9.9", name, loupe::update::sha256_file(archive)));
-    github.answers = {{"/" + name, archive}, {"/releases/latest", dir / "release.json"}};
-    ok &= check(loupe::update::check(copy, Follow::Releases, github.fetch()).starts_with("staged"), "staged");
+    ok &= check(staged_offer(copy, name, archive), "staged");
 
     std::stop_source stop;
     bool finished = false;
@@ -532,10 +540,7 @@ check_setup_folder(const fs::path& out) {
     const fs::path setup = dir / name;
     fs::create_directories(dir);
     fs::copy_file(loupe::exe_path(), setup);
-    FakeGitHub github;
-    write(dir / "release.json", release_json("v9.9.9", name, loupe::update::sha256_file(setup)));
-    github.answers = {{"/" + name, setup}, {"/releases/latest", dir / "release.json"}};
-    bool ok = check(loupe::update::check(copy, Follow::Releases, github.fetch()).starts_with("staged"), "staged");
+    bool ok = check(staged_offer(copy, name, setup), "staged");
     const fs::path ran = dir / "ran.txt";
     _putenv_s(SETUP_OUT, loupe::utf8(ran).c_str());
     std::string why;
