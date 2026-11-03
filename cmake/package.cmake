@@ -3,6 +3,8 @@
 # shortcuts and opens .apak files in Loupe. Linux: a tarball in the prefix layout, bin/loupe and
 # share/ with its samples, .desktop file and icon, to copy into ~/.local or
 # /usr/local or run where it lands. LOUPE_SAMPLES adds every autana demo scene's pack.
+# A Main build's files are named main in place of the version, so the rolling
+# release's links stay the same from one push to the next.
 
 set(CPACK_PACKAGE_VENDOR "jose-villegas")
 if(WIN32)
@@ -18,6 +20,10 @@ if(WIN32)
     set(CPACK_PACKAGE_INSTALL_DIRECTORY Loupe)
     set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY Loupe)
     set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
+    # Beside loupe.exe in an installed copy only: how a build knows it was installed.
+    set(CPACK_NSIS_UNINSTALL_NAME Uninstall)
+    set_property(SOURCE src/version.cpp APPEND PROPERTY COMPILE_DEFINITIONS
+                 "LOUPE_UNINSTALLER=\"${CPACK_NSIS_UNINSTALL_NAME}.exe\"")
     set(CPACK_NSIS_INSTALL_ROOT "$PROGRAMFILES64")
     set(CPACK_NSIS_PACKAGE_NAME Loupe)
     set(CPACK_NSIS_DISPLAY_NAME Loupe)
@@ -76,5 +82,11 @@ set(CPACK_STRIP_FILES ON)
 # Writes the values above into CPackConfig.cmake as they are: the
 # backslashes and quotes of the NSIS lines survive.
 set(CPACK_VERBATIM_VARIABLES ON)
-# CPACK_PACKAGE_FILE_NAME's default: loupe-<version>-<system name>.
+# loupe-<version>-<system name>; cpack_generator.cmake names the Windows ones.
+if(LOUPE_CHANNEL STREQUAL "Main")
+    set(CPACK_LOUPE_FILE_VERSION main)
+else()
+    set(CPACK_LOUPE_FILE_VERSION "${PROJECT_VERSION}")
+endif()
+set(CPACK_PACKAGE_FILE_NAME "loupe-${CPACK_LOUPE_FILE_VERSION}-${CPACK_SYSTEM_NAME}")
 include(CPack)

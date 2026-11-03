@@ -5,7 +5,8 @@ name: Build
 # against autana's main when the nightly calls it with autana-ref. Each run
 # also builds the downloads and renders every sample from them; a tag
 # v<version>, or v<version>-<pre-release> for a pre-release, publishes them as
-# that tag's GitHub Release.
+# that tag's GitHub Release, and a push to main as the rolling pre-release
+# main-build (tools/ci/publish_main.sh).
 
 on:
   pull_request:
@@ -86,8 +87,14 @@ jobs:
           "$RUNNER_TEMP/nsis-3.13/makensis.exe" -VERSION
       # The downloads: optimized, without the pack tool, every autana demo scene
       # as a sample; then each is unpacked and every sample rendered from it.
+      # Their channel (src/version.hpp): Releases from a v* tag, Main from a push
+      # to main, None from any other run. The workflow's configure keeps it.
       - name: Build, test and pack the downloads
-        run: cmake --workflow --preset release
+        env:
+          CHANNEL: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') && 'Releases' || github.ref == 'refs/heads/main' && 'Main') || 'None' }}
+        run: |
+          cmake --preset release -DLOUPE_CHANNEL="$CHANNEL"
+          cmake --workflow --preset release
       - name: Every sample renders from the unpacked download, with nothing on PATH
         run: |
           for archive in build/release/loupe-*.zip build/release/loupe-*.tar.gz; do
@@ -119,11 +126,14 @@ jobs:
   publish:
     name: GitHub Release
     needs: build
-    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    if: ${{ github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
+    # One main-build publish at a time; a newer push's waits, an older one's is dropped.
+    concurrency:
+      group: ${{ github.workflow }}-publish-${{ github.ref }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -135,6 +145,7 @@ jobs:
           path: dist
       # CPack names the files by the project version, so the tag must name it too.
       - name: Release ${{ github.ref_name }}
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
         run: |
           version=${GITHUB_REF_NAME#v}
           version=${version%%-*}
@@ -147,3 +158,6 @@ jobs:
           sh tools/ci/release_notes.sh "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY" > notes.md
           gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag \
               --title "Loupe ${GITHUB_REF_NAME#v}" --notes-file notes.md $pre
+      - name: Replace the main-build pre-release with ${{ github.sha }}
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: sh tools/ci/publish_main.sh main-build "$GITHUB_REPOSITORY" "$GITHUB_SHA" dist

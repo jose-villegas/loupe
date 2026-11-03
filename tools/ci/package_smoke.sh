@@ -2,7 +2,7 @@
 # Unpacks a download (cpack's .zip or .tar.gz) into an empty folder, or takes a
 # folder it was installed into, and renders every sample in it with -o, on a
 # PATH that holds nothing: no compiler runtime, no Python, only what the
-# download and the system carry.
+# download and the system carry. An unpacked archive's loupe says it is portable.
 #
 # usage: tools/ci/package_smoke.sh ARCHIVE|FOLDER OUT_DIR
 set -eu
@@ -32,7 +32,11 @@ if [ "$(uname -s)" = Linux ] && ldd "$loupe" >"$out/ldd.txt" 2>&1; then
         exit 1
     fi
 fi
-env PATH="$out/empty-path" "$loupe" --version
+version=$(env PATH="$out/empty-path" "$loupe" --version)
+echo "$version"
+if [ ! -d "$1" ]; then
+    case "$version" in *", portable), "*) ;; *) echo "package_smoke: an unpacked $1 is not portable" >&2; exit 1 ;; esac
+fi
 for sample in $samples; do
     image="$out/renders/$(basename "$sample" .apak).bmp"
     env PATH="$out/empty-path" "$loupe" "$sample" -o "$image"

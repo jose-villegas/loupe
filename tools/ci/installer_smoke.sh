@@ -2,10 +2,11 @@
 # Installs the Windows setup download silently into an empty folder, twice,
 # so the second replaces the first as an upgrade does. Checks its shortcuts
 # and its .apak association, renders every sample from the installed
-# loupe.exe (package_smoke.sh), then uninstalls silently and checks that
-# .apak opens what it opened before. A second install and uninstall, with
-# nothing opening .apak before, must leave nothing: no folder, shortcut or
-# registry key. Needs an admin shell, as the installer writes for all users.
+# loupe.exe (package_smoke.sh), which must say it is installed, then
+# uninstalls silently and checks that .apak opens what it opened before. A
+# second install and uninstall, with nothing opening .apak before, must leave
+# nothing: no folder, shortcut or registry key. Needs an admin shell, as the
+# installer writes for all users.
 #
 # usage: tools/ci/installer_smoke.sh SETUP_EXE OUT_DIR
 set -eu
@@ -64,6 +65,8 @@ command=$(default_of 'HKLM\Software\Classes\Loupe.apak\shell\open\command')
 echo "installer_smoke: installed twice, with shortcuts and the .apak association"
 
 tools/ci/package_smoke.sh "$dir" "$out/smoke"
+version=$("$dir/loupe.exe" --version)
+case "$version" in *", installed), "*) ;; *) fail "the installed loupe.exe says $version" ;; esac
 
 uninstall
 previous=$(default_of "$apak")

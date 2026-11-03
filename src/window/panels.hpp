@@ -26,8 +26,8 @@ struct Start {
     bool browse = false;
 };
 
-// The menu bar: About, which shows the version and the autana pin.
-void draw_menu();
+// The menu bar: About, which shows `version`, the build's version_line().
+void draw_menu(const std::string& version);
 // The window without a scene: the samples, the recent scenes and Open...;
 // `refusal` says why the last scene picked did not open.
 void draw_start(const Library& library, const std::string& refusal, Start& start);

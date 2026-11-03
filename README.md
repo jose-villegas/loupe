@@ -34,8 +34,24 @@ need no Python and no compiler; the window needs a Vulkan driver.
 
 The Linux build is made on Ubuntu 24.04 with GCC's runtime linked in, so it
 needs only glibc 2.39 or newer, X11 or Wayland, and a Vulkan driver.
-About, on the window's menu bar, or `loupe --version`, names the Loupe version and
-the autana commit it was built against.
+The [main build](https://github.com/jose-villegas/loupe/releases/tag/main-build)
+pre-release holds the same downloads built from the latest push to `main`,
+named `main` in place of the version (`loupe-main-windows-portable.zip`), so
+its links stay the same.
+
+About, on the window's menu bar, or `loupe --version`, names the build:
+
+```text
+loupe 0.1.0 (1a2b3c4d5, main build, portable), autana 262e7d0ab
+```
+
+| Part | Says |
+|---|---|
+| `0.1.0` | the version |
+| `1a2b3c4d5` | Loupe's commit |
+| `main build` | the channel it was built for: `release` from a version tag, `main build` from `main`, `local build` from anywhere else (`-DLOUPE_CHANNEL=None`, the default) |
+| `portable` | `installed` for the setup's copy, else `portable` |
+| `262e7d0ab` | the autana commit it was built against |
 
 ## Build
 
@@ -92,7 +108,7 @@ build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml --
 | `-o out.bmp`, `--video out.avi` | the last frame, every frame |
 | `--checkpoint-mb MB` | the window's checkpoint memory (1024); past it, every other checkpoint goes |
 | `--ticks N` | closes the window after N ticks, for scripted runs |
-| `--version` | prints the Loupe version and the autana commit, and exits |
+| `--version` | prints the build's version, commit, channel and autana commit (Download), and exits |
 
 The flags but the last three are autana's `third_party/autana/launcher/tools/render/scene_viewer.sh` flags, and the output is the same bytes.
 A `.apak` opens as it is: its folder is the asset dir, its name the scene id.
@@ -153,7 +169,8 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `thinning_*` | under a checkpoint budget the checkpoints stay within it, their interval doubles, and seeks still draw the straight bytes |
 | `view_switch` | a debug view picked mid-run, and kept through a seek back, draws what it drew when picked from the start |
 | `window_smoke`, `window_start` | the window opens, on a scene and on the start panel, and draws 10 ticks offscreen on Mesa's lavapipe under the Khronos validation layer, with no validation error; skipped where either is missing |
-| `version` | `--version` names the project version and the autana commit |
+| `version` | `--version` names the project version, Loupe's commit, the configured channel and the autana commit |
+| `build_id` | `--version`'s line for each channel, and a copy counts as installed only with the setup's uninstaller beside it |
 | `include_gate` | only `src/engine/autana.hpp` includes autana's headers |
 
 CI runs them on Linux and Windows at the pinned autana on every pull request,
@@ -203,6 +220,11 @@ GitHub Release, and refuses a tag that names another version. Every pull
 request and nightly run builds and smoke-tests the downloads the same way,
 without publishing them. A tag `v<version>-rc.1` publishes a pre-release whose
 files and `--version` still name `<version>`.
+
+Every push to `main` builds the same downloads with `-DLOUPE_CHANNEL=Main` and
+puts them on the `main-build` pre-release (`tools/ci/publish_main.sh`): the tag
+moves to the pushed commit, the files are replaced under the same names and the
+notes list the pull requests since the latest release.
 
 ## License
 

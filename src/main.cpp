@@ -7,6 +7,7 @@
 #include "engine/frames.hpp"
 #include "options.hpp"
 #include "path/path.hpp"
+#include "process.hpp"
 #include "version.hpp"
 #include "window/run_window.hpp"
 
@@ -19,7 +20,7 @@ main(int argc, char** argv) {
         return 2;
     }
     if (options.version) {
-        std::printf("%s\n", loupe::version_line());
+        std::printf("%s\n", loupe::version_line(loupe::build_id(loupe::exe_path().parent_path())).c_str());
         return 0;
     }
     if (options.out_bmp.empty() && options.out_video.empty()) {

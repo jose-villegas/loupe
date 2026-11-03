@@ -12,6 +12,14 @@ endif()
 option(LOUPE_PACK_TOOL "Open a .scene.toml by building its pack with autana's build_pack.py" ON)
 # The release's samples: every autana demo scene's pack, installed (cmake/package.cmake).
 option(LOUPE_SAMPLES "Install every autana demo scene's pack as a sample" OFF)
+# Where this build's updates come from (src/version.hpp); the release workflow
+# sets it for the downloads, and a local build stays None.
+set(LOUPE_CHANNEL None CACHE STRING "The channel this build is for: None, Releases or Main")
+set(channels None Releases Main)
+set_property(CACHE LOUPE_CHANNEL PROPERTY STRINGS ${channels})
+if(NOT LOUPE_CHANNEL IN_LIST channels)
+    message(FATAL_ERROR "LOUPE_CHANNEL is ${LOUPE_CHANNEL}, not one of ${channels}")
+endif()
 file(STRINGS "${AUTANA_DIR}/scripts/lib/python-min-version" python_min LIMIT_COUNT 1)
 if(LOUPE_PACK_TOOL OR LOUPE_SAMPLES)
     find_package(Python3 ${python_min} REQUIRED COMPONENTS Interpreter)
@@ -58,17 +66,18 @@ add_library(loupe_core OBJECT
     src/tools.cpp
     src/version.cpp)
 target_include_directories(loupe_core PUBLIC src)
-# The version and the autana commit, for version.cpp. The commit is read on
-# every build, so it follows the submodule whatever moved it.
+# The version, the channel and the commits, for version.cpp. The commits are
+# read on every build, so they follow whatever moved Loupe or the submodule.
 find_package(Git QUIET)
-set(autana_commit "${CMAKE_BINARY_DIR}/generated/autana_commit.inc")
-add_custom_target(autana_commit BYPRODUCTS "${autana_commit}"
-    COMMAND "${CMAKE_COMMAND}" "-DGIT=${GIT_EXECUTABLE}" "-DAUTANA_DIR=${AUTANA_DIR}" "-DOUT=${autana_commit}"
-            -P "${PROJECT_SOURCE_DIR}/cmake/autana_commit.cmake"
+set(commits "${CMAKE_BINARY_DIR}/generated/commits.inc")
+add_custom_target(commits BYPRODUCTS "${commits}"
+    COMMAND "${CMAKE_COMMAND}" "-DGIT=${GIT_EXECUTABLE}" "-DSOURCE_DIR=${PROJECT_SOURCE_DIR}"
+            "-DAUTANA_DIR=${AUTANA_DIR}" "-DOUT=${commits}" -P "${PROJECT_SOURCE_DIR}/cmake/commits.cmake"
     VERBATIM)
-add_dependencies(loupe_core autana_commit)
+add_dependencies(loupe_core commits)
 target_include_directories(loupe_core PRIVATE "${CMAKE_BINARY_DIR}/generated")
-set_property(SOURCE src/version.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_VERSION=\"${PROJECT_VERSION}\"")
+set_property(SOURCE src/version.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_VERSION=\"${PROJECT_VERSION}\""
+             "LOUPE_CHANNEL=${LOUPE_CHANNEL}")
 if(WIN32)
     # Every executable that links loupe_core, tests too, runs with UTF-8 as its code page.
     enable_language(RC)
