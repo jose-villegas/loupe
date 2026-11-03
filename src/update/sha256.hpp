@@ -1,5 +1,4 @@
-// SHA-256 from the system, for checking a download against GitHub's digest:
-// CNG on Windows, coreutils' sha256sum elsewhere.
+// SHA-256 (Mbed TLS's), for checking a download against GitHub's digest.
 #pragma once
 
 #include <filesystem>

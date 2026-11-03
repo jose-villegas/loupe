@@ -27,3 +27,8 @@
 	url = https://github.com/nlohmann/json.git
 	shallow = true
 	branch = v3.12.0
+[submodule "third_party/mbedtls"]
+	path = third_party/mbedtls
+	url = https://github.com/Mbed-TLS/mbedtls.git
+	shallow = true
+	branch = mbedtls-3.6.7

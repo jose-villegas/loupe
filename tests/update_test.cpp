@@ -1,6 +1,6 @@
-// Self-update (src/update): the system's SHA-256 on FIPS 180-4's examples,
-// as files; each copy's download found in GitHub's saved answers; which offers are newer; the setting; a check that stages
-// a verified download, deletes a corrupted one and never asks for a local
+// Self-update (src/update): SHA-256 on FIPS 180-4's examples, as files; each
+// copy's download found in GitHub's saved answers; which offers are newer;
+// the setting; a check that stages a verified download, deletes a corrupted one and never asks for a local
 // build; and a running portable copy swapped for a staged one, then settled
 // at its next start.
 //
@@ -94,7 +94,7 @@ release_json(const std::string& tag, const std::string& name, const std::string&
            + "\", \"browser_download_url\": \"https://example.invalid/" + name + "\"}]}";
 }
 
-// The system's SHA-256 of files holding FIPS 180-4's examples.
+// The SHA-256 of files holding FIPS 180-4's examples.
 bool
 check_sha256(const fs::path& out) {
     bool ok = true;
@@ -104,12 +104,7 @@ check_sha256(const fs::path& out) {
         {"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
          "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"},
         {std::string(1000000, 'a'), "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"}};
-#if defined(_WIN32)
-    const fs::path file = out / "sha256" / "example file";
-#else
-    // A backslash in its name, which sha256sum escapes.
-    const fs::path file = out / "sha256" / "example \\ file";
-#endif
+    const fs::path file = out / "sha256" / "example";
     for (const auto& [text, digest] : examples) {
         write(file, text);
         ok &= check(loupe::update::sha256_file(file) == digest, "SHA-256 of " + text.substr(0, 8) + "...");
