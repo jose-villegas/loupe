@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -116,11 +117,7 @@ check_sha256(const fs::path& out) {
 // `text` parsed; discarded when it is not JSON.
 nlohmann::json
 parsed(const std::string& text) {
-    try {
-        return nlohmann::json::parse(text, nullptr, false);
-    } catch (const nlohmann::json::exception&) {
-        return nlohmann::json(nlohmann::json::value_t::discarded);
-    }
+    return nlohmann::json::parse(text, nullptr, false);
 }
 
 // GitHub's saved answer in `file`, parsed.
@@ -568,10 +565,9 @@ swap_self(const fs::path& config) {
     return swapped ? 0 : 1;
 }
 
-} // namespace
-
+// The test as main() runs it, whatever it was run as.
 int
-main(int argc, char** argv) {
+run(int argc, char** argv) {
     if (argc == 3 && std::string(argv[1]) == "--swap") {
         return swap_self(loupe::from_utf8(argv[2]));
     }
@@ -618,4 +614,17 @@ main(int argc, char** argv) {
     ok &= check_setup_folder(out);
 #endif
     return ok ? 0 : 1;
+}
+
+} // namespace
+
+// An exception out of a check fails the test.
+int
+main(int argc, char** argv) {
+    try {
+        return run(argc, argv);
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "%s: FAILED by an exception: %s\n", TEST, error.what());
+        return 1;
+    }
 }
