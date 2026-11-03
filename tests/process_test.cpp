@@ -85,6 +85,12 @@ read_all(const fs::path& file) {
     return text.str();
 }
 
+// This test's copy in `folder`, which main() makes.
+fs::path
+copy_in(const fs::path& folder) {
+    return folder / loupe::exe_path().filename();
+}
+
 bool
 check(bool ok, const std::string& what) {
     std::fprintf(stderr, "%s: %s %s\n", TEST, ok ? "ok" : "FAILED", what.c_str());
@@ -92,7 +98,8 @@ check(bool ok, const std::string& what) {
 }
 
 bool
-check_logged(const fs::path& copy, const fs::path& folder) {
+check_logged(const fs::path& folder) {
+    const fs::path copy = copy_in(folder);
     const fs::path out = folder / "out.txt";
     const fs::path log = folder / "child.log";
     const bool ran = loupe::run_logged({loupe::utf8(copy), CHILD, loupe::utf8(out), ARGUMENT}, log);
@@ -102,10 +109,11 @@ check_logged(const fs::path& copy, const fs::path& folder) {
 }
 
 bool
-check_stopped(const fs::path& copy, const fs::path& folder) {
+check_stopped(const fs::path& folder) {
+    const fs::path copy = copy_in(folder);
     std::stop_source stop;
     const steady_clock::time_point start = steady_clock::now();
-    std::jthread asker([&stop] {
+    const std::jthread asker([&stop] {
         std::this_thread::sleep_for(STOP_AFTER);
         stop.request_stop();
     });
@@ -114,7 +122,8 @@ check_stopped(const fs::path& copy, const fs::path& folder) {
 }
 
 bool
-check_unwaited(const fs::path& copy, const fs::path& folder) {
+check_unwaited(const fs::path& folder) {
+    const fs::path copy = copy_in(folder);
     const fs::path out = folder / "line.txt";
     bool ok = check(loupe::start_unwaited(copy, {LINE, loupe::utf8(out), "/S"}), "start_unwaited starts the child");
     const steady_clock::time_point deadline = steady_clock::now() + PATIENCE;
@@ -147,10 +156,9 @@ main(int argc, char** argv) {
     const fs::path folder = fs::absolute(argv[1]) / loupe::from_utf8(FOLDER);
     fs::remove_all(folder);
     fs::create_directories(folder);
-    const fs::path copy = folder / loupe::exe_path().filename();
-    fs::copy_file(loupe::exe_path(), copy);
-    bool ok = check_logged(copy, folder);
-    ok &= check_stopped(copy, folder);
-    ok &= check_unwaited(copy, folder);
+    fs::copy_file(loupe::exe_path(), copy_in(folder));
+    bool ok = check_logged(folder);
+    ok &= check_stopped(folder);
+    ok &= check_unwaited(folder);
     return ok ? 0 : 1;
 }
