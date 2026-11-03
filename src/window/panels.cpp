@@ -6,7 +6,6 @@
 
 #include "imgui.h"
 #include "paths.hpp"
-#include "version.hpp"
 
 namespace loupe::window {
 
@@ -36,7 +35,7 @@ scene_list(const char* heading, const std::vector<std::filesystem::path>& scenes
 } // namespace
 
 void
-draw_menu() {
+draw_menu(const std::string& version) {
     bool about = false;
     if (ImGui::BeginMenuBar()) {
         about = ImGui::MenuItem(ABOUT);
@@ -47,7 +46,7 @@ draw_menu() {
         ImGui::OpenPopup(ABOUT);
     }
     if (ImGui::BeginPopupModal(ABOUT, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted(version_line());
+        ImGui::TextUnformatted(version.c_str());
         if (ImGui::Button("Close")) {
             ImGui::CloseCurrentPopup();
         }

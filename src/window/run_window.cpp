@@ -14,6 +14,7 @@
 #include "library.hpp"
 #include "paths.hpp"
 #include "scratch.hpp"
+#include "version.hpp"
 #include "window/files.hpp"
 #include "window/frame_texture.hpp"
 #include "window/gpu.hpp"
@@ -131,6 +132,7 @@ class Window {
     Scratch scratch_;
     std::optional<size_t> checkpoint_mb_;
     Folders folders_;
+    std::string version_;
     Library library_;
     std::string refusal_;
     std::optional<Shown> shown_;
@@ -138,7 +140,8 @@ class Window {
 };
 
 Window::Window(window::Gpu& gpu, const Options& options)
-    : gpu_(gpu), checkpoint_mb_(options.checkpoint_mb), folders_(window::folders()), library_(library(folders_)) {}
+    : gpu_(gpu), checkpoint_mb_(options.checkpoint_mb), folders_(window::folders()),
+      version_(version_line(build_id(folders_.exe_dir))), library_(library(folders_)) {}
 
 void
 Window::tick() {
@@ -146,7 +149,7 @@ Window::tick() {
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
     ImGui::Begin(TITLE, nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_MenuBar);
-    window::draw_menu();
+    window::draw_menu(version_);
     window::Start start;
     bool back = false;
     if (shown_) {

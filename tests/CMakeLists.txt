@@ -176,6 +176,20 @@ endfunction()
 window_smoke(window_smoke "${sponza}")
 window_smoke(window_start "")
 
-# --version names the project version and the autana commit compiled.
+# A build's id, and the uninstaller that marks an installed copy (cmake/package.cmake).
+add_executable(build_id_test build_id_test.cpp)
+target_link_libraries(build_id_test PRIVATE loupe_core)
+set(uninstaller "")
+if(WIN32)
+    set(uninstaller "${CPACK_NSIS_UNINSTALL_NAME}.exe")
+endif()
+add_test(NAME build_id COMMAND build_id_test "${CMAKE_CURRENT_BINARY_DIR}/build_id" ${uninstaller})
+
+# --version names the project version, Loupe's commit, the configured channel,
+# portable (the build folder has no uninstaller), and the autana commit compiled.
+set(channel_words_None "local build")
+set(channel_words_Releases release)
+set(channel_words_Main "main build")
 add_test(NAME version COMMAND loupe --version)
-set_tests_properties(version PROPERTIES PASS_REGULAR_EXPRESSION "^loupe ${PROJECT_VERSION}, autana [0-9a-f]+\n$")
+set_tests_properties(version PROPERTIES PASS_REGULAR_EXPRESSION
+    "^loupe ${PROJECT_VERSION} \\([0-9a-f]+, ${channel_words_${LOUPE_CHANNEL}}, portable\\), autana [0-9a-f]+\n$")

@@ -47,7 +47,7 @@ struct Options {
     // (scripted runs; until closed by default).
     std::optional<size_t> checkpoint_mb; // --checkpoint-mb
     std::optional<int> ticks;            // --ticks
-    bool version = false;                // --version: print version_line() and exit
+    bool version = false;                // --version: print the build's version_line() and exit
 };
 
 // False with `why` set for a command line it cannot run.
