@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -138,6 +139,8 @@ class Window {
     // Only a window someone uses updates; a scripted run (--ticks) never does.
     bool updates_ = false;
     window::About about_;
+    // The update check, stopped and joined before the staged build is applied.
+    std::jthread checker_;
     Library library_;
     std::string refusal_;
     std::optional<Shown> shown_;
@@ -154,7 +157,7 @@ Window::Window(window::Gpu& gpu, const Options& options)
     if (updates_) {
         about_.updated = update::settle(copy_).value_or("");
         about_.follow = update::follow(copy_);
-        update::check_in_background(copy_, about_.follow);
+        checker_ = update::check_in_background(copy_, about_.follow);
     }
 }
 
@@ -194,11 +197,16 @@ Window::tick() {
 bool
 Window::finish() {
     close();
+    checker_.request_stop();
+    if (checker_.joinable()) {
+        checker_.join();
+    }
     std::string why;
-    if (updates_ && update::follow(copy_) != update::Follow::Off) {
-        update::log(copy_, update::apply_staged(copy_, &why) ? "swapped the staged build in"
-                           : why.empty()                     ? "nothing staged"
-                                                             : why);
+    const update::Follow follow = update::follow(copy_);
+    if (updates_ && follow != update::Follow::Off) {
+        update::log(copy_, update::apply_staged(copy_, follow, &why) ? "swapped the staged build in"
+                           : why.empty()                             ? "nothing staged"
+                                                                     : why);
     }
     return ok_;
 }

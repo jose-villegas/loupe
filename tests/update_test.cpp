@@ -5,13 +5,19 @@
 // build; and a running portable copy swapped for a staged one, then settled
 // at its next start.
 //
-// usage: update_test FIXTURES OUT_DIR, which runs a copy of itself as
-// update_test --swap CONFIG for the swap.
+// Then a staged build applies only while it is newer on the followed channel;
+// a swap that fails part way puts every file back; and a setup is held
+// unchangeable from its hash until it has started.
+//
+// usage: update_test FIXTURES OUT_DIR, which runs copies of itself as
+// update_test --swap CONFIG for the swap and update_test --touch FILE.
+#include <chrono>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "paths.hpp"
@@ -260,7 +266,8 @@ check_staging(const fs::path& out, const std::string& name, const fs::path& arch
     github.answers.back().second = out / "bad.json";
     said = loupe::update::check(release, Follow::Releases, github.fetch());
     std::string why;
-    ok &= check(said.find("deleted") != std::string::npos && !loupe::update::apply_staged(release, &why) && why.empty(),
+    ok &= check(said.find("deleted") != std::string::npos
+                    && !loupe::update::apply_staged(release, Follow::Releases, &why) && why.empty(),
                 "a download that is not GitHub's digest is deleted, not staged: " + said);
     std::error_code error;
     for (const fs::directory_entry& entry : fs::recursive_directory_iterator(config, error)) {
@@ -333,12 +340,116 @@ check_swap(const fs::path& out, const std::string& name, const std::string& bin)
     return ok;
 }
 
+// A stage applies only while it is newer than the running copy on the channel
+// it follows now; anything else clears it, and so does a check that finds
+// nothing newer.
+bool
+check_stale(const fs::path& out, const std::string& name, const fs::path& archive) {
+    const fs::path config = out / "stale";
+    FakeGitHub github;
+    write(config / "new.json", release_json("v9.9.9", name, loupe::update::sha256_file(archive)));
+    write(config / "old.json", release_json("v0.0.1", name, loupe::update::sha256_file(archive)));
+    github.answers = {{"/" + name, archive}, {"/releases/latest", config / "new.json"}};
+    const loupe::update::Copy copy = copy_of(loupe::Channel::Releases, out / "stale" / "loupe", config);
+    loupe::update::Copy updated = copy;
+    updated.id.version = "9.9.9";
+    std::string why;
+    bool ok = true;
+    // `copy` and `follow` find the stage that `check(copy, Releases)` makes not newer, so clear it.
+    const auto cleared = [&](const loupe::update::Copy& running, Follow follow, const std::string& what) {
+        ok &= check(loupe::update::check(copy, Follow::Releases, github.fetch()).starts_with("staged"),
+                    "staged 9.9.9 for " + what);
+        const bool applied = loupe::update::apply_staged(running, follow, &why);
+        ok &= check(!applied && why.find("cleared") != std::string::npos, what + " does not apply it: " + why);
+        ok &= check(!loupe::update::apply_staged(copy, Follow::Releases, &why) && why.empty(), "and it is gone");
+    };
+    cleared(updated, Follow::Releases, "a copy already at 9.9.9");
+    cleared(copy, Follow::Main, "a copy that follows main now");
+    ok &= check(loupe::update::check(copy, Follow::Releases, github.fetch()).starts_with("staged"), "staged again");
+    github.answers.back().second = config / "old.json";
+    const std::string said = loupe::update::check(copy, Follow::Releases, github.fetch());
+    ok &= check(said.starts_with("up to date") && !loupe::update::apply_staged(copy, Follow::Releases, &why)
+                    && why.empty(),
+                "a check that finds nothing newer clears the stage: " + said);
+    return ok;
+}
+
+// A swap that cannot write one of its files leaves the copy as it was: here
+// the archive has a file inside zblock/, where the copy has a file zblock,
+// and its other files, sorted first, are put back.
+bool
+check_rollback(const fs::path& out, const std::string& name) {
+    const fs::path dir = out / "rollback";
+    const fs::path top = dir / "archive" / "loupe-9.9.9";
+    write(top / loupe::exe_path().filename(), NEW_EXE);
+    write(top / "LICENSE", "new");
+    write(top / "zblock" / "inner", "new");
+    const fs::path archive = dir / name;
+    bool ok = check(pack(dir / "archive", "loupe-9.9.9", archive), "the blocked archive is made");
+    const fs::path root = dir / "copy";
+    const fs::path exe = root / loupe::exe_path().filename();
+    write(exe, "old exe");
+    write(root / "LICENSE", "old");
+    write(root / "zblock", "old");
+    const loupe::update::Copy copy = copy_of(loupe::Channel::Releases, exe, dir / "config");
+    FakeGitHub github;
+    write(dir / "release.json", release_json("v9.9.9", name, loupe::update::sha256_file(archive)));
+    github.answers = {{"/" + name, archive}, {"/releases/latest", dir / "release.json"}};
+    ok &= check(loupe::update::check(copy, Follow::Releases, github.fetch()).starts_with("staged"), "staged");
+    std::string why;
+    const bool applied = loupe::update::apply_staged(copy, Follow::Releases, &why);
+    ok &= check(!applied && !why.empty(), "the swap fails: " + why);
+    ok &= check(loupe::read_text(exe) == "old exe" && loupe::read_text(root / "LICENSE") == "old"
+                    && loupe::read_text(root / "zblock") == "old",
+                "every file is as it was");
+    std::error_code error;
+    for (const fs::directory_entry& entry : fs::recursive_directory_iterator(root, error)) {
+        ok &= check(entry.path().extension() != ".old", "nothing is left aside: " + loupe::utf8(entry.path()));
+    }
+    const bool again = loupe::update::apply_staged(copy, Follow::Releases, &why);
+    ok &= check(!again && why.find("cannot") != std::string::npos, "the stage is kept for the next close: " + why);
+    return ok;
+}
+
+// A file run as verified starts while held, and while held no one can write,
+// rename or delete it (on Windows); a wrong digest runs nothing.
+bool
+check_held(const fs::path& out) {
+    const fs::path dir = out / "held";
+    const fs::path file = dir / loupe::exe_path().filename();
+    const fs::path touched = dir / "touched";
+    fs::create_directories(dir);
+    fs::copy_file(loupe::exe_path(), file);
+    const std::string digest = loupe::update::sha256_file(file);
+    bool ok = true;
+    bool ran = false;
+    ok &= check(!loupe::update::run_verified(file, std::string(64, '0'), [&ran] { return ran = true; }) && !ran,
+                "a wrong digest runs nothing");
+    const bool started = loupe::update::run_verified(file, digest, [&] {
+#if defined(_WIN32)
+        std::error_code error;
+        ok &= check(!std::ofstream(file, std::ios::binary | std::ios::app).is_open(), "no one can write it");
+        fs::rename(file, fs::path(file) += ".moved", error);
+        ok &= check(error.operator bool(), "or rename it");
+        ok &= check(!fs::remove(file, error), "or delete it");
+#endif
+        return loupe::start_unwaited(file, {"--touch", loupe::utf8(touched)});
+    });
+    ok &= check(started, "the held file starts");
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!fs::exists(touched) && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    ok &= check(fs::exists(touched), "and runs");
+    return ok;
+}
+
 // The child: this process, a staged copy's running executable, swaps itself.
 int
 swap_self(const fs::path& config) {
     std::string why;
-    const bool swapped =
-        loupe::update::apply_staged(copy_of(loupe::Channel::Releases, loupe::exe_path(), config), &why);
+    const bool swapped = loupe::update::apply_staged(copy_of(loupe::Channel::Releases, loupe::exe_path(), config),
+                                                     Follow::Releases, &why);
     std::fprintf(stderr, "%s --swap: %s\n", TEST, swapped ? "swapped" : why.c_str());
     return swapped ? 0 : 1;
 }
@@ -349,6 +460,10 @@ int
 main(int argc, char** argv) {
     if (argc == 3 && std::string(argv[1]) == "--swap") {
         return swap_self(loupe::from_utf8(argv[2]));
+    }
+    if (argc == 3 && std::string(argv[1]) == "--touch") {
+        write(loupe::from_utf8(argv[2]), "");
+        return 0;
     }
     if (argc != 3) {
         std::fprintf(stderr, "usage: %s FIXTURES OUT_DIR\n", TEST);
@@ -370,5 +485,8 @@ main(int argc, char** argv) {
     ok &= check_staging(out, name, archive);
     ok &= check_swap(out, name, "");
     ok &= check_swap(out, name, "bin");
+    ok &= check_stale(out, name, archive);
+    ok &= check_rollback(out, name);
+    ok &= check_held(out);
     return ok ? 0 : 1;
 }

@@ -6,9 +6,7 @@
 #include <cstdint>
 #include <format>
 #include <fstream>
-#include <mutex>
 #include <system_error>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -33,18 +31,15 @@ constexpr const char SHA_TYPE[] = "application/vnd.github.sha";
 constexpr const char DOWNLOAD_TYPE[] = "application/octet-stream";
 constexpr const char DIGEST_PREFIX[] = "sha256:";
 constexpr size_t SHA256_HEX = 64;
-// What a portable swap renames the running executable to; removed at the next start.
+// What a portable swap renames each file it replaces to: put back when the
+// swap fails, removed when it succeeds; the running executable's at the next start.
 constexpr const char ASIDE_SUFFIX[] = ".old";
 
 // The words settings.txt spells each Follow with.
 constexpr const char* FOLLOW_WORDS[] = {"off", "releases", "main"};
 
-// Staging and swapping, from the check's thread and the window's, one at a time.
-std::mutex staging;
-std::mutex logging;
-
 // <config>/update/'s files: the answers and the download on their way, and
-// the staged build with its record (name, SHA-256, what it is).
+// the staged build with its record (stage_record()).
 struct Files {
     fs::path dir, release, commit, part, staged, record, applied, unpacked, tool_log;
 };
@@ -128,11 +123,50 @@ describe(const Offer& offer) {
     return offer.version.empty() ? std::format("{} at {}", offer.tag, offer.commit.substr(0, 9)) : offer.version;
 }
 
+// A staged build's record, one line each: its file's name, its SHA-256, the
+// channel it was staged on, its tag, version and commit.
+enum RecordLine : uint8_t { NAME, SHA256, FOLLOWED, TAG, VERSION, COMMIT, RECORD_LINES };
+
+std::vector<std::string>
+stage_record(const Offer& offer, Follow follow) {
+    std::vector<std::string> record(RECORD_LINES);
+    record[NAME] = offer.name;
+    record[SHA256] = offer.sha256;
+    record[FOLLOWED] = FOLLOW_WORDS[static_cast<size_t>(follow)];
+    record[TAG] = offer.tag;
+    record[VERSION] = offer.version;
+    record[COMMIT] = offer.commit;
+    return record;
+}
+
+// The staged build's offer and the channel it was staged on; none when nothing is staged.
+std::optional<std::pair<Offer, std::string>>
+staged_offer(const Files& files) {
+    const std::vector<std::string> record = lines_of(files.record);
+    if (record.size() != RECORD_LINES) {
+        return std::nullopt;
+    }
+    return std::pair{Offer{.tag = record[TAG],
+                           .version = record[VERSION],
+                           .commit = record[COMMIT],
+                           .name = record[NAME],
+                           .url = "",
+                           .sha256 = record[SHA256]},
+                     record[FOLLOWED]};
+}
+
+void
+clear_stage(const Files& files) {
+    std::error_code error;
+    fs::remove(files.record, error);
+    fs::remove_all(files.staged, error);
+}
+
 // `offer`'s download into the staging folder, verified; what happened.
 std::string
-stage(const Files& files, const Offer& offer, const Fetch& fetch) {
-    const std::vector<std::string> staged = lines_of(files.record);
-    if (staged.size() >= 2 && staged[1] == offer.sha256) {
+stage(const Files& files, const Offer& offer, Follow follow, const Fetch& fetch) {
+    const std::optional<std::pair<Offer, std::string>> staged = staged_offer(files);
+    if (staged && staged->first.sha256 == offer.sha256 && staged->second == FOLLOW_WORDS[static_cast<size_t>(follow)]) {
         return std::format("{} is already staged", describe(offer));
     }
     std::string why;
@@ -146,15 +180,83 @@ stage(const Files& files, const Offer& offer, const Fetch& fetch) {
         fs::remove(files.part, error);
         return std::format("{} has SHA-256 {}, not GitHub's {}: deleted", offer.name, digest, offer.sha256);
     }
-    const std::scoped_lock hold(staging);
-    fs::remove_all(files.staged, error);
+    clear_stage(files);
     fs::create_directories(files.staged, error);
     fs::rename(files.part, files.staged / offer.name, error);
-    if (error || !write_lines(files.record, {offer.name, offer.sha256, describe(offer)})) {
+    if (error || !write_lines(files.record, stage_record(offer, follow))) {
         return std::format("cannot stage {} in {}", offer.name, utf8(files.staged));
     }
     return std::format("staged {}: {}", describe(offer), offer.name);
 }
+
+// Files a swap has replaced so far, to put back when a later one fails.
+class Replaced {
+  public:
+    Replaced() = default;
+    Replaced(const Replaced&) = delete;
+    Replaced& operator=(const Replaced&) = delete;
+    Replaced(Replaced&&) = delete;
+    Replaced& operator=(Replaced&&) = delete;
+
+    // Unless kept: every new file removed, every replaced one renamed back.
+    ~Replaced() {
+        std::error_code error;
+        for (auto it = done_.rbegin(); !kept_ && it != done_.rend(); ++it) {
+            fs::remove(it->target, error);
+            if (it->had_one) {
+                fs::rename(aside(it->target), it->target, error);
+            }
+        }
+    }
+
+    // `source` in place of `target`, which is renamed aside first; false with `why`.
+    bool
+    put(const fs::path& source, const fs::path& target, std::string* why) {
+        std::error_code error;
+        const bool had_one = fs::exists(target, error);
+        fs::create_directories(target.parent_path(), error);
+        if (had_one) {
+            fs::remove(aside(target), error);
+            fs::rename(target, aside(target), error);
+            if (error) {
+                *why = std::format("cannot rename {} aside: {}", utf8(target), error.message());
+                return false;
+            }
+        }
+        done_.push_back({.target = target, .had_one = had_one});
+        if (!fs::copy_file(source, target, error)) {
+            *why = std::format("cannot write {}: {}", utf8(target), error.message());
+            return false;
+        }
+        fs::permissions(target, fs::status(source, error).permissions(), error);
+        return true;
+    }
+
+    // Keeps the new files; the replaced ones are removed, but for a running
+    // executable, which settle() removes at the next start.
+    void
+    keep() {
+        kept_ = true;
+        std::error_code error;
+        for (const Done& done : done_) {
+            fs::remove(aside(done.target), error);
+        }
+    }
+
+  private:
+    static fs::path
+    aside(const fs::path& file) {
+        return fs::path(file) += ASIDE_SUFFIX;
+    }
+
+    struct Done {
+        fs::path target;
+        bool had_one;
+    };
+
+    std::vector<Done> done_;
+    bool kept_ = false;
+};
 
 // The file in `dir`'s tree named as `copy`'s executable; empty when there is none.
 fs::path
@@ -169,9 +271,9 @@ find_exe(const fs::path& dir, const Copy& copy) {
     return {};
 }
 
-// The archive unpacked over the copy's folder: every file but the executable
-// copied over, then the running executable renamed aside and the new one
-// put in its place.
+// The archive unpacked in the update folder, then each of the copy's files,
+// the running executable among them, renamed aside and replaced; when one
+// cannot be, every one is put back, so the copy is whole either way.
 bool
 swap_portable(const Copy& copy, const Files& files, const fs::path& archive, std::string* why) {
     std::error_code error;
@@ -190,41 +292,34 @@ swap_portable(const Copy& copy, const Files& files, const fs::path& archive, std
     // The archive's root folder (CPack's archives hold one), and the copy's
     // folder that stands for it: as many levels above the executable as the
     // archive's is below its root.
-    const fs::path inside = fs::relative(exe, files.unpacked);
-    const fs::path top = files.unpacked / *inside.begin();
-    const fs::path exe_in_top = fs::relative(exe, top);
+    const fs::path top = files.unpacked / *fs::relative(exe, files.unpacked).begin();
     fs::path root = copy.exe.parent_path();
-    for (const fs::path& level : exe_in_top.parent_path()) {
+    for (const fs::path& level : fs::relative(exe, top).parent_path()) {
         (void)level;
         root = root.parent_path();
     }
+    std::vector<fs::path> sources;
     for (const fs::directory_entry& entry : fs::recursive_directory_iterator(top, error)) {
-        const fs::path in_top = fs::relative(entry.path(), top);
-        if (!entry.is_regular_file(error) || in_top == exe_in_top) {
-            continue;
-        }
-        fs::create_directories((root / in_top).parent_path(), error);
-        if (!fs::copy_file(entry.path(), root / in_top, fs::copy_options::overwrite_existing, error)) {
-            *why = std::format("cannot write {}: {}", utf8(root / in_top), error.message());
-            return false;
+        if (entry.is_regular_file(error)) {
+            sources.push_back(entry.path());
         }
     }
-    const fs::path aside = fs::path(copy.exe) += ASIDE_SUFFIX;
-    fs::remove(aside, error);
-    fs::rename(copy.exe, aside, error);
-    if (error) {
-        *why = std::format("cannot rename {} aside: {}", utf8(copy.exe), error.message());
-        return false;
+    std::ranges::sort(sources);
+    bool swapped = true;
+    {
+        Replaced replaced;
+        for (const fs::path& source : sources) {
+            if (!replaced.put(source, root / fs::relative(source, top), why)) {
+                swapped = false;
+                break;
+            }
+        }
+        if (swapped) {
+            replaced.keep();
+        }
     }
-    if (!fs::copy_file(exe, copy.exe, error)) {
-        *why = std::format("cannot write {}: {}", utf8(copy.exe), error.message());
-        std::error_code restore;
-        fs::rename(aside, copy.exe, restore);
-        return false;
-    }
-    fs::permissions(copy.exe, fs::status(exe, error).permissions(), error);
     fs::remove_all(files.unpacked, error);
-    return true;
+    return swapped;
 }
 
 } // namespace
@@ -323,8 +418,8 @@ is_newer(const Offer& offer, const BuildId& id, Follow follow) {
 }
 
 Fetch
-curl(const fs::path& log) {
-    return [log](const std::string& url, const std::string& accept, const fs::path& out, std::string* why) {
+curl(const fs::path& log, const std::stop_token& stop) {
+    return [log, stop](const std::string& url, const std::string& accept, const fs::path& out, std::string* why) {
         const fs::path program = system_program("curl");
         if (program.empty()) {
             *why = "no curl on this system";
@@ -334,8 +429,12 @@ curl(const fs::path& log) {
         fs::create_directories(out.parent_path(), error);
         if (run_logged({utf8(program), "-fsSL", "--retry", "2", "--max-time", "600", "-H", "Accept: " + accept, "-o",
                         utf8(out), url},
-                       log)) {
+                       log, stop)) {
             return true;
+        }
+        if (stop.stop_requested()) {
+            *why = "stopped: Loupe closed";
+            return false;
         }
         const std::vector<std::string> said = lines_of(log);
         *why = said.empty() ? "curl failed" : said.back();
@@ -375,55 +474,63 @@ check(const Copy& copy, Follow follow, const Fetch& fetch) {
         offer->commit = commit.empty() ? "" : commit[0];
     }
     if (!is_newer(*offer, copy.id, follow)) {
+        clear_stage(files);
         return std::format("up to date: {} offers {}", release_url, describe(*offer));
     }
-    return stage(files, *offer, fetch);
+    return stage(files, *offer, follow, fetch);
 }
 
-void
+std::jthread
 check_in_background(const Copy& copy, Follow follow) {
     if (copy.id.built_for == Channel::None || follow == Follow::Off || copy.config.empty()) {
-        return;
+        return {};
     }
-    std::thread([copy, follow] { log(copy, check(copy, follow, curl(files_of(copy).tool_log))); }).detach();
+    return std::jthread([copy, follow](const std::stop_token& stop) {
+        log(copy, check(copy, follow, curl(files_of(copy).tool_log, stop)));
+    });
 }
 
 bool
-apply_staged(const Copy& copy, std::string* why) {
+apply_staged(const Copy& copy, Follow follow, std::string* why) {
     why->clear();
     if (copy.config.empty()) {
         return false;
     }
-    const std::scoped_lock hold(staging);
     const Files files = files_of(copy);
-    const std::vector<std::string> record = lines_of(files.record);
-    if (record.size() < 2) {
+    const std::optional<std::pair<Offer, std::string>> staged = staged_offer(files);
+    if (!staged) {
         return false;
     }
-    std::error_code error;
-    fs::remove(files.record, error);
-    const fs::path staged = files.staged / record[0];
-    if (sha256_file(staged) != record[1]) {
-        *why = std::format("{} changed since it was staged: deleted", utf8(staged));
-        fs::remove_all(files.staged, error);
+    const Offer& offer = staged->first;
+    if (staged->second != FOLLOW_WORDS[static_cast<size_t>(follow)] || !is_newer(offer, copy.id, follow)) {
+        *why = std::format("the staged {} is not newer on what this copy follows now: cleared", describe(offer));
+        clear_stage(files);
         return false;
     }
+    const fs::path file = files.staged / offer.name;
     // Read at the next start: a copy of another commit then is the new build.
     if (!write_lines(files.applied, {copy.id.commit})) {
         *why = std::format("cannot write {}", utf8(files.applied));
         return false;
     }
-    if (copy.id.installed) {
-        if (!start_unwaited(staged, {"/S"})) {
-            *why = std::format("cannot start {}", utf8(staged));
-            return false;
+    // A setup runs elevated, so it runs only as hashed: no one can change the
+    // file between the two.
+    const bool applied = copy.id.installed
+                             ? run_verified(file, offer.sha256, [&file] { return start_unwaited(file, {"/S"}); })
+                             : sha256_file(file) == offer.sha256 && swap_portable(copy, files, file, why);
+    std::error_code error;
+    if (!applied) {
+        fs::remove(files.applied, error);
+        if (why->empty()) {
+            *why = std::format("{} changed since it was staged, or would not start: cleared", utf8(file));
+            clear_stage(files);
         }
-        return true;
-    }
-    if (!swap_portable(copy, files, staged, why)) {
         return false;
     }
-    fs::remove_all(files.staged, error);
+    fs::remove(files.record, error);
+    if (!copy.id.installed) {
+        fs::remove_all(files.staged, error);
+    }
     return true;
 }
 
@@ -457,7 +564,6 @@ log(const Copy& copy, const std::string& line) {
     if (copy.config.empty()) {
         return;
     }
-    const std::scoped_lock hold(logging);
     std::error_code error;
     fs::create_directories(copy.config, error);
     std::ofstream out(copy.config / LOG_FILE, std::ios::binary | std::ios::app);

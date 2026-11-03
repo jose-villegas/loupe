@@ -6,6 +6,13 @@
 #include <cstdint>
 #include <fstream>
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace loupe::update {
 
 namespace {
@@ -115,6 +122,30 @@ sha256_file(const std::filesystem::path& file) {
         hasher.add(std::string_view(chunk.data(), static_cast<size_t>(in.gcount())));
     }
     return in.bad() ? std::string() : hasher.finish();
+}
+
+bool
+run_verified(const std::filesystem::path& file, const std::string& sha256, const std::function<bool()>& run) {
+#if defined(_WIN32)
+    // Shared for reading only: no writer, rename or delete while it is open.
+    const HANDLE held = CreateFileW(file.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
+                                    FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (held == INVALID_HANDLE_VALUE) {
+        return false;
+    }
+    Hasher hasher;
+    std::string chunk(READ_CHUNK, '\0');
+    DWORD got = 0;
+    bool read = true;
+    while ((read = ReadFile(held, chunk.data(), static_cast<DWORD>(chunk.size()), &got, nullptr) != FALSE) && got > 0) {
+        hasher.add(std::string_view(chunk.data(), got));
+    }
+    const bool ran = read && hasher.finish() == sha256 && run();
+    CloseHandle(held);
+    return ran;
+#else
+    return sha256_file(file) == sha256 && run();
+#endif
 }
 
 } // namespace loupe::update
