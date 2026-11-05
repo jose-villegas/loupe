@@ -14,7 +14,7 @@ constexpr float LEVEL_EPSILON = 1e-4F;
 
 vec3f_t
 level(vec3f_t v) {
-    return {v.x, 0.0F, v.z};
+    return {.x = v.x, .y = 0.0F, .z = v.z};
 }
 
 float
@@ -43,7 +43,8 @@ turned(const transformf_t& pose, float look_x, float look_y) {
     const float pitch =
         std::clamp(std::asin(std::clamp(forward.y, -1.0F, 1.0F)) - (look_y * Observer::RADIANS_PER_PIXEL),
                    -Observer::PITCH_LIMIT, Observer::PITCH_LIMIT);
-    const vec3f_t facing = {std::cos(pitch) * std::sin(yaw), std::sin(pitch), std::cos(pitch) * std::cos(yaw)};
+    const vec3f_t facing = {
+        .x = std::cos(pitch) * std::sin(yaw), .y = std::sin(pitch), .z = std::cos(pitch) * std::cos(yaw)};
     return transformf_looking(pose.position, facing, vec3f_up());
 }
 
@@ -91,7 +92,8 @@ drive_observer(Observer& observer, float dt_seconds) {
     const ImGuiIO& io = ImGui::GetIO();
     Steer steer;
     if (!io.WantTextInput) {
-        steer.move = {axis(ImGuiKey_D, ImGuiKey_A), axis(ImGuiKey_E, ImGuiKey_Q), axis(ImGuiKey_W, ImGuiKey_S)};
+        steer.move = {
+            .x = axis(ImGuiKey_D, ImGuiKey_A), .y = axis(ImGuiKey_E, ImGuiKey_Q), .z = axis(ImGuiKey_W, ImGuiKey_S)};
     }
     const ImVec2 began = io.MouseClickedPos[ImGuiMouseButton_Right];
     const ImVec2 min = ImGui::GetItemRectMin();

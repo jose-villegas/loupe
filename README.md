@@ -113,6 +113,14 @@ steps one frame per display refresh; the arrows and the scrubber seek through
 checkpoints, so a frame sought is the frame stepping straight there drew. The
 view picker draws the frame on screen again under another debug view.
 
+A view that draws the frame a second time from elsewhere, such as `cull`,
+shows an observer checkbox. While it is on, the timeline pauses and the shown
+frame is drawn again from a camera the person flies, the frame's own camera
+left where its path put it: W, A, S and D move, Q and E go down and up,
+dragging with the right button looks round, and the wheel scales the speed.
+Each move costs one engine frame, from a checkpoint held just before the shown
+frame. Turned off, or after a seek, the frame is the straight run's again.
+
 ## Render a scene
 
 With `-o` or `--video`, Loupe writes the frames and exits, without a window:
@@ -190,12 +198,14 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `library` | the start panel's samples, and a recent list kept most recent first, each once, at most 10 |
 | `seek` | a seek back through a checkpoint draws the bytes stepping straight there drew |
 | `thinning_*` | under a checkpoint budget the checkpoints stay within it, their interval doubles, and seeks still draw the straight bytes |
+| `observe` | under `cull`, each observer move draws one frame, the same pose draws the same bytes, and turned off or followed by a seek the frames are the straight run's |
+| `observer_steer` | the observer's keys move it along its right, its forward and the world's up at its speed, a drag turns it with a level horizon and within the pitch limit, and the wheel scales the speed within bounds |
 | `view_switch` | a debug view picked mid-run, and kept through a seek back, draws what it drew when picked from the start |
 | `window_smoke`, `window_start` | the window opens, on a scene and on the start panel, and draws 10 ticks offscreen on Mesa's lavapipe under the Khronos validation layer, with no validation error; skipped where either is missing |
 | `version` | `--version` names the project version, Loupe's commit, the configured channel and the autana commit |
 | `update` | SHA-256 on the standard's examples; GitHub's saved release answers give each system's download; which offers are newer; the setting; a check stages only a verified newer download and a local build never asks; a running copy, beside its samples and in `bin/`, is swapped for a staged one and says so at its next start |
 | `build_id` | `--version`'s line for each channel, and a copy counts as installed only with the setup's uninstaller beside it |
-| `include_gate` | only `src/engine/autana.hpp` includes autana's headers |
+| `include_gate` | only `src/engine/autana.hpp` includes autana's headers, and `src/engine/pose.hpp` its maths package |
 
 CI runs them on Linux and Windows at the pinned autana on every pull request,
 and nightly against autana's `main`, keeping one issue open while that fails.

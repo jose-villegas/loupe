@@ -33,7 +33,7 @@ struct Observer {
 // (W, S). `look_x` and `look_y` are the drag in pixels, right and down;
 // `wheel` is notches, up positive.
 struct Steer {
-    vec3f_t move = {0.0F, 0.0F, 0.0F};
+    vec3f_t move = {.x = 0.0F, .y = 0.0F, .z = 0.0F};
     float look_x = 0.0F, look_y = 0.0F;
     float wheel = 0.0F;
 };

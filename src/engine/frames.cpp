@@ -34,7 +34,7 @@ struct Frames::State {
     // While observing: the state before drawing the shown frame, apart from the
     // kept checkpoints, which thinning may drop.
     render_host_checkpoint_t* held = nullptr;
-    int64_t drawn = 0;
+    int64_t drawn = 0; // engine frames, replays included
 
     // Checkpoints sit before frames FIRST_SEEKABLE, FIRST_SEEKABLE + every...
     bool

@@ -73,13 +73,13 @@ moves() {
     expect(near(observer.pose.position, vec3f_scale(vec3f_unit_z(), -distance)), "D moves along the observer's right");
 
     // Looking down at a slant, E still climbs straight up.
-    observer = facing(vec3f_normalize({0.0F, -1.0F, 1.0F}));
+    observer = facing(vec3f_normalize({.x = 0.0F, .y = -1.0F, .z = 1.0F}));
     keys.move = vec3f_up();
     (void)steer_observer(observer, keys, dt);
     expect(near(observer.pose.position, vec3f_scale(vec3f_up(), distance)), "E moves along the world's up");
 
     observer = facing(vec3f_forward());
-    keys.move = {1.0F, 0.0F, 1.0F};
+    keys.move = {.x = 1.0F, .y = 0.0F, .z = 1.0F};
     (void)steer_observer(observer, keys, dt);
     const vec3f_t at = observer.pose.position;
     expect(std::fabs(std::sqrt(vec3f_dot(at, at)) - distance) < TOLERANCE, "a diagonal is no faster");
@@ -101,14 +101,14 @@ looks() {
     expect(std::fabs(forward(observer).y + std::sin(Observer::PITCH_LIMIT)) < TOLERANCE,
            "dragging far down stops at the pitch limit");
 
-    // The top spectator's pose: straight down, the picture's top towards +z.
-    // Looking up from it tips forward towards the picture's top.
-    observer.pose = transformf_looking(vec3f_zero(), vec3f_down(), vec3f_unit_z());
+    // Straight down with the picture's top towards +x, as no straight-ahead heading
+    // would guess: looking up from it tips forward towards the picture's top.
+    observer.pose = transformf_looking(vec3f_zero(), vec3f_down(), vec3f_right());
     drag = Steer{};
     drag.look_y = -QUARTER_DRAG / 2;
     (void)steer_observer(observer, drag, 0.0F);
     const vec3f_t tipped = forward(observer);
-    expect(tipped.z > 0.0F && std::fabs(tipped.x) < TOLERANCE, "looking up from straight down tips to the top");
+    expect(tipped.x > 0.0F && std::fabs(tipped.z) < TOLERANCE, "looking up from straight down tips to the top");
 }
 
 void
