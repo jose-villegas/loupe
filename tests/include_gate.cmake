@@ -1,9 +1,12 @@
-# Fails when any file under src/ or tests/ but src/engine/autana.hpp includes a
-# header from autana's tree. Each include resolves as the compiler finds it:
+# Fails when any file under src/ or tests/ but src/engine/autana.hpp and
+# src/engine/pose.hpp (autana's maths package alone) includes a header from
+# autana's tree. Each include resolves as the compiler finds it:
 # a quoted one beside its file first, then along INCLUDE_DIRS in order.
 file(STRINGS "${INCLUDE_DIRS}" include_dirs)
 file(REAL_PATH "${AUTANA_DIR}" autana)
 file(REAL_PATH "${SOURCE_DIR}/src/engine/autana.hpp" seam)
+file(REAL_PATH "${SOURCE_DIR}/src/engine/pose.hpp" pose)
+file(REAL_PATH "${AUTANA_DIR}/launcher/packages/math" math)
 file(GLOB_RECURSE sources "${SOURCE_DIR}/src/*" "${SOURCE_DIR}/tests/*")
 
 set(reaches "")
@@ -27,7 +30,8 @@ foreach(source IN LISTS sources)
             if(EXISTS "${base}/${name}")
                 file(REAL_PATH "${base}/${name}" found)
                 cmake_path(IS_PREFIX autana "${found}" NORMALIZE inside)
-                if(inside)
+                cmake_path(IS_PREFIX math "${found}" NORMALIZE maths)
+                if(inside AND NOT (source STREQUAL pose AND maths))
                     list(APPEND reaches "${source}: ${line} -> ${found}")
                 endif()
                 break()
@@ -38,7 +42,7 @@ endforeach()
 
 if(reaches)
     list(JOIN reaches "\n  " listed)
-    message(FATAL_ERROR "Only src/engine/autana.hpp includes autana's headers:\n  ${listed}")
+    message(FATAL_ERROR "Only src/engine/autana.hpp, and src/engine/pose.hpp for its maths, include autana's headers:\n  ${listed}")
 endif()
 list(LENGTH sources count)
-message(STATUS "${count} files, none reaching into ${autana} but src/engine/autana.hpp")
+message(STATUS "${count} files, none reaching into ${autana} but src/engine/autana.hpp and src/engine/pose.hpp")
