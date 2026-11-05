@@ -31,6 +31,10 @@ struct Frames::State {
     uint32_t dt_ms = 0;                                   // the run's, as it opened
     std::vector<uint32_t> dts;                            // each drawn frame's dt, for replaying it
     std::map<int, render_host_checkpoint_t*> checkpoints; // the state before drawing frame key
+    // While observing: the state before drawing the shown frame, apart from the
+    // kept checkpoints, which thinning may drop.
+    render_host_checkpoint_t* held = nullptr;
+    int64_t drawn = 0; // engine frames, replays included
 
     // Checkpoints sit before frames FIRST_SEEKABLE, FIRST_SEEKABLE + every...
     bool
@@ -111,6 +115,26 @@ provider_args(const std::string& id, const Options& options) {
     return args;
 }
 
+// The render context the provider draws through; null for one that draws without.
+render_context_t*
+context() {
+    return scene_provider.render_context != nullptr ? scene_provider.render_context() : nullptr;
+}
+
+// Restores `checkpoint`. It holds the view it was saved with; the view picked now stays.
+bool
+restore_keeping_view(render_host_checkpoint_t* checkpoint) {
+    render_context_t* drawing = context();
+    const int picked = drawing != nullptr ? drawing->debug_view : RENDER_DEBUG_VIEW_SHADED;
+    if (!render_host_restore(checkpoint)) {
+        return false;
+    }
+    if (drawing != nullptr) {
+        render_context_set_debug_view(drawing, picked);
+    }
+    return true;
+}
+
 } // namespace
 
 Frames::Frames(std::unique_ptr<State> state) : state_(std::move(state)) {}
@@ -179,12 +203,12 @@ Frames::checkpoint_bytes() const {
 
 bool
 Frames::has_views() const {
-    return scene_provider.render_context != nullptr;
+    return context() != nullptr;
 }
 
 int
 Frames::view() const {
-    return has_views() ? scene_provider.render_context()->debug_view : RENDER_DEBUG_VIEW_SHADED;
+    return has_views() ? context()->debug_view : RENDER_DEBUG_VIEW_SHADED;
 }
 
 bool
@@ -192,12 +216,22 @@ Frames::set_view(int view) {
     if (!has_views()) {
         return false;
     }
-    render_context_set_debug_view(scene_provider.render_context(), view);
-    return this->view() == view && redraw_shown();
+    render_context_set_debug_view(context(), view);
+    if (this->view() != view) {
+        return false;
+    }
+    // Observing, the held checkpoint redraws the shown frame in one step; restoring keeps the view set here.
+    return state_->held != nullptr ? leave_observing() : redraw_shown();
 }
 
 bool
 Frames::step(uint32_t dt_ms) {
+    stop_observing();
+    return advance(dt_ms);
+}
+
+bool
+Frames::advance(uint32_t dt_ms) {
     State& s = *state_;
     if (s.index < std::ssize(s.dts) && s.dts[s.index] != dt_ms) {
         s.forget_after(s.index);
@@ -217,6 +251,7 @@ Frames::step(uint32_t dt_ms) {
     }
     const input_t input = {};
     render_host_step(dt_ms, &input);
+    s.drawn++;
     if (s.index == std::ssize(s.dts)) {
         s.dts.push_back(dt_ms);
     }
@@ -226,7 +261,7 @@ Frames::step(uint32_t dt_ms) {
 
 bool
 Frames::seek(int index) {
-    if (index < 0 || (index < state_->index - 1 && !restore_before(index))) {
+    if (index < 0 || !leave_observing() || (index < state_->index - 1 && !restore_before(index))) {
         return false;
     }
     step_to(index);
@@ -241,13 +276,8 @@ Frames::restore_before(int index) {
         return false;
     }
     --from;
-    // The checkpoint holds the view it was saved with; the view picked now stays.
-    const int picked = view();
-    if (!render_host_restore(from->second)) {
+    if (!restore_keeping_view(from->second)) {
         return false;
-    }
-    if (has_views()) {
-        render_context_set_debug_view(scene_provider.render_context(), picked);
     }
     s.index = from->first;
     return true;
@@ -257,7 +287,7 @@ void
 Frames::step_to(int index) {
     State& s = *state_;
     while (s.index <= index) {
-        step(s.index < std::ssize(s.dts) ? s.dts[s.index] : dt_ms());
+        advance(s.index < std::ssize(s.dts) ? s.dts[s.index] : dt_ms());
     }
 }
 
@@ -273,6 +303,92 @@ Frames::redraw_shown() {
     }
     step_to(shown);
     return true;
+}
+
+bool
+Frames::can_observe() const {
+    const render_debug_view_t* row = render_context_debug_view(view());
+    return row != nullptr && row->second_view != nullptr;
+}
+
+bool
+Frames::observe(std::optional<transformf_t> pose) {
+    State& s = *state_;
+    const int shown = s.index - 1;
+    if (!can_observe() || shown < 0) {
+        return false;
+    }
+    if (!pose) {
+        return leave_observing();
+    }
+    if (s.held == nullptr) {
+        // Once: back to just before the shown frame, and hold that state.
+        if (!restore_before(shown)) {
+            return false;
+        }
+        step_to(shown - 1);
+        s.held = render_host_save();
+        if (s.held == nullptr) {
+            std::fprintf(stderr, "loupe: no checkpoint before frame %d to observe it from\n", shown);
+            step_to(shown);
+            return false;
+        }
+    } else if (restore_keeping_view(s.held)) {
+        s.index = shown;
+    } else {
+        return false;
+    }
+    render_context_set_observer(context(), &*pose);
+    return advance(s.dts[shown]);
+}
+
+bool
+Frames::leave_observing() {
+    State& s = *state_;
+    if (s.held == nullptr) {
+        return true;
+    }
+    const int shown = s.index - 1;
+    const bool restored = restore_keeping_view(s.held);
+    render_context_set_observer(context(), nullptr);
+    if (restored) {
+        s.index = shown;
+    }
+    const bool drew = restored && advance(s.dts[shown]);
+    stop_observing();
+    return drew;
+}
+
+std::optional<transformf_t>
+Frames::observer_pose() const {
+    if (!can_observe()) {
+        return std::nullopt;
+    }
+    const render_context_t* drew = context();
+    transformf_t pose;
+    if (render_context_observer_pose(drew, &pose)) {
+        return pose;
+    }
+    if (!drew->kept) {
+        return std::nullopt;
+    }
+    return render_view_pose(&drew->kept_view);
+}
+
+int64_t
+Frames::drawn() const {
+    return state_->drawn;
+}
+
+void
+Frames::stop_observing() {
+    State& s = *state_;
+    if (s.held == nullptr) {
+        return;
+    }
+    render_context_set_observer(context(), nullptr);
+    render_host_checkpoint_free(s.held);
+    s.held = nullptr;
 }
 
 int
@@ -344,9 +460,11 @@ Frames::close() {
     if (!state_->open) {
         return true;
     }
+    // The image close writes is the last drawn: the straight run's, not the observer's.
+    const bool redrawn = leave_observing();
     state_->forget_after(-1);
     state_->open = false;
-    return render_host_close();
+    return render_host_close() && redrawn;
 }
 
 bool

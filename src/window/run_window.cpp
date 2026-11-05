@@ -21,6 +21,7 @@
 #include "window/files.hpp"
 #include "window/frame_texture.hpp"
 #include "window/gpu.hpp"
+#include "window/observer.hpp"
 #include "window/panels.hpp"
 
 namespace loupe {
@@ -60,6 +61,7 @@ struct Shown {
     std::unique_ptr<Frames> frames;
     window::FrameTexture texture;
     window::Timeline timeline;
+    window::Observer observer;
     std::vector<DebugView> views;
 
     Shown(window::Gpu& gpu, std::unique_ptr<Frames> opened)
@@ -67,13 +69,30 @@ struct Shown {
           views(frames->has_views() ? debug_views() : std::vector<DebugView>{}) {}
 };
 
-// Applies one of what the panels asked for this tick, a picked view first; true
-// when the frame on screen changed. A failure clears `ok`, and a failed step stops play.
+// What the panels asked of the shown frame this tick: another view, or the
+// observer turned on, off or moved.
+struct Asked {
+    std::optional<int> view;
+    bool observe = false;
+};
+
+// Applies one of what the panels asked for this tick, a picked view first, then
+// the observer, which pauses the timeline while on; true when the frame on screen
+// changed. A failure clears `ok`, and a failed step stops play.
 bool
-apply(Frames& frames, window::Timeline& timeline, const int* picked_view, bool* ok) {
-    if (picked_view != nullptr) {
-        // Draws the shown frame again under the view, playing or not.
-        *ok &= frames.set_view(*picked_view);
+apply(Frames& frames, window::Timeline& timeline, window::Observer& observer, const Asked& asked, bool* ok) {
+    if (asked.view) {
+        // Draws the shown frame again under the view, playing or not, and leaves the observer.
+        observer.on = false;
+        *ok &= frames.set_view(*asked.view);
+        return true;
+    }
+    if (observer.on) {
+        timeline.playing = false;
+        timeline.seek_to.reset();
+    }
+    if (asked.observe) {
+        *ok &= frames.observe(observer.on ? std::optional(observer.pose) : std::nullopt);
         return true;
     }
     if (timeline.seek_to) {
@@ -102,12 +121,23 @@ draw_shown(Shown& shown, bool* ok) {
     const bool back = ImGui::Button("Scenes");
     ImGui::SameLine();
     int view = shown.frames->view();
-    const bool picked = !shown.views.empty() && window::draw_view_picker(shown.views, &view);
+    Asked asked;
+    if (!shown.views.empty() && window::draw_view_picker(shown.views, &view)) {
+        asked.view = view;
+    }
+    ImGui::SameLine();
+    const bool was_on = shown.observer.on;
+    window::draw_observer_toggle(*shown.frames, shown.observer);
+    ImGui::BeginDisabled(shown.observer.on);
     window::draw_timeline(*shown.frames, shown.timeline);
-    if (apply(*shown.frames, shown.timeline, picked ? &view : nullptr, ok)) {
+    ImGui::EndDisabled();
+    window::draw_frame(shown.texture);
+    const bool moved = shown.observer.on && window::drive_observer(shown.observer, ImGui::GetIO().DeltaTime);
+    asked.observe = moved || shown.observer.on != was_on;
+    // Uploaded after the frame is drawn, for the observer's input over it; still this tick's picture.
+    if (apply(*shown.frames, shown.timeline, shown.observer, asked, ok)) {
         shown.texture.upload(shown.frames->frame());
     }
-    window::draw_frame(shown.texture);
     return back;
 }
 
