@@ -66,8 +66,8 @@ class Frames {
     int view() const;
     // Draws under `view` from here on, and draws the shown frame again under it when a
     // checkpoint before it allows. Kept across seeks: a checkpoint holds the view it was
-    // saved with, so every restore sets it again. Stops observing first. False without a
-    // render context.
+    // saved with, so every restore sets it again. Observing, the redraw stops it. False
+    // without a render context.
     bool set_view(int view);
     // Whether the view draws a second view (render_debug_view_t.second_view), which observe() moves.
     bool can_observe() const;
@@ -84,12 +84,12 @@ class Frames {
     // Engine frames drawn since open, replays included: what seeks and observes cost.
     int64_t drawn() const;
     // Draws frame index(), `dt_ms` after the one before it; false when a checkpoint
-    // could not be saved. Stops observing first, without drawing the shown frame again.
+    // could not be saved. Stops observing first: the next frame does not depend on it.
     bool step(uint32_t dt_ms);
     // Leaves frame() at frame `index`, exactly as stepping straight there drew it.
     // False back to a frame before the first checkpoint, or to frame 0, which autana
     // cannot restore. A seek re-draws frames, so do not mix it with -o or --video.
-    // Stops observing first, as step() does.
+    // Observing, the shown frame is first drawn again without the observer.
     bool seek(int index);
     // How many frames are drawn; frame() is frame index() - 1.
     int index() const;
@@ -113,6 +113,9 @@ class Frames {
     bool advance(uint32_t dt_ms);
     // Frees the held checkpoint and clears the observer; nothing is drawn.
     void stop_observing();
+    // Draws the shown frame again from the held checkpoint without the observer,
+    // one step, then stops observing; true when not observing.
+    bool leave_observing();
     explicit Frames(std::unique_ptr<State> state);
     std::unique_ptr<State> state_;
 };

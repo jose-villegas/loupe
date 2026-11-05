@@ -216,9 +216,12 @@ Frames::set_view(int view) {
     if (!has_views()) {
         return false;
     }
-    stop_observing();
     render_context_set_debug_view(context(), view);
-    return this->view() == view && redraw_shown();
+    if (this->view() != view) {
+        return false;
+    }
+    // Observing, the held checkpoint redraws the shown frame in one step; restoring keeps the view set here.
+    return state_->held != nullptr ? leave_observing() : redraw_shown();
 }
 
 bool
@@ -258,11 +261,7 @@ Frames::advance(uint32_t dt_ms) {
 
 bool
 Frames::seek(int index) {
-    // Observed, the shown frame is the observer's picture: seeking to it draws it again.
-    const bool observed = state_->held != nullptr;
-    stop_observing();
-    const int shown = state_->index - 1;
-    if (index < 0 || ((index < shown || (observed && index == shown)) && !restore_before(index))) {
+    if (index < 0 || !leave_observing() || (index < state_->index - 1 && !restore_before(index))) {
         return false;
     }
     step_to(index);
@@ -319,8 +318,8 @@ Frames::observe(std::optional<transformf_t> pose) {
     if (!can_observe() || shown < 0) {
         return false;
     }
-    if (s.held == nullptr && !pose) {
-        return true; // not observing: the shown frame is the view's own already
+    if (!pose) {
+        return leave_observing();
     }
     if (s.held == nullptr) {
         // Once: back to just before the shown frame, and hold that state.
@@ -339,11 +338,24 @@ Frames::observe(std::optional<transformf_t> pose) {
     } else {
         return false;
     }
-    render_context_set_observer(context(), pose ? &*pose : nullptr);
-    const bool drew = advance(s.dts[shown]);
-    if (!pose) {
-        stop_observing();
+    render_context_set_observer(context(), &*pose);
+    return advance(s.dts[shown]);
+}
+
+bool
+Frames::leave_observing() {
+    State& s = *state_;
+    if (s.held == nullptr) {
+        return true;
     }
+    const int shown = s.index - 1;
+    const bool restored = restore_keeping_view(s.held);
+    render_context_set_observer(context(), nullptr);
+    if (restored) {
+        s.index = shown;
+    }
+    const bool drew = restored && advance(s.dts[shown]);
+    stop_observing();
     return drew;
 }
 
@@ -448,10 +460,11 @@ Frames::close() {
     if (!state_->open) {
         return true;
     }
-    stop_observing();
+    // The image close writes is the last drawn: the straight run's, not the observer's.
+    const bool redrawn = leave_observing();
     state_->forget_after(-1);
     state_->open = false;
-    return render_host_close();
+    return render_host_close() && redrawn;
 }
 
 bool

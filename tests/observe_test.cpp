@@ -1,7 +1,10 @@
 // Frames::observe under the cull view, which draws a second view: an observer
 // redraws the shown frame from elsewhere at one engine frame a move, and leaves
-// nothing behind; turned off, and after any seek, the bytes are a straight run's.
+// nothing behind; turned off, after any seek, a view pick or close, the bytes are a straight run's.
+#include <algorithm>
 #include <cstdio>
+#include <fstream>
+#include <iterator>
 
 #include "frames_fixture.hpp"
 
@@ -14,8 +17,10 @@ constexpr int EVERY = loupe::Frames::CHECKPOINT_EVERY;
 // shown frame from that checkpoint would cost OBSERVED - EVERY frames, not one.
 constexpr int OBSERVED = EVERY + 20;
 constexpr int STRAIGHT_TO = OBSERVED + 5;
-// After observing: the observed frame, the next, one in the first span, back to the observed.
-const int AFTER[] = {OBSERVED, OBSERVED + 1, 5, OBSERVED};
+// After observing: the next frame, one in the first span, back to the observed;
+// then the observed frame straight from an observed draw.
+const int AFTER[] = {OBSERVED + 1, 5, OBSERVED};
+const int AFTER_ON_SHOWN[] = {OBSERVED};
 constexpr int MOVES = 100;
 // The observer's step back from where it starts, per move, in metres.
 constexpr float BACK = 0.05F;
@@ -83,7 +88,22 @@ main(int argc, char** argv) {
 
     ok &= check(frames->observe(std::nullopt) && loupe::test::pixels(*frames) == straight[OBSERVED],
                 "turned off, the shown frame is the straight run's");
+    // Left by a seek forward, a seek to the observed frame, and a view pick.
     ok &= frames->observe(backed(*start, BACK));
     ok &= loupe::test::same_each(TEST, *frames, AFTER, straight, "after observing");
-    return frames->close() && ok ? 0 : 1;
+    ok &= frames->observe(backed(*start, BACK));
+    ok &= loupe::test::same_each(TEST, *frames, AFTER_ON_SHOWN, straight, "after observing");
+    ok &= frames->observe(backed(*start, BACK));
+    ok &= check(frames->set_view(view_named(VIEW)) && loupe::test::pixels(*frames) == straight[OBSERVED],
+                "a view picked while observing draws the straight run's frame");
+
+    // Closed while observing, the image -o writes is the straight run's shown frame.
+    ok &= frames->observe(backed(*start, BACK));
+    ok &= frames->close();
+    std::ifstream written(argv[2], std::ios::binary);
+    const std::vector<uint8_t> bmp{std::istreambuf_iterator<char>(written), {}};
+    const std::vector<uint8_t>& shown = straight[OBSERVED];
+    ok &= check(bmp.size() >= shown.size() && std::equal(shown.begin(), shown.end(), bmp.end() - std::ssize(shown)),
+                "closed while observing, -o writes the straight run's frame");
+    return ok ? 0 : 1;
 }

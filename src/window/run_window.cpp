@@ -87,14 +87,13 @@ apply(Frames& frames, window::Timeline& timeline, window::Observer& observer, co
         *ok &= frames.set_view(*asked.view);
         return true;
     }
-    if (asked.observe) {
-        *ok &= frames.observe(observer.on ? std::optional(observer.pose) : std::nullopt);
-        return true;
-    }
     if (observer.on) {
         timeline.playing = false;
         timeline.seek_to.reset();
-        return false;
+    }
+    if (asked.observe) {
+        *ok &= frames.observe(observer.on ? std::optional(observer.pose) : std::nullopt);
+        return true;
     }
     if (timeline.seek_to) {
         *ok &= frames.seek(*timeline.seek_to);
