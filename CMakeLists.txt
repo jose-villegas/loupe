@@ -52,8 +52,8 @@ autana_cpp_checks()
 
 # Everything but the command line. Autana's sources compile into this library
 # alone; its usage requirements stay private, and only src/engine/autana.hpp
-# includes autana's engine headers (tests/include_gate.cmake). autana's maths
-# package, below the engine, is public: src/engine/pose.hpp's poses cross into the window. Objects, not an
+# includes autana's engine headers (tests/include_gate.cmake). autana's math and
+# kinematics packages, below the engine, are public: src/engine/pose.hpp's poses cross into the window. Objects, not an
 # archive: an archive would keep render_host.c's weak stand-ins and drop the
 # scene manager's real definitions.
 add_library(loupe_core OBJECT
@@ -93,10 +93,12 @@ if(WIN32)
     target_sources(loupe_core PRIVATE src/windows/utf8.rc)
 endif()
 target_link_libraries(loupe_core PRIVATE autana::scene_provider)
-if(NOT TARGET math)
-    message(FATAL_ERROR "autana at ${AUTANA_DIR} has no math package target")
-endif()
-target_link_libraries(loupe_core PUBLIC math)
+foreach(package math kinematics)
+    if(NOT TARGET ${package})
+        message(FATAL_ERROR "autana at ${AUTANA_DIR} has no ${package} package target")
+    endif()
+endforeach()
+target_link_libraries(loupe_core PUBLIC math kinematics)
 target_link_libraries(loupe_core PUBLIC nlohmann_json::nlohmann_json mbedtls_sha256)
 # The pack tool's own programs, and where it keeps packs; --compare also
 # checks out revisions with git and lays the sides out with autana's

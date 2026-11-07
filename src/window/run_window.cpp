@@ -92,7 +92,7 @@ apply(Frames& frames, window::Timeline& timeline, window::Observer& observer, co
         timeline.seek_to.reset();
     }
     if (asked.observe) {
-        *ok &= frames.observe(observer.on ? std::optional(observer.pose) : std::nullopt);
+        *ok &= frames.observe(observer.on ? std::optional(observer.fly.pose) : std::nullopt);
         return true;
     }
     if (timeline.seek_to) {

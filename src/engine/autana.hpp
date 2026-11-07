@@ -8,6 +8,8 @@ extern "C" {
 #include "core/tune.h"
 #include "hash/name_hash64.h"
 #include "render_host.h"
+#include "scene/camera/camera.h"
+#include "scene/scene.h"
 #include "scene_viewer.h"
 }
 #undef _Static_assert

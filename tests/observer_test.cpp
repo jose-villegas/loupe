@@ -1,22 +1,29 @@
-// steer_observer(): the keys move the observer along its own right and forward
-// and the world's up at its speed, a drag turns it with a level horizon, and the
-// wheel scales its speed within bounds.
+// The observer's own part of flying, fly_motion being autana's: the start speed
+// read from the scene's box, and observer_steer() reading ImGui as steering. Keys
+// map to the axes unless a text field has them, a right drag counts only when it
+// began over the frame, and the wheel only over it.
 #include <cmath>
 #include <cstdio>
-#include <numbers>
+#include <functional>
+#include <initializer_list>
 
+#include "imgui.h"
 #include "window/observer.hpp"
 
 namespace {
 
-using loupe::window::Observer;
-using loupe::window::Steer;
-using loupe::window::steer_observer;
+using loupe::window::OBSERVER_CROSSING_S;
+using loupe::window::observer_start_speed;
+using loupe::window::observer_steer;
 
-constexpr float TOLERANCE = 1e-4F;
-constexpr float HALF_PI = std::numbers::pi_v<float> / 2;
-// A drag that turns a quarter turn.
-constexpr float QUARTER_DRAG = HALF_PI / Observer::RADIANS_PER_PIXEL;
+constexpr float TOLERANCE = 1e-5F;
+// The frame's item, from the window's top left, and points over it and past it.
+constexpr float FRAME_SIDE = 100.0F;
+constexpr float WINDOW_SIDE = 2.0F * FRAME_SIDE;
+const ImVec2 OVER = {FRAME_SIDE / 2, FRAME_SIDE / 2};
+const ImVec2 PAST = {FRAME_SIDE * 1.5F, FRAME_SIDE * 1.5F};
+const ImVec2 DRAG = {10.0F, -5.0F};
+constexpr float NOTCHES = 2.0F;
 
 int failures = 0;
 
@@ -27,113 +34,114 @@ expect(bool ok, const char* what) {
 }
 
 bool
-near(vec3f_t a, vec3f_t b) {
-    return std::fabs(a.x - b.x) < TOLERANCE && std::fabs(a.y - b.y) < TOLERANCE && std::fabs(a.z - b.z) < TOLERANCE;
+is_zero(vec3f_t v) {
+    return v.x == 0.0F && v.y == 0.0F && v.z == 0.0F;
 }
 
-vec3f_t
-forward(const Observer& observer) {
-    return quatf_rotate(observer.pose.rotation, vec3f_forward());
-}
-
-// At the origin, facing `facing` with the world's up above.
-Observer
-facing(vec3f_t direction) {
-    Observer observer;
-    observer.pose = transformf_looking(vec3f_zero(), direction, vec3f_up());
-    return observer;
-}
-
-void
-still() {
-    Observer observer = facing(vec3f_forward());
-    const transformf_t before = observer.pose;
-    expect(!steer_observer(observer, Steer{}, 1.0F), "no input leaves the pose");
-    expect(near(observer.pose.position, before.position) && near(forward(observer), vec3f_forward()),
-           "no input keeps where it stands and faces");
-    Steer keys;
-    keys.move = vec3f_forward();
-    expect(!steer_observer(observer, keys, 0.0F), "keys over no time leave the pose");
+// One ImGui frame with the frame drawn as an item at the window's top left;
+// `before` runs after NewFrame, as the window's own reads of io would see it.
+// Returns what observer_steer() read just after the item.
+fly_motion_steer_t
+tick(const std::function<void()>& before = {}) {
+    ImGui::NewFrame();
+    if (before) {
+        before();
+    }
+    ImGui::SetNextWindowPos({0.0F, 0.0F});
+    ImGui::SetNextWindowSize({WINDOW_SIDE, WINDOW_SIDE});
+    ImGui::Begin("frame", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove);
+    ImGui::SetCursorScreenPos({0.0F, 0.0F});
+    ImGui::InvisibleButton("frame", {FRAME_SIDE, FRAME_SIDE});
+    const fly_motion_steer_t steer = observer_steer();
+    ImGui::End();
+    ImGui::Render();
+    return steer;
 }
 
 void
-moves() {
-    const float dt = 0.5F;
-    // Facing +x: forward is +x and right is -z.
-    Observer observer = facing(vec3f_right());
-    const float distance = observer.speed * dt;
-    Steer keys;
-    keys.move = vec3f_forward();
-    expect(steer_observer(observer, keys, dt), "W changes the pose");
-    expect(near(observer.pose.position, vec3f_scale(vec3f_right(), distance)), "W moves speed * dt along forward");
-
-    observer = facing(vec3f_right());
-    keys.move = vec3f_right();
-    (void)steer_observer(observer, keys, dt);
-    expect(near(observer.pose.position, vec3f_scale(vec3f_unit_z(), -distance)), "D moves along the observer's right");
-
-    // Looking down at a slant, E still climbs straight up.
-    observer = facing(vec3f_normalize({.x = 0.0F, .y = -1.0F, .z = 1.0F}));
-    keys.move = vec3f_up();
-    (void)steer_observer(observer, keys, dt);
-    expect(near(observer.pose.position, vec3f_scale(vec3f_up(), distance)), "E moves along the world's up");
-
-    observer = facing(vec3f_forward());
-    keys.move = {.x = 1.0F, .y = 0.0F, .z = 1.0F};
-    (void)steer_observer(observer, keys, dt);
-    const vec3f_t at = observer.pose.position;
-    expect(std::fabs(std::sqrt(vec3f_dot(at, at)) - distance) < TOLERANCE, "a diagonal is no faster");
+keys_down(std::initializer_list<ImGuiKey> which, bool down) {
+    for (const ImGuiKey key : which) {
+        ImGui::GetIO().AddKeyEvent(key, down);
+    }
 }
 
 void
-looks() {
-    Observer observer = facing(vec3f_forward());
-    Steer drag;
-    drag.look_x = QUARTER_DRAG;
-    expect(steer_observer(observer, drag, 0.0F), "a drag changes the pose");
-    expect(near(forward(observer), vec3f_right()), "a quarter drag right turns to face right");
-    expect(near(quatf_rotate(observer.pose.rotation, vec3f_up()), vec3f_up()), "the horizon stays level");
+start_speed() {
+    const box3f_t metres = {.lo = {.x = 0.0F, .y = 0.0F, .z = 0.0F},
+                            .hi = {.x = 3.0F, .y = 4.0F, .z = 12.0F}}; // 13 corner to corner
+    expect(std::fabs(observer_start_speed(metres) - (13.0F / OBSERVER_CROSSING_S)) < TOLERANCE,
+           "the box is crossed corner to corner in the crossing time");
+    expect(observer_start_speed(box3f_empty()) == FLY_MOTION_START_SPEED, "an empty box starts at the start speed");
+}
 
-    observer = facing(vec3f_forward());
-    drag = Steer{};
-    drag.look_y = 4 * QUARTER_DRAG;
-    (void)steer_observer(observer, drag, 0.0F);
-    expect(std::fabs(forward(observer).y + std::sin(Observer::PITCH_LIMIT)) < TOLERANCE,
-           "dragging far down stops at the pitch limit");
+void
+keys() {
+    keys_down({ImGuiKey_W, ImGuiKey_D, ImGuiKey_Q}, true);
+    const fly_motion_steer_t ahead = tick();
+    expect(ahead.move.x == 1.0F && ahead.move.y == -1.0F && ahead.move.z == 1.0F, "D, Q and W: right, down, forward");
+    keys_down({ImGuiKey_W, ImGuiKey_D, ImGuiKey_Q}, false);
+    keys_down({ImGuiKey_S, ImGuiKey_A, ImGuiKey_E}, true);
+    const fly_motion_steer_t back = tick();
+    expect(back.move.x == -1.0F && back.move.y == 1.0F && back.move.z == -1.0F, "A, E and S: left, up, back");
+    const fly_motion_steer_t typing = tick([] { ImGui::GetIO().WantTextInput = true; });
+    expect(is_zero(typing.move), "a text field keeps the keys");
+    keys_down({ImGuiKey_S, ImGuiKey_A, ImGuiKey_E}, false);
+    expect(is_zero(tick().move), "no key, no move");
+}
 
-    // Straight down with the picture's top towards +x, as no straight-ahead heading
-    // would guess: looking up from it tips forward towards the picture's top.
-    observer.pose = transformf_looking(vec3f_zero(), vec3f_down(), vec3f_right());
-    drag = Steer{};
-    drag.look_y = -QUARTER_DRAG / 2;
-    (void)steer_observer(observer, drag, 0.0F);
-    const vec3f_t tipped = forward(observer);
-    expect(tipped.x > 0.0F && std::fabs(tipped.z) < TOLERANCE, "looking up from straight down tips to the top");
+// A right drag from `from` by DRAG: what the frame that sees the move reads.
+vec2f_t
+drag_from(ImVec2 from) {
+    ImGuiIO& io = ImGui::GetIO();
+    io.AddMousePosEvent(from.x, from.y);
+    (void)tick();
+    io.AddMouseButtonEvent(ImGuiMouseButton_Right, true);
+    (void)tick();
+    io.AddMousePosEvent(from.x + DRAG.x, from.y + DRAG.y);
+    const fly_motion_steer_t steer = tick();
+    io.AddMouseButtonEvent(ImGuiMouseButton_Right, false);
+    (void)tick();
+    return steer.look;
+}
+
+void
+drags() {
+    const vec2f_t over = drag_from(OVER);
+    expect(over.x == DRAG.x && over.y == DRAG.y, "a right drag begun over the frame looks by its pixels");
+    const vec2f_t past = drag_from(PAST);
+    expect(past.x == 0.0F && past.y == 0.0F, "a right drag begun past the frame does not look");
+}
+
+// The wheel turned with the mouse at `at`: what that frame reads.
+float
+wheel_at(ImVec2 at) {
+    ImGuiIO& io = ImGui::GetIO();
+    io.AddMousePosEvent(at.x, at.y);
+    (void)tick();
+    io.AddMouseWheelEvent(0.0F, NOTCHES);
+    return tick().wheel;
 }
 
 void
 wheel() {
-    Observer observer = facing(vec3f_forward());
-    Steer notch;
-    notch.wheel = 1.0F;
-    expect(!steer_observer(observer, notch, 1.0F), "the wheel leaves the pose");
-    expect(std::fabs(observer.speed - (Observer::START_SPEED * Observer::SPEED_STEP)) < TOLERANCE,
-           "a notch up scales the speed by SPEED_STEP");
-    notch.wheel = -1000.0F;
-    (void)steer_observer(observer, notch, 0.0F);
-    expect(observer.speed == Observer::SPEED_MIN, "the speed stops at SPEED_MIN");
-    notch.wheel = 1000.0F;
-    (void)steer_observer(observer, notch, 0.0F);
-    expect(observer.speed == Observer::SPEED_MAX, "the speed stops at SPEED_MAX");
+    expect(wheel_at(OVER) == NOTCHES, "the wheel over the frame scales by its notches");
+    expect(wheel_at(PAST) == 0.0F, "the wheel past the frame does not");
 }
 
 } // namespace
 
 int
 main() {
-    still();
-    moves();
-    looks();
+    start_speed();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.DisplaySize = {WINDOW_SIDE, WINDOW_SIDE};
+    // Nothing is drawn, so the atlas needs no renderer to build it up front.
+    io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+    (void)tick();
+    keys();
+    drags();
     wheel();
+    ImGui::DestroyContext();
     return failures == 0 ? 0 : 1;
 }

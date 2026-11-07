@@ -375,6 +375,12 @@ Frames::observer_pose() const {
     return render_view_pose(&drew->kept_view);
 }
 
+box3f_t
+Frames::scene_box() const {
+    const entity_t camera = camera_active();
+    return handle_is_none(camera) ? box3f_empty() : scene_bounds(camera);
+}
+
 int64_t
 Frames::drawn() const {
     return state_->drawn;
