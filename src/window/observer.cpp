@@ -1,6 +1,7 @@
 #include "window/observer.hpp"
 
 #include "imgui.h"
+#include "imgui_internal.h"
 
 namespace loupe::window {
 
@@ -29,10 +30,8 @@ observer_steer() {
         steer.move = {
             .x = axis(ImGuiKey_D, ImGuiKey_A), .y = axis(ImGuiKey_E, ImGuiKey_Q), .z = axis(ImGuiKey_W, ImGuiKey_S)};
     }
-    const ImVec2 began = io.MouseClickedPos[ImGuiMouseButton_Right];
-    const ImVec2 min = ImGui::GetItemRectMin();
-    const ImVec2 max = ImGui::GetItemRectMax();
-    const bool began_over = began.x >= min.x && began.y >= min.y && began.x < max.x && began.y < max.y;
+    const bool began_over =
+        ImRect(ImGui::GetItemRectMin(), ImGui::GetItemRectMax()).Contains(io.MouseClickedPos[ImGuiMouseButton_Right]);
     if (ImGui::IsMouseDown(ImGuiMouseButton_Right) && began_over) {
         steer.look = {.x = io.MouseDelta.x, .y = io.MouseDelta.y};
     }

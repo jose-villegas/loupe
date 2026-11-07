@@ -52,10 +52,10 @@ autana_cpp_checks()
 
 # Everything but the command line. Autana's sources compile into this library
 # alone; its usage requirements stay private, and only src/engine/autana.hpp
-# includes autana's engine headers (tests/include_gate.cmake). autana's math and
-# kinematics packages, below the engine, are public: src/engine/pose.hpp's poses cross into the window. Objects, not an
-# archive: an archive would keep render_host.c's weak stand-ins and drop the
-# scene manager's real definitions.
+# includes autana's engine headers (tests/include_gate.cmake). autana's math
+# and kinematics packages, below the engine, are public: src/engine/pose.hpp's
+# poses cross into the window. Objects, not an archive: an archive would keep
+# render_host.c's weak stand-ins and drop the scene manager's real definitions.
 add_library(loupe_core OBJECT
     src/engine/frames.cpp
     src/library.cpp

@@ -118,9 +118,10 @@ shows an observer checkbox. While it is on, the timeline pauses and the shown
 frame is drawn again from a camera the person flies, the frame's own camera
 left where its path put it: W, A, S and D move, Q and E go down and up,
 dragging with the right button looks round, and the wheel scales the speed,
-which starts at crossing the scene's box corner to corner in 20 seconds. autana's
-`fly_motion` flies it. Each move costs one engine frame, from a checkpoint held just before the shown
-frame. Unticked, or with another view picked, the frame is the straight run's again.
+which starts at crossing the scene's box corner to corner in 20 seconds.
+autana's `fly_motion` flies it. Each move costs one engine frame, from a
+checkpoint held just before the shown frame. Unticked, or with another view
+picked, the frame is the straight run's again.
 
 ## Render a scene
 

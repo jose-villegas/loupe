@@ -21,6 +21,8 @@ constexpr fly_motion_tuning_t OBSERVER_TUNING = {
     .radians_per_pixel = FLY_MOTION_RADIANS_PER_PIXEL,
     .pitch_limit = FLY_MOTION_PITCH_LIMIT,
 };
+// A field autana adds would start at zero here, unseen: fail the build instead (autana-73nya drops this copy).
+static_assert(sizeof(fly_motion_tuning_t) == 5 * sizeof(float), "fly_motion_tuning_t changed: update OBSERVER_TUNING");
 
 // `fly.pose` starts at Frames::observer_pose(), at observer_start_speed().
 struct Observer {

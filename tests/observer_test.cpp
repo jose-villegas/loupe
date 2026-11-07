@@ -23,6 +23,9 @@ constexpr float WINDOW_SIDE = 2.0F * FRAME_SIDE;
 const ImVec2 OVER = {FRAME_SIDE / 2, FRAME_SIDE / 2};
 const ImVec2 PAST = {FRAME_SIDE * 1.5F, FRAME_SIDE * 1.5F};
 const ImVec2 DRAG = {10.0F, -5.0F};
+// Points a drag crosses the frame's right edge between, just inside and just past it.
+const ImVec2 INSIDE_EDGE = {FRAME_SIDE - 5.0F, FRAME_SIDE / 2};
+const ImVec2 PAST_EDGE = {FRAME_SIDE + 10.0F, FRAME_SIDE / 2};
 constexpr float NOTCHES = 2.0F;
 
 int failures = 0;
@@ -89,15 +92,15 @@ keys() {
     expect(is_zero(tick().move), "no key, no move");
 }
 
-// A right drag from `from` by DRAG: what the frame that sees the move reads.
+// A right drag from `from` to `to`: what the frame that sees the move reads.
 vec2f_t
-drag_from(ImVec2 from) {
+drag(ImVec2 from, ImVec2 to) {
     ImGuiIO& io = ImGui::GetIO();
     io.AddMousePosEvent(from.x, from.y);
     (void)tick();
     io.AddMouseButtonEvent(ImGuiMouseButton_Right, true);
     (void)tick();
-    io.AddMousePosEvent(from.x + DRAG.x, from.y + DRAG.y);
+    io.AddMousePosEvent(to.x, to.y);
     const fly_motion_steer_t steer = tick();
     io.AddMouseButtonEvent(ImGuiMouseButton_Right, false);
     (void)tick();
@@ -106,9 +109,14 @@ drag_from(ImVec2 from) {
 
 void
 drags() {
-    const vec2f_t over = drag_from(OVER);
+    const vec2f_t over = drag(OVER, {OVER.x + DRAG.x, OVER.y + DRAG.y});
     expect(over.x == DRAG.x && over.y == DRAG.y, "a right drag begun over the frame looks by its pixels");
-    const vec2f_t past = drag_from(PAST);
+    const vec2f_t out = drag(INSIDE_EDGE, PAST_EDGE);
+    expect(out.x == PAST_EDGE.x - INSIDE_EDGE.x && out.y == 0.0F,
+           "a right drag begun over the frame looks past its edge");
+    const vec2f_t in = drag(PAST_EDGE, INSIDE_EDGE);
+    expect(in.x == 0.0F && in.y == 0.0F, "a right drag begun past the frame does not look over it");
+    const vec2f_t past = drag(PAST, {PAST.x + DRAG.x, PAST.y + DRAG.y});
     expect(past.x == 0.0F && past.y == 0.0F, "a right drag begun past the frame does not look");
 }
 
