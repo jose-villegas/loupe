@@ -92,8 +92,8 @@ jobs:
         run: python "$GATES/check_doc_index.py"
       - name: Generated files match their generator
         run: python "$GATES/check_generated_files.py"
-      - name: Self-hosted workflows reject untrusted events
-        run: python "$GATES/check_self_hosted_workflows.py"
+      - name: Workflows keep self-hosted jobs off untrusted events and queue shared runs
+        run: python "$GATES/check_workflows.py"
       - name: No new magic numbers or protocol strings
         run: python "$GATES/check_magic_numbers.py" --base "origin/${{ github.base_ref || 'main' }}" --include-root src
       - name: No new token clone pairs

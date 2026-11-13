@@ -81,6 +81,9 @@ class Frames {
     // when the view drew none: where an observer starts. None without a view
     // that can observe, or before a frame is drawn.
     std::optional<transformf_t> observer_pose() const;
+    // The world box around what the shown frame's scene draws (scene_bounds);
+    // empty with no camera drawing. An observer's start speed is read from it.
+    box3f_t scene_box() const;
     // Engine frames drawn since open, replays included: what seeks and observes cost.
     int64_t drawn() const;
     // Draws frame index(), `dt_ms` after the one before it; false when a checkpoint

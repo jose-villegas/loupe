@@ -117,9 +117,11 @@ A view that draws the frame a second time from elsewhere, such as `cull`,
 shows an observer checkbox. While it is on, the timeline pauses and the shown
 frame is drawn again from a camera the person flies, the frame's own camera
 left where its path put it: W, A, S and D move, Q and E go down and up,
-dragging with the right button looks round, and the wheel scales the speed.
-Each move costs one engine frame, from a checkpoint held just before the shown
-frame. Unticked, or with another view picked, the frame is the straight run's again.
+dragging with the right button looks round, and the wheel scales the speed,
+which starts at crossing the scene's box corner to corner in 20 seconds.
+autana's `fly_motion` flies it. Each move costs one engine frame, from a
+checkpoint held just before the shown frame. Unticked, or with another view
+picked, the frame is the straight run's again.
 
 ## Render a scene
 
@@ -199,7 +201,7 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `seek` | a seek back through a checkpoint draws the bytes stepping straight there drew |
 | `thinning_*` | under a checkpoint budget the checkpoints stay within it, their interval doubles, and seeks still draw the straight bytes |
 | `observe` | under `cull`, each observer move draws one frame and the same pose draws the same bytes; turned off, or left by a seek either way, a view pick or closing (the image `-o` writes), the frames are the straight run's |
-| `observer_steer` | the observer's keys move it along its right, its forward and the world's up at its speed, a drag turns it with a level horizon and within the pitch limit, and the wheel scales the speed within bounds |
+| `observer_steer` | the observer starts at the speed that crosses the scene's box in 20 seconds; W, A, S, D, Q and E are its axes unless a text field has the keys, a right drag looks only when it began over the frame, and the wheel counts only over it |
 | `view_switch` | a debug view picked mid-run, and kept through a seek back, draws what it drew when picked from the start |
 | `window_smoke`, `window_start` | the window opens, on a scene and on the start panel, and draws 10 ticks offscreen on Mesa's lavapipe under the Khronos validation layer, with no validation error; skipped where either is missing |
 | `version` | `--version` names the project version, Loupe's commit, the configured channel and the autana commit |

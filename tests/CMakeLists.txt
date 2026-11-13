@@ -111,7 +111,7 @@ target_link_libraries(seek_test PRIVATE loupe_core)
 add_test(NAME seek COMMAND seek_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/seek.bmp")
 on_packs(seek)
 
-# The observer: Frames::observe on the cull view, and its controller's maths.
+# The observer: Frames::observe on the cull view, and its start speed and ImGui steering.
 add_executable(observe_test observe_test.cpp)
 target_link_libraries(observe_test PRIVATE loupe_core)
 add_test(NAME observe COMMAND observe_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/observe.bmp")
