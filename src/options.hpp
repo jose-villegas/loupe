@@ -30,12 +30,16 @@ struct RenderFlags {
 
 // A flag left out keeps the provider's own default.
 struct Options {
-    // A .apak or a .scene.toml (resolve_scene); none opens the window on its start panel.
+    // A .apak or a .scene.toml (resolve_scene), or in the window a .framerec
+    // (Frames::open_stream); none opens the window on its start panel.
     std::filesystem::path scene;
     RenderFlags render;
     std::optional<int> frames;      // --frames
     std::optional<uint32_t> dt_ms;  // --dt
     std::string out_bmp, out_video; // -o, --video
+    // The run's frame record stream, written as -o or --video's frames are
+    // drawn; it opens as a .framerec.
+    std::string record; // --record
     // A path's frame, and the A | B compare (src/path/path.hpp): side B's
     // checkout, a git revision or a folder, and B's renderer flags in place of
     // A's when given.

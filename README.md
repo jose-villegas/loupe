@@ -132,7 +132,7 @@ A scene opens as docked panels:
 | Viewport | the frame, the move, rotate and scale handles on the selected object (W, E, R; along its own axes or the world's), and a cube showing which way the camera looks |
 | Outliner | the scene's objects by parent |
 | Inspector | the selected object's position, rotation in degrees and scale as numbers, then the last save and which bakes it re-keys |
-| Frame debugger | Scenes, the view picker, the observer and the timeline, as above |
+| Frame debugger | Scenes, a recording's controls (Record a board), the view picker, the observer and the timeline, as above |
 
 A click on the frame selects the object whose origin lies nearest. A drag of a
 handle or a field is one step of Edit's undo (Ctrl+Z, Ctrl+Y), whichever panel
@@ -151,6 +151,39 @@ which keeps the file's comments and layout and changes only those values. Then
 the saved scene re-keys, in the Inspector; moving a skinned or
 unbaked object re-keys none. A pack (`.apak`) has no scene file, so it opens
 without the editor, and so does a build without the pack tool.
+
+## Record a board
+
+A board running autana streams the render input of every frame it draws over
+USB: the views, meshes, poses and settings, and a crc of each keyframe's
+picture ([Frame-Record-Format](third_party/autana/docs/tools/Frame-Record-Format.md)).
+Loupe draws those frames again with autana's own renderer, so a frame from the
+board takes the debug views, the cull view and the observer like a scene's.
+
+On the start panel, List boards runs `autana devices --json` and lists the
+boards the board pool knows. Record on a free board starts `autana -b BOARD
+record` and opens its stream in this window; frames fill the timeline as they
+arrive, and play follows the newest.
+
+| Control | Sends to the board |
+|---|---|
+| Pause / Unpause | `FREEZE` / `RESUME`: the board holds one frame on screen, so it arrives whole |
+| Next frame | `STEP`: one more frame, while paused |
+| Stop | closes `autana record`'s input: the board sends what it holds and the recording ends |
+
+The panel counts the frames received and those that came after a drop on the
+board. Each recording is kept, as it arrives, as
+`recordings/<board>-<time>.framerec` in Loupe's settings folder, beside its
+`autana record` log, and joins the recent list. A `.framerec` opens like a
+scene file: on the command line, from Open..., or from recent.
+
+The stream names its packs by name and crc, and Loupe loads them from its
+samples folder. A pack whose crc differs from the board's refuses the
+stream, saying which. So the board runs a build of the autana commit Loupe
+is pinned to (`third_party/autana`): from that checkout, `autana flash dev`.
+
+A run of Loupe's own records too: `--record out.framerec` beside `-o` or
+`--video` writes the stream of the frames it draws.
 
 ## Render a scene
 
@@ -239,6 +272,8 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `editor_docs` | one undo stack across edits; only unbaked renderers place; a placement's matrix turns as autana's `quatf_from_euler` and comes back from it; the handles' matrices put a point where autana's pinhole does; a save sets only the fields that moved; the read's JSON parses, anything else is refused |
 | `place` | a placed object draws there on the shown frame at once and on frames sought after; placed back, every frame is the straight run's; an unknown name is refused |
 | `scene_save` | on a copy of the capybara scene, moving and scaling the capybara adds only its two lines; a baked renderer is refused, the file unchanged |
+| `stream` | a run's `--record`, opened as a `.framerec`, draws every frame with each keyframe's CHECK the same, and seeks back draw the bytes stepping forward drew; fed live in pieces its count grows to every frame and draws them alike; bytes that are no stream are refused |
+| `recording` | against a stand-in for `autana record`, every stream byte arrives in order and in the saved file, console lines reach its input, and Stop ends it; `autana devices --json` parses into free, held and remote boards |
 | `include_gate` | only `src/engine/autana.hpp` includes autana's engine headers; autana's packages, below the engine, are open to every file |
 
 CI runs them on Linux and Windows at the pinned autana on every pull request,

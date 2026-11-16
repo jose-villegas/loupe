@@ -12,6 +12,10 @@ namespace loupe::window {
 namespace {
 
 constexpr const char ABOUT[] = "About";
+// The console lines a recording's controls send (console_freeze).
+constexpr const char FREEZE[] = "FREEZE";
+constexpr const char RESUME[] = "RESUME";
+constexpr const char STEP[] = "STEP";
 
 // One selectable row per scene under `heading`, labelled by `label`; a click picks it.
 template <typename Label>
@@ -93,14 +97,66 @@ draw_start(const Library& library, const std::string& refusal, Start& start) {
 }
 
 void
+draw_attach(Attach& attach) {
+    ImGui::SeparatorText("Boards");
+    attach.refresh = ImGui::Button(attach.listed ? "List again" : "List boards");
+    if (!attach.why.empty()) {
+        ImGui::TextWrapped("%s", attach.why.c_str());
+    } else if (attach.listed && attach.boards.empty()) {
+        ImGui::TextDisabled("none");
+    }
+    for (const Board& board : attach.boards) {
+        ImGui::PushID(board.id.c_str());
+        ImGui::BeginDisabled(!board.free);
+        if (ImGui::Button("Record")) {
+            attach.record = board.id;
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::Text("%s  %s%s", board.id.c_str(), board.port.empty() ? "on another host" : board.port.c_str(),
+                    board.free ? "" : "  (held)");
+        ImGui::PopID();
+    }
+}
+
+void
+draw_record_controls(const Frames::StreamState& stream, const Recording::Status& status, RecordControls& controls) {
+    ImGui::BeginDisabled(status.stopped || !status.running);
+    controls.stop = ImGui::Button("Stop");
+    ImGui::SameLine();
+    if (ImGui::Button(controls.paused ? "Unpause" : "Pause")) {
+        controls.send = controls.paused ? RESUME : FREEZE;
+        controls.paused = !controls.paused;
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!controls.paused);
+    if (ImGui::Button("Next frame")) {
+        controls.send = STEP;
+    }
+    ImGui::EndDisabled();
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::Text("%d frames, %d dropped", stream.frames, stream.dropped);
+    if (stream.refused) {
+        ImGui::TextWrapped("Refused: %s", stream.why.c_str());
+    }
+    if (!status.running) {
+        ImGui::TextWrapped("Recording ended (exit %d): %s", status.exit.value_or(-1), status.last_line.c_str());
+    } else if (status.stopped) {
+        ImGui::TextDisabled("Stopping: the board drains what it holds");
+    }
+}
+
+void
 draw_timeline(const Frames& frames, Timeline& timeline) {
     const int shown = frames.index() - 1;
-    const int last = std::max(frames.count() - 1, Frames::FIRST_SEEKABLE);
+    const int first = frames.first_seekable();
+    const int last = std::max(frames.count() - 1, first);
     if (ImGui::Button(timeline.playing ? "Pause" : "Play")) {
         timeline.playing = !timeline.playing;
     }
     ImGui::SameLine();
-    ImGui::BeginDisabled(shown <= Frames::FIRST_SEEKABLE);
+    ImGui::BeginDisabled(shown <= first);
     if (ImGui::ArrowButton("back", ImGuiDir_Left)) {
         timeline.seek_to = shown - 1;
     }
@@ -114,7 +170,7 @@ draw_timeline(const Frames& frames, Timeline& timeline) {
     ImGui::SameLine();
     int picked = shown;
     ImGui::SetNextItemWidth(-FLT_MIN);
-    if (ImGui::SliderInt("##frame", &picked, Frames::FIRST_SEEKABLE, last, "frame %d")) {
+    if (ImGui::SliderInt("##frame", &picked, first, last, "frame %d")) {
         timeline.seek_to = picked;
     }
 }

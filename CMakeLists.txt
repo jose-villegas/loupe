@@ -95,7 +95,8 @@ if(WIN32)
     enable_language(RC)
     target_sources(loupe_core PRIVATE src/windows/utf8.rc)
 endif()
-target_link_libraries(loupe_core PRIVATE autana::scene_provider)
+# Scenes draw through the scene provider, recordings through the stream provider.
+target_link_libraries(loupe_core PRIVATE autana::scene_provider autana::stream_provider)
 foreach(package math kinematics)
     if(NOT TARGET ${package})
         message(FATAL_ERROR "autana at ${AUTANA_DIR} has no ${package} package target")
@@ -125,6 +126,7 @@ add_library(loupe_window OBJECT
     src/window/gpu.cpp
     src/window/observer.cpp
     src/window/panels.cpp
+    src/window/recording.cpp
     src/window/run_window.cpp)
 target_link_libraries(loupe_window PUBLIC loupe_core imgui imguizmo)
 # The window's icon, the app logo, built into the binary as the bytes of its PNG.

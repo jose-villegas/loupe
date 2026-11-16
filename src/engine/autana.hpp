@@ -12,5 +12,6 @@ extern "C" {
 #include "scene/scene.h"
 #include "scene/transform/transform.h"
 #include "scene_viewer.h"
+#include "stream/stream_provider.h"
 }
 #undef _Static_assert

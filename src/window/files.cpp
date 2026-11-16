@@ -21,15 +21,16 @@ namespace {
 constexpr const char CONFIG_ORG[] = "autana";
 constexpr const char CONFIG_APP[] = "loupe";
 
-// The scene files this build opens, as one dialog filter: extensions without
+// The scene files and recordings this build opens, as one dialog filter: extensions without
 // the dot, ";" between them. SDL reads it until the callback, so it lives as
 // long as the program.
 const SDL_DialogFileFilter&
 scene_filter() {
     const std::string_view scene_extension = SCENE_SUFFIX.substr(SCENE_SUFFIX.rfind('.') + 1);
-    static const std::string pattern =
-        std::string(PACK_SUFFIX.substr(1)) + (builds_packs() ? ";" + std::string(scene_extension) : "");
-    static const SDL_DialogFileFilter filter = {.name = "Scenes", .pattern = pattern.c_str()};
+    static const std::string pattern = std::string(PACK_SUFFIX.substr(1))
+                                       + (builds_packs() ? ";" + std::string(scene_extension) : "") + ";"
+                                       + std::string(RECORDING_SUFFIX.substr(1));
+    static const SDL_DialogFileFilter filter = {.name = "Scenes and recordings", .pattern = pattern.c_str()};
     return filter;
 }
 

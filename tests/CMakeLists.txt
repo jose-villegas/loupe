@@ -106,6 +106,18 @@ else()
     refused(compare_refused "${sponza_toml}|--compare|HEAD|--video|v.mp4" 2 "built without the pack tool --compare needs")
 endif()
 
+# A frame record stream: a host run's --record opened as a .framerec and fed live.
+add_executable(stream_test stream_test.cpp)
+target_link_libraries(stream_test PRIVATE loupe_core)
+add_test(NAME stream COMMAND stream_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/stream")
+on_packs(stream)
+
+# A board's recording against a fake autana record, and the board list's parse.
+add_executable(fake_record fake_record.cpp)
+add_executable(recording_test recording_test.cpp)
+target_link_libraries(recording_test PRIVATE loupe_core loupe_window)
+add_test(NAME recording COMMAND recording_test "$<TARGET_FILE:fake_record>" "${CMAKE_CURRENT_BINARY_DIR}/recording")
+
 add_executable(seek_test seek_test.cpp)
 target_link_libraries(seek_test PRIVATE loupe_core)
 add_test(NAME seek COMMAND seek_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/seek.bmp")

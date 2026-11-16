@@ -91,6 +91,11 @@ window_flags_fit(const Options& options, std::string* why) {
         *why = "--checkpoint-mb and --ticks are for the window, not for -o or --video";
         return false;
     }
+    // The window draws frames again as it seeks, so only a straight run records.
+    if (windowed && !options.record.empty()) {
+        *why = "--record writes the frames a -o or --video run draws";
+        return false;
+    }
     return true;
 }
 
@@ -165,6 +170,8 @@ apply_flag(const std::string& flag, const std::string& value, Options* options, 
         options->out_bmp = value;
     } else if (flag == "--video") {
         options->out_video = value;
+    } else if (flag == "--record") {
+        options->record = value;
     } else if (flag == "--compare") {
         options->compare = value;
     } else if (flag == "--b-args") {
@@ -224,7 +231,8 @@ const char*
 usage() {
     return "usage: loupe [SCENE.apak | SCENE.scene.toml] [--object NAME ...] [--camera NAME] [--view NAME]\n"
            "             [--frames N] [--dt MS] [--set owner.name=value ...] [-o out.bmp] [--video out.avi]\n"
-           "             [--checkpoint-mb MB] [--ticks N]\n"
+           "             [--record out.framerec] [--checkpoint-mb MB] [--ticks N]\n"
+           "       loupe RECORDING.framerec [--checkpoint-mb MB] [--ticks N]\n"
            "       loupe SCENE [flags] [--frames N] [--dt MS] --frame N -o out.png\n"
            "       loupe SCENE.scene.toml [flags] [--frames N] [--dt MS] --compare REV|DIR [--b-args \"FLAGS\"]\n"
            "             (--video out.mp4 | --frame N -o out.png)\n"
