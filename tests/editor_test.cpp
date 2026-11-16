@@ -145,6 +145,11 @@ matrices() {
         {.position = {1.0F, 2.0F, 3.0F}, .rotation_deg = {10.0F, 20.0F, 30.0F}, .scale = {2.0F, 1.0F, 0.5F}});
     bool ok = check(same_matrix(loupe::editor::mirror_z(loupe::editor::mirror_z(matrix)), matrix),
                     "mirror_z twice is no mirror");
+    // ImGuizmo reads a column-major float[16]: the translation is elements 12..14.
+    const loupe::editor::GizmoMatrix columns = loupe::editor::gizmo(matrix);
+    ok &= check(columns[12] == 1.0F && columns[13] == 2.0F && columns[14] == 3.0F && columns[1] == matrix.m[1][0]
+                    && same_matrix(loupe::editor::from_gizmo(columns), matrix),
+                "the handles' matrix is column-major and comes back as it was");
     // A point the engine's pinhole puts at pixel (px, py) lands there through the handles' matrices.
     const loupe::ViewCamera camera = {.eye = {1.0F, 2.0F, -5.0F},
                                       .right = vec3f_unit_x(),

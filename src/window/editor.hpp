@@ -36,7 +36,7 @@ struct Drag {
 };
 
 // The bake check a save starts (bake.py list --missing), in the background.
-// Going away stops it rather than waiting for it.
+// Going away or starting another stops the one running.
 struct BakeCheck {
     std::stop_source stop;
     std::future<editor::Rebuild> result;
@@ -47,6 +47,8 @@ struct BakeCheck {
     BakeCheck(BakeCheck&&) = default;
     BakeCheck& operator=(BakeCheck&& other) noexcept;
     ~BakeCheck();
+    // Stops and waits for the check running, then starts one on `toml`, its log in `folder`.
+    void start(const std::filesystem::path& toml, const std::filesystem::path& folder);
 };
 
 // The open scene's documents and undo stack, the outliner's tree (each

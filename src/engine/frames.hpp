@@ -139,11 +139,11 @@ class Frames {
     // checkpoint before. What observe() and place() redraw with, so a drag
     // costs a frame per move. True when nothing is drawn yet.
     bool redraw_held();
-    // Frees the held checkpoint and clears the observer; nothing is drawn.
-    void stop_observing();
-    // Draws the shown frame again from the held checkpoint without the observer,
+    // Frees the held checkpoint and clears any observer; nothing is drawn.
+    void release_hold();
+    // Draws the shown frame again from the held checkpoint without any observer,
     // one step, then frees the hold; true when nothing is held.
-    bool leave_observing();
+    bool redraw_unheld();
     explicit Frames(std::unique_ptr<State> state);
     std::unique_ptr<State> state_;
 };

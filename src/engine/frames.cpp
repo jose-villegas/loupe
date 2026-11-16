@@ -235,13 +235,13 @@ Frames::set_view(int view) {
     if (this->view() != view) {
         return false;
     }
-    // Observing, the held checkpoint redraws the shown frame in one step; restoring keeps the view set here.
-    return state_->held != nullptr ? leave_observing() : redraw_shown();
+    // Held (observing or placing), the checkpoint redraws the shown frame in one step; restoring keeps the view set here.
+    return state_->held != nullptr ? redraw_unheld() : redraw_shown();
 }
 
 bool
 Frames::step(uint32_t dt_ms) {
-    stop_observing();
+    release_hold();
     return advance(dt_ms);
 }
 
@@ -282,7 +282,7 @@ Frames::advance(uint32_t dt_ms) {
 
 bool
 Frames::seek(int index) {
-    if (index < 0 || !leave_observing() || (index < state_->index - 1 && !restore_before(index))) {
+    if (index < 0 || !redraw_unheld() || (index < state_->index - 1 && !restore_before(index))) {
         return false;
     }
     step_to(index);
@@ -340,7 +340,7 @@ Frames::observe(std::optional<transformf_t> pose) {
         return false;
     }
     if (!pose) {
-        return leave_observing();
+        return redraw_unheld();
     }
     render_context_set_observer(context(), &*pose);
     return redraw_held();
@@ -374,7 +374,7 @@ Frames::redraw_held() {
 }
 
 bool
-Frames::leave_observing() {
+Frames::redraw_unheld() {
     State& s = *state_;
     if (s.held == nullptr) {
         return true;
@@ -386,7 +386,7 @@ Frames::leave_observing() {
         s.index = shown;
     }
     const bool drew = restored && advance(s.dts[shown]);
-    stop_observing();
+    release_hold();
     return drew;
 }
 
@@ -465,7 +465,7 @@ Frames::drawn() const {
 }
 
 void
-Frames::stop_observing() {
+Frames::release_hold() {
     State& s = *state_;
     if (s.held == nullptr) {
         return;
@@ -545,7 +545,7 @@ Frames::close() {
         return true;
     }
     // The image close writes is the last drawn: the straight run's, not the observer's.
-    const bool redrawn = leave_observing();
+    const bool redrawn = redraw_unheld();
     state_->forget_after(-1);
     state_->open = false;
     return render_host_close() && redrawn;

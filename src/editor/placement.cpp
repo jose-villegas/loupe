@@ -55,6 +55,28 @@ to_placement(const mat4f_t& matrix) {
                      .scale = values(transform.scale)};
 }
 
+GizmoMatrix
+gizmo(const mat4f_t& matrix) {
+    GizmoMatrix out{};
+    for (size_t row = 0; row < 4; row++) {
+        for (size_t column = 0; column < 4; column++) {
+            out[(column * 4) + row] = matrix.m[row][column];
+        }
+    }
+    return out;
+}
+
+mat4f_t
+from_gizmo(const GizmoMatrix& values) {
+    mat4f_t out{};
+    for (size_t row = 0; row < 4; row++) {
+        for (size_t column = 0; column < 4; column++) {
+            out.m[row][column] = values[(column * 4) + row];
+        }
+    }
+    return out;
+}
+
 mat4f_t
 mirror_z(const mat4f_t& matrix) {
     mat4f_t out = matrix;

@@ -29,30 +29,9 @@ constexpr ImU32 CUBE_BACKGROUND = IM_COL32(0, 0, 0, 0);
 constexpr std::array<float, 3> FIELD_SPEEDS = {0.01F, 0.5F, 0.005F};
 constexpr ImVec4 BAKED_COLOUR = {0.95F, 0.75F, 0.3F, 1.0F};
 
-// ImGuizmo's float[16] is column-major: element [column * 4 + row].
-using GizmoMatrix = std::array<float, 16>;
-
-GizmoMatrix
-gizmo(const mat4f_t& matrix) {
-    GizmoMatrix out{};
-    for (int row = 0; row < 4; row++) {
-        for (int column = 0; column < 4; column++) {
-            out[static_cast<size_t>(column * 4 + row)] = matrix.m[row][column];
-        }
-    }
-    return out;
-}
-
-mat4f_t
-from_gizmo(const GizmoMatrix& values) {
-    mat4f_t out{};
-    for (int row = 0; row < 4; row++) {
-        for (int column = 0; column < 4; column++) {
-            out.m[row][column] = values[static_cast<size_t>(column * 4 + row)];
-        }
-    }
-    return out;
-}
+using editor::from_gizmo;
+using editor::gizmo;
+using editor::GizmoMatrix;
 
 bool
 is_scene_file(const std::filesystem::path& scene) {
@@ -216,6 +195,12 @@ BakeCheck::operator=(BakeCheck&& other) noexcept {
 
 BakeCheck::~BakeCheck() { stop.request_stop(); }
 
+void
+BakeCheck::start(const std::filesystem::path& toml, const std::filesystem::path& folder) {
+    *this = BakeCheck{};
+    result = std::async(std::launch::async, editor::rebuild, toml, folder, stop.get_token());
+}
+
 Editor
 editor_over(editor::SceneDoc doc) {
     Editor editor;
@@ -287,6 +272,8 @@ apply(Editor& editor, const EditAsk& ask) {
     if (!ask.save || editor.scratch == nullptr) {
         return;
     }
+    // A running check reads the file the save writes, and writes the log the next check opens.
+    editor.checking = {};
     std::string why;
     const std::filesystem::path folder = editor.scratch->path();
     if (!editor::save_scene(editor.docs.scene, folder, &why)) {
@@ -296,10 +283,7 @@ apply(Editor& editor, const EditAsk& ask) {
     }
     editor.status = "Saved " + utf8(editor.docs.scene.toml.filename());
     editor.checked.reset();
-    BakeCheck check;
-    check.result =
-        std::async(std::launch::async, editor::rebuild, editor.docs.scene.toml, folder, check.stop.get_token());
-    editor.checking = std::move(check);
+    editor.checking.start(editor.docs.scene.toml, folder);
 }
 
 void
@@ -396,6 +380,10 @@ draw_handles(Editor& editor, const Frames& frames, ImVec2 min, ImVec2 max) {
             end_drag(editor);
         }
         editor.handles_held = held;
+    } else if (editor.handles_held) {
+        // The object went away or stopped placing mid-drag: the drag ends here.
+        end_drag(editor);
+        editor.handles_held = false;
     }
     // The view cube shows which way the camera looks. It turns its own copy of the view, so it moves nothing.
     GizmoMatrix cube_view = gizmo_view;
