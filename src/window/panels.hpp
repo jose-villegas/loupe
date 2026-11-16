@@ -3,10 +3,12 @@
 #pragma once
 
 #include <filesystem>
+#include <future>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "board/boards.hpp"
 #include "engine/frames.hpp"
 #include "imgui.h"
 #include "library.hpp"
@@ -32,10 +34,10 @@ struct Start {
 // The start panel's boards: the pool's last listing, why it failed, and
 // what was asked this tick: list them again, or record one.
 struct Attach {
-    std::vector<Board> boards;
-    std::string why;
+    BoardList list;
     bool listed = false;
     bool refresh = false;
+    std::future<BoardList> listing; // valid while `autana devices` runs
     std::optional<std::string> record;
 };
 

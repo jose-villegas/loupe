@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <format>
+#include <future>
 #include <memory>
 #include <optional>
 #include <string>
@@ -11,6 +12,7 @@
 #include <utility>
 #include <vector>
 
+#include "board/boards.hpp"
 #include "engine/frames.hpp"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -326,6 +328,11 @@ class Window {
   private:
     // Closes the open scene, if any, back to the start panel.
     void close();
+    // Scenes pressed: a running recording is stopped first, and the window
+    // shows it draining until it has ended, then closes.
+    void leave();
+    // Starts a board listing when asked, off this thread; takes it when done.
+    void list_boards();
 
     window::Gpu& gpu_;
     // A window run's stand-in for -o: autana's close writes the last frame, to
@@ -345,6 +352,7 @@ class Window {
     window::Attach attach_;
     std::string refusal_;
     std::optional<Shown> shown_;
+    bool leaving_ = false; // leave() waits for a recording to end
     bool ok_ = true;
 };
 
@@ -393,13 +401,13 @@ Window::tick() {
     ImGui::End();
     gpu_.end_frame();
     if (back) {
+        leave();
+    }
+    if (leaving_ && (!shown_ || !shown_->recording->status().running)) {
+        leaving_ = false;
         close();
     }
-    if (attach_.refresh) {
-        attach_.why.clear();
-        attach_.boards = window::list_boards(&attach_.why);
-        attach_.listed = true;
-    }
+    list_boards();
     if (attach_.record) {
         (void)attach(*attach_.record);
         attach_.record.reset();
@@ -434,8 +442,34 @@ Window::finish() {
 }
 
 void
+Window::leave() {
+    if (shown_ && shown_->recording && shown_->recording->status().running) {
+        shown_->recording->stop();
+        leaving_ = true;
+        return;
+    }
+    close();
+}
+
+void
+Window::list_boards() {
+    if (attach_.refresh && !attach_.listing.valid()) {
+        attach_.listing = std::async(std::launch::async, loupe::list_boards, scratch_.path() / "devices.log");
+    }
+    if (attach_.listing.valid() && attach_.listing.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        attach_.list = attach_.listing.get();
+        attach_.listed = true;
+    }
+}
+
+void
 Window::close() {
     if (shown_) {
+        // A recording joins the recent list once it holds bytes; one refused at once does not.
+        std::error_code missing;
+        if (shown_->recording && std::filesystem::file_size(shown_->recording->saved(), missing) > 0) {
+            (void)remember(folders_, shown_->recording->saved());
+        }
         ok_ &= shown_->frames->close();
         shown_.reset();
         gpu_.set_title(TITLE);
@@ -483,9 +517,8 @@ Window::attach(const std::string& board) {
         Options live;
         live.out_bmp = utf8(scratch_.path() / "frame.bmp");
         frames = open_recording(live, samples_dir(folders_), board, &why);
-        recording = frames != nullptr
-                        ? window::Recording::start(window::autana_command({"-b", board, "record"}), file, &why)
-                        : nullptr;
+        recording =
+            frames != nullptr ? window::Recording::start(autana_command({"-b", board, "record"}), file, &why) : nullptr;
     }
     if (recording == nullptr) {
         refusal_ = std::format("{}: {}", board, why);
@@ -493,12 +526,11 @@ Window::attach(const std::string& board) {
         return false;
     }
     refusal_.clear();
-    (void)remember(folders_, recording->saved());
     gpu_.set_title(std::format("{}: {} (recording)", TITLE, board));
     shown_.emplace(gpu_, std::move(frames));
     shown_->recording = std::move(recording);
     shown_->editor_why = RECORDING_NO_EDITOR;
-    // Play follows the frames as they arrive.
+    // Play draws each frame as it arrives.
     shown_->timeline.playing = true;
     return true;
 }

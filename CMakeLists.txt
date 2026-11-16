@@ -57,6 +57,7 @@ autana_cpp_checks()
 # poses cross into the window. Objects, not an archive: an archive would keep
 # render_host.c's weak stand-ins and drop the scene manager's real definitions.
 add_library(loupe_core OBJECT
+    src/board/boards.cpp
     src/editor/doc.cpp
     src/editor/placement.cpp
     src/editor/scene_tool.cpp

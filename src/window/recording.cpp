@@ -1,12 +1,12 @@
 #include "window/recording.hpp"
 
 #include <array>
-#include <chrono>
+#include <cstdio>
+#include <exception>
 #include <fstream>
 #include <utility>
 
 #include <SDL3/SDL.h>
-#include <nlohmann/json.hpp>
 
 #include "paths.hpp"
 #include "process.hpp"
@@ -21,8 +21,8 @@ namespace {
 constexpr size_t READ_BYTES = size_t{64} * 1024;
 // How long the reader waits before reading a pipe that had nothing again.
 constexpr auto IDLE_WAIT = std::chrono::milliseconds(2);
-// The pool's word for a board no one holds.
-constexpr std::string_view FREE_STATE = "unlocked";
+// How often the destructor looks whether the child has ended.
+constexpr auto END_POLL = std::chrono::milliseconds(20);
 
 // The last non-empty line of `file`; empty when it has none.
 std::string
@@ -38,68 +38,15 @@ last_line(const fs::path& file) {
 
 } // namespace
 
-std::vector<std::string>
-autana_command(const std::vector<std::string>& args) {
-#if defined(_WIN32)
-    std::vector<std::string> command = {utf8(system_program("cmd")), "/d", "/c", "autana"};
-#else
-    std::vector<std::string> command = {"autana"};
-#endif
-    command.insert(command.end(), args.begin(), args.end());
-    return command;
-}
-
-std::vector<Board>
-parse_boards(const std::string& json, std::string* why) {
-    const nlohmann::json parsed = nlohmann::json::parse(json, nullptr, false);
-    if (parsed.is_discarded() || !parsed.contains("boards") || !parsed["boards"].is_array()) {
-        *why = "autana devices --json gave no boards: " + json;
-        return {};
-    }
-    std::vector<Board> boards;
-    try {
-        for (const nlohmann::json& item : parsed["boards"]) {
-            const nlohmann::json& port = item.at("port");
-            boards.push_back({.id = item.at("board").get<std::string>(),
-                              .port = port.is_null() ? std::string() : port.get<std::string>(),
-                              .free = item.at("state").get<std::string>() == FREE_STATE});
-        }
-    } catch (const nlohmann::json::exception& error) {
-        *why = std::string("autana devices --json gave a board without its fields: ") + error.what();
-        return {};
-    }
-    return boards;
-}
-
-std::vector<Board>
-list_boards(std::string* why) {
-    const std::vector<std::string> command = autana_command({"devices", "--json"});
-    const std::vector<char*> argv = argv_of(command);
-    SDL_Process* process = SDL_CreateProcess(argv.data(), true);
-    if (process == nullptr) {
-        *why = std::string("cannot run autana devices: ") + SDL_GetError();
-        return {};
-    }
-    size_t size = 0;
-    int exit_code = 0;
-    char* output = static_cast<char*>(SDL_ReadProcess(process, &size, &exit_code));
-    SDL_DestroyProcess(process);
-    const std::string text = output != nullptr ? std::string(output, size) : std::string();
-    SDL_free(output);
-    if (exit_code != 0) {
-        *why = "autana devices failed: " + text;
-        return {};
-    }
-    return parse_boards(text, why);
-}
-
 std::unique_ptr<Recording>
-Recording::start(const std::vector<std::string>& command, const fs::path& save_to, std::string* why) {
+Recording::start(const std::vector<std::string>& command, const fs::path& save_to, std::string* why,
+                 std::chrono::milliseconds end_within) {
     std::error_code error;
     fs::create_directories(save_to.parent_path(), error);
     std::unique_ptr<Recording> recording(new Recording());
     recording->saved_ = save_to;
     recording->log_ = fs::path(save_to).concat(".log");
+    recording->end_within_ = end_within;
     SDL_IOStream* log = SDL_IOFromFile(utf8(recording->log_).c_str(), "w");
     if (log == nullptr) {
         *why = "cannot write " + utf8(recording->log_) + ": " + SDL_GetError();
@@ -120,16 +67,23 @@ Recording::start(const std::vector<std::string>& command, const fs::path& save_t
         *why = std::string("cannot start autana record: ") + SDL_GetError();
         return nullptr;
     }
-    recording->reader_ = std::jthread([raw = recording.get()] { raw->read_stdout(); });
+    recording->reader_ = std::jthread([raw = recording.get()](const std::stop_token& stop) {
+        try {
+            raw->read_stdout(stop);
+        } catch (const std::exception& failure) {
+            // No memory for the bytes: the stream stops here, and the saved file holds what came.
+            std::fprintf(stderr, "loupe: recording stopped reading: %s\n", failure.what());
+        }
+    });
     return recording;
 }
 
 void
-Recording::read_stdout() {
+Recording::read_stdout(const std::stop_token& stop) {
     SDL_IOStream* out = SDL_GetProcessOutput(process_);
     std::ofstream save(saved_, std::ios::binary);
     std::array<uint8_t, READ_BYTES> buffer{};
-    while (out != nullptr) {
+    while (out != nullptr && !stop.stop_requested()) {
         const size_t count = SDL_ReadIO(out, buffer.data(), buffer.size());
         if (count == 0) {
             if (SDL_GetIOStatus(out) != SDL_IO_STATUS_NOT_READY) {
@@ -147,14 +101,19 @@ Recording::read_stdout() {
 
 Recording::~Recording() {
     stop();
-    if (reader_.joinable()) {
-        reader_.join();
+    const auto deadline = std::chrono::steady_clock::now() + end_within_;
+    int code = 0;
+    bool ended = exit_.has_value();
+    while (!ended && std::chrono::steady_clock::now() < deadline) {
+        ended = SDL_WaitProcess(process_, false, &code);
+        std::this_thread::sleep_for(END_POLL);
     }
-    if (process_ != nullptr) {
-        int code = 0;
-        (void)SDL_WaitProcess(process_, true, &code);
-        SDL_DestroyProcess(process_);
+    if (!ended) {
+        (void)SDL_KillProcess(process_, true);
     }
+    reader_.request_stop();
+    reader_ = {};
+    SDL_DestroyProcess(process_);
 }
 
 size_t
@@ -180,7 +139,7 @@ Recording::send(std::string_view line) {
 
 void
 Recording::stop() {
-    if (stopped_ || process_ == nullptr) {
+    if (stopped_) {
         return;
     }
     stopped_ = true;
@@ -189,15 +148,15 @@ Recording::stop() {
     }
 }
 
+// The log is read once, when the child has ended: the panel shows its last line then.
 Recording::Status
 Recording::status() {
-    if (!exit_) {
-        int code = 0;
-        if (SDL_WaitProcess(process_, false, &code)) {
-            exit_ = code;
-        }
+    int code = 0;
+    if (!exit_ && SDL_WaitProcess(process_, false, &code)) {
+        exit_ = code;
+        last_line_ = last_line(log_);
     }
-    return {.running = !exit_, .stopped = stopped_, .exit = exit_, .last_line = last_line(log_)};
+    return {.running = !exit_, .stopped = stopped_, .exit = exit_, .last_line = last_line_};
 }
 
 const fs::path&

@@ -99,13 +99,20 @@ draw_start(const Library& library, const std::string& refusal, Start& start) {
 void
 draw_attach(Attach& attach) {
     ImGui::SeparatorText("Boards");
+    const bool listing = attach.listing.valid();
+    ImGui::BeginDisabled(listing);
     attach.refresh = ImGui::Button(attach.listed ? "List again" : "List boards");
-    if (!attach.why.empty()) {
-        ImGui::TextWrapped("%s", attach.why.c_str());
-    } else if (attach.listed && attach.boards.empty()) {
+    ImGui::EndDisabled();
+    if (listing) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("asking the board pool");
+    }
+    if (!attach.list.why.empty()) {
+        ImGui::TextWrapped("%s", attach.list.why.c_str());
+    } else if (attach.listed && attach.list.boards.empty()) {
         ImGui::TextDisabled("none");
     }
-    for (const Board& board : attach.boards) {
+    for (const Board& board : attach.list.boards) {
         ImGui::PushID(board.id.c_str());
         ImGui::BeginDisabled(!board.free);
         if (ImGui::Button("Record")) {
@@ -121,20 +128,23 @@ draw_attach(Attach& attach) {
 
 void
 draw_record_controls(const Frames::StreamState& stream, const Recording::Status& status, RecordControls& controls) {
+    // The board's own controls, apart from the timeline's Play and Pause.
+    ImGui::PushID("board");
     ImGui::BeginDisabled(status.stopped || !status.running);
-    controls.stop = ImGui::Button("Stop");
+    controls.stop = ImGui::Button("Stop recording");
     ImGui::SameLine();
-    if (ImGui::Button(controls.paused ? "Unpause" : "Pause")) {
+    if (ImGui::Button(controls.paused ? "Unfreeze board" : "Freeze board")) {
         controls.send = controls.paused ? RESUME : FREEZE;
         controls.paused = !controls.paused;
     }
     ImGui::SameLine();
     ImGui::BeginDisabled(!controls.paused);
-    if (ImGui::Button("Next frame")) {
+    if (ImGui::Button("Step board")) {
         controls.send = STEP;
     }
     ImGui::EndDisabled();
     ImGui::EndDisabled();
+    ImGui::PopID();
     ImGui::SameLine();
     ImGui::Text("%d frames, %d dropped", stream.frames, stream.dropped);
     if (stream.refused) {

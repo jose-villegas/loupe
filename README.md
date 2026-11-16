@@ -163,18 +163,22 @@ board takes the debug views, the cull view and the observer like a scene's.
 On the start panel, List boards runs `autana devices --json` and lists the
 boards the board pool knows. Record on a free board starts `autana -b BOARD
 record` and opens its stream in this window; frames fill the timeline as they
-arrive, and play follows the newest.
+arrive, and play draws each one in turn.
 
 | Control | Sends to the board |
 |---|---|
-| Pause / Unpause | `FREEZE` / `RESUME`: the board holds one frame on screen, so it arrives whole |
-| Next frame | `STEP`: one more frame, while paused |
-| Stop | closes `autana record`'s input: the board sends what it holds and the recording ends |
+| Freeze / Unfreeze board | `FREEZE` / `RESUME`: the board holds one frame on screen, so it arrives whole |
+| Step board | `STEP`: one more frame, while frozen |
+| Stop recording | closes `autana record`'s input: the board sends what it holds and the recording ends |
+
+Scenes during a recording stops it first, and the window shows the board
+draining until autana ends, 30 s at most; quitting waits as long, then lets
+autana finish on its own.
 
 The panel counts the frames received and those that came after a drop on the
 board. Each recording is kept, as it arrives, as
 `recordings/<board>-<time>.framerec` in Loupe's settings folder, beside its
-`autana record` log, and joins the recent list. A `.framerec` opens like a
+`autana record` log, and joins the recent list once anything has arrived. A `.framerec` opens like a
 scene file: on the command line, from Open..., or from recent.
 
 The stream names its packs by name and crc, and Loupe loads them from its
