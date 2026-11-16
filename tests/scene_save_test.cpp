@@ -13,6 +13,7 @@
 
 #include "editor/doc.hpp"
 #include "editor/scene_tool.hpp"
+#include "scratch.hpp"
 
 namespace {
 
@@ -50,8 +51,9 @@ main(int argc, char** argv) {
     }
     const char* scene = argv[1];
     const std::string before = read_file(scene);
+    const loupe::Scratch logs("scene_save_test-");
     std::string why;
-    std::optional<loupe::editor::SceneDoc> doc = loupe::editor::read_scene(scene, &why);
+    std::optional<loupe::editor::SceneDoc> doc = loupe::editor::read_scene(scene, logs.path(), &why);
     if (!check(doc.has_value(), "the scene reads: " + why)) {
         return 1;
     }
@@ -67,8 +69,11 @@ main(int argc, char** argv) {
     moved.position = {0.5F, 0.0F, -0.25F};
     moved.scale = {1.5F, 1.5F, 1.5F};
     loupe::editor::EditStack edits;
-    edits.push(std::make_unique<loupe::editor::Place>("capybara", capybara->local, moved), docs);
-    ok &= check(loupe::editor::save_scene(docs.scene, &why), "the save writes: " + why);
+    edits.push(std::make_unique<loupe::editor::Place>("capybara",
+                                                      loupe::editor::Move{.before = capybara->local, .after = moved}),
+               docs);
+    ok &= check(loupe::editor::save_scene(docs.scene, logs.path(), &why) && !docs.scene.unsaved(),
+                "the save writes, and nothing is left unsaved: " + why);
     const std::vector<std::string> old_lines = lines(before), new_lines = lines(read_file(scene));
     std::vector<std::string> added, kept;
     for (const std::string& line : new_lines) {
@@ -78,12 +83,13 @@ main(int argc, char** argv) {
     ok &= check(kept == old_lines
                     && added == std::vector<std::string>{"position = [0.5, 0.0, -0.25]", "scale = [1.5, 1.5, 1.5]"},
                 "the file gains the capybara's two lines and nothing else changes");
-    std::optional<loupe::editor::SceneDoc> again = loupe::editor::read_scene(scene, &why);
+    std::optional<loupe::editor::SceneDoc> again = loupe::editor::read_scene(scene, logs.path(), &why);
     ok &= check(again && again->find("capybara")->local == moved, "the read sees the saved placement");
     const std::string saved = read_file(scene);
     docs.scene.find("meadow")->local.position = {1.0F, 0.0F, 0.0F};
-    ok &= check(!loupe::editor::save_scene(docs.scene, &why) && why.find("baked") != std::string::npos,
+    ok &= check(!loupe::editor::save_scene(docs.scene, logs.path(), &why) && why.find("baked") != std::string::npos,
                 "a baked renderer is refused, saying why");
-    ok &= check(read_file(scene) == saved, "a refused save leaves the file as it was");
+    ok &= check(read_file(scene) == saved && docs.scene.unsaved(),
+                "a refused save leaves the file as it was, and the change still unsaved");
     return ok ? 0 : 1;
 }

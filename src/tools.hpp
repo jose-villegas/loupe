@@ -1,9 +1,11 @@
-// The programs a build with the pack tool runs: autana's build_pack.py and
-// render_compare.py, and git. A build without it refuses each call, saying so.
+// The programs a build with the pack tool runs: autana's tools (build_pack.py,
+// render_compare.py, scene_edit.py, bake.py) and git. A build without it
+// refuses each call, saying so.
 #pragma once
 
 #include <filesystem>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -21,8 +23,6 @@ struct PackBuild {
 bool builds_packs();
 // The autana checkout loupe is built against.
 std::filesystem::path autana_dir();
-// The Python autana's tools run on; empty without the pack tool.
-std::filesystem::path python();
 // Where packs built from a .scene.toml are kept, one folder per scene file.
 std::filesystem::path pack_cache();
 // Runs `build`; false with `why` set when it failed.
@@ -31,6 +31,13 @@ bool build_pack(const PackBuild& build, std::string* why);
 // dropped, or none with `why` set.
 std::optional<std::string> git(const std::vector<std::string>& args, const std::filesystem::path& log,
                                std::string* why);
+// autana's tool `script` (a path under launcher/tools) on the pack tool's
+// Python with `args`, its output into `log`; the output, trailing newlines
+// dropped, or none with `why` set to the script and its output. A request on
+// `stop` ends it, and it counts as failed.
+std::optional<std::string> autana_tool(const std::filesystem::path& script, const std::vector<std::string>& args,
+                                       const std::filesystem::path& log, std::string* why,
+                                       const std::stop_token& stop = {});
 // autana's render_compare.py with `args`, its output into `log`; false with `why` set.
 bool render_compare(const std::vector<std::string>& args, const std::filesystem::path& log, std::string* why);
 

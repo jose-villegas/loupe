@@ -76,6 +76,18 @@ step_straight(Frames& frames, int to, std::span<const int> keep, Straight* strai
     return ok;
 }
 
+// open_test for `TEST SCENE.apak out.bmp`, then step_straight until frame
+// `to` - 1 is shown, every frame kept in `straight`; `*ok` is the steps'
+// verdict. Null when the scene did not open.
+inline std::unique_ptr<Frames>
+open_stepped(const char* test, std::span<char*> args, int to, Straight* straight, bool* ok) {
+    std::unique_ptr<Frames> frames = open_test(test, args, 3, "SCENE.apak out.bmp");
+    if (frames != nullptr) {
+        *ok = step_straight(*frames, to, {}, straight);
+    }
+    return frames;
+}
+
 // Seeks to frame `index` and compares its bytes with `expected`, said on stderr.
 inline bool
 same(const char* test, Frames& frames, int index, const std::vector<uint8_t>& expected, const char* what) {

@@ -37,10 +37,19 @@ has_tool(std::string* why) {
 
 // `program` with `args` after it, its output into `log`.
 bool
-run(const std::string& program, const std::vector<std::string>& args, const fs::path& log) {
+run(const std::string& program, const std::vector<std::string>& args, const fs::path& log,
+    const std::stop_token& stop = {}) {
     std::vector<std::string> line = {program};
     line.insert(line.end(), args.begin(), args.end());
-    return run_logged(line, log);
+    return run_logged(line, log, stop);
+}
+
+// `log`'s text without the line ends it closes with.
+std::string
+read_trimmed(const fs::path& log) {
+    std::string text = read_text(log);
+    text.erase(text.find_last_not_of("\r\n") + 1);
+    return text;
 }
 
 } // namespace
@@ -53,11 +62,6 @@ builds_packs() {
 fs::path
 autana_dir() {
     return AUTANA_DIR;
-}
-
-fs::path
-python() {
-    return PYTHON;
 }
 
 fs::path
@@ -90,28 +94,34 @@ git(const std::vector<std::string>& args, const fs::path& log, std::string* why)
         return std::nullopt;
     }
     const bool ok = run(GIT, args, log);
-    std::string out = read_text(log);
+    std::string out = read_trimmed(log);
     if (!ok) {
         *why = "git failed:\n" + out;
         return std::nullopt;
     }
-    out.erase(out.find_last_not_of("\r\n") + 1);
+    return out;
+}
+
+std::optional<std::string>
+autana_tool(const fs::path& script, const std::vector<std::string>& args, const fs::path& log, std::string* why,
+            const std::stop_token& stop) {
+    if (!has_tool(why)) {
+        return std::nullopt;
+    }
+    std::vector<std::string> line = {utf8(autana_dir() / "launcher" / "tools" / script)};
+    line.insert(line.end(), args.begin(), args.end());
+    const bool ok = run(PYTHON, line, log, stop);
+    std::string out = read_trimmed(log);
+    if (!ok) {
+        *why = utf8(script.filename()) + " failed:\n" + out;
+        return std::nullopt;
+    }
     return out;
 }
 
 bool
 render_compare(const std::vector<std::string>& args, const fs::path& log, std::string* why) {
-    if (!has_tool(why)) {
-        return false;
-    }
-    const fs::path script = autana_dir() / "launcher" / "tools" / "render" / "render_compare.py";
-    std::vector<std::string> line = {utf8(script)};
-    line.insert(line.end(), args.begin(), args.end());
-    if (!run(PYTHON, line, log)) {
-        *why = "render_compare.py failed";
-        return false;
-    }
-    return true;
+    return autana_tool(fs::path("render") / "render_compare.py", args, log, why).has_value();
 }
 
 } // namespace loupe

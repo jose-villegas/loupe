@@ -37,9 +37,6 @@ struct ViewCamera {
     int width = 0, height = 0;
 };
 
-// A 4x4 matrix, column-major (element [column * 4 + row]).
-using Matrix4 = std::array<float, 16>;
-
 // Every view a render context can draw, shaded first, in autana's table order.
 std::vector<DebugView> debug_views();
 
@@ -103,7 +100,7 @@ class Frames {
     bool place(const std::string& object, const transformf_t& local);
     // The world matrix of `object`'s parent (the scene root for a top-level
     // object); none when the scene holds no such object.
-    std::optional<Matrix4> parent_world(const std::string& object) const;
+    std::optional<mat4f_t> parent_world(const std::string& object) const;
     // The active camera as the shown frame drew it, its axes the frame's own on
     // a turned panel too; none without a camera.
     std::optional<ViewCamera> view_camera() const;
@@ -137,10 +134,15 @@ class Frames {
     bool redraw_shown();
     // step() without leaving the observer: draws frame index().
     bool advance(uint32_t dt_ms);
+    // Draws the shown frame again in one step from a checkpoint held just
+    // before it; the first call takes the hold, replaying from the kept
+    // checkpoint before. What observe() and place() redraw with, so a drag
+    // costs a frame per move. True when nothing is drawn yet.
+    bool redraw_held();
     // Frees the held checkpoint and clears the observer; nothing is drawn.
     void stop_observing();
     // Draws the shown frame again from the held checkpoint without the observer,
-    // one step, then stops observing; true when not observing.
+    // one step, then frees the hold; true when nothing is held.
     bool leave_observing();
     explicit Frames(std::unique_ptr<State> state);
     std::unique_ptr<State> state_;

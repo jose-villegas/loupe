@@ -16,8 +16,7 @@ flowchart LR
   path --> core
   core["loupe_core<br/>Frames · documents · undo · options · pack · tools · library"]
   core -- "render_host_*" --> autana["autana::scene_provider<br/>third_party/autana"]
-  core -- "pack tool builds only" --> tools["git · build_pack.py<br/>render_compare.py"]
-  window -- "save, pack tool builds only" --> edit["scene_edit.py<br/>bake.py list"]
+  core -- "pack tool builds only" --> tools["git · build_pack.py · render_compare.py<br/>scene_edit.py · bake.py list"]
 ```
 
 ## Download
@@ -140,15 +139,16 @@ handle or a field is one step of Edit's undo (Ctrl+Z, Ctrl+Y), whichever panel
 it came from, and the frame shows the object where it is now, on every frame
 sought or played.
 
-Only renderers that are not baked move: skinned ones, and meshes without
-`bake = true`. A baked renderer is traced where it sits, so the inspector shows
-it locked, and lights and cameras keep their placement, since they change what
-every bake traces.
+What may move is what autana's
+`third_party/autana/launcher/tools/scene/scene_edit.py` will write: renderers
+that are not baked. A baked renderer is traced where it sits, so the Inspector
+shows it locked, and lights and cameras keep their placement, since they change
+what every bake traces; the Inspector gives the tool's reason for each.
 
-Save (Ctrl+S) writes the moved values into the `.scene.toml` with autana's
-`launcher/tools/scene/scene_edit.py`, which keeps the file's comments and layout
-and changes only those values. Then `launcher/tools/bake/bake.py list --missing`
-names the bakes the saved scene re-keys, in the inspector; moving a skinned or
+Save (Ctrl+S) writes the moved values into the `.scene.toml` with that tool,
+which keeps the file's comments and layout and changes only those values. Then
+`third_party/autana/launcher/tools/bake/bake.py list --missing` names the bakes
+the saved scene re-keys, in the Inspector; moving a skinned or
 unbaked object re-keys none. A pack (`.apak`) has no scene file, so it opens
 without the editor, and so does a build without the pack tool.
 

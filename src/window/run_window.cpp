@@ -229,7 +229,9 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
         window::apply(*shown.editor, ask);
         if (!shown.observer.on) {
             const int64_t drawn = shown.frames->drawn();
-            *ok &= window::sync(*shown.editor, *shown.frames);
+            *ok &= window::sync(*shown.editor, [&shown](const std::string& object, const transformf_t& local) {
+                return shown.frames->place(object, local);
+            });
             changed |= shown.frames->drawn() != drawn;
         }
     }
@@ -376,11 +378,7 @@ Window::open(const Options& options) {
     (void)remember(folders_, options.scene);
     gpu_.set_title(std::format("{}: {}", TITLE, frames->scene_id()));
     shown_.emplace(gpu_, std::move(frames));
-    if (builds_packs()) {
-        shown_->editor = window::open_editor(options.scene, &shown_->editor_why);
-    } else {
-        shown_->editor_why = "this loupe was built without the pack tool, so it cannot write a scene file";
-    }
+    shown_->editor = window::open_editor(options.scene, &shown_->editor_why);
     return true;
 }
 

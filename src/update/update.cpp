@@ -47,7 +47,7 @@ constexpr const char SETUP_FOLDER_PREFIX[] = "loupe-setup-";
 constexpr const char* FOLLOW_WORDS[] = {"off", "releases", "main"};
 
 // <config>/update/'s files: the answers and the download on their way, the
-// staged build with its record (stage_record()), and a swap's journal.
+// staged build with its record (write_stage_record()), and a swap's journal.
 struct Files {
     fs::path dir, release, commit, part, staged, record, applied, unpacked, journal, tool_log;
 };

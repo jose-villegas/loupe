@@ -7,8 +7,6 @@
 #include <cstddef>
 #include <filesystem>
 #include <memory>
-#include <optional>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -24,31 +22,45 @@ struct Placement {
     bool operator==(const Placement&) const = default;
 };
 
+// A placement's three fields by the names the .scene.toml gives them, in the
+// file's order.
+struct PlacementField {
+    const char* name;
+    std::array<float, 3> Placement::* values;
+};
+
+constexpr std::array<PlacementField, 3> PLACEMENT_FIELDS = {{
+    {.name = "position", .values = &Placement::position},
+    {.name = "rotation", .values = &Placement::rotation_deg},
+    {.name = "scale", .values = &Placement::scale},
+}};
+
 // One scene object. `kind` is its one component: mesh_renderer,
-// skinned_renderer, light or camera. A baked renderer (bake = true) is traced
-// where it sits, so it is locked. `saved` is the placement the file holds, so
-// a save writes only the fields that moved.
+// skinned_renderer, light or camera; `baked` a renderer with bake = true.
+// `locked` is why it may not be placed, as autana's scene_edit.py says,
+// empty when it may. `saved` is the placement the file holds, so a save
+// writes only the fields that moved.
 struct Object {
     std::string path, parent;
     std::string kind;
     Placement local, saved;
     bool baked = false;
+    std::string locked;
 };
 
-// The scene file and its objects in the file's order. `changed` names the
-// objects edited since the last save.
+// Whether the editor may move `object`: scene_edit.py gave no reason it may not.
+bool placeable(const Object& object);
+
+// The scene file and its objects in the file's order.
 struct SceneDoc {
     std::filesystem::path toml;
     std::vector<Object> objects;
-    std::set<std::string> changed;
 
     Object* find(const std::string& path);
     const Object* find(const std::string& path) const;
+    // Whether any object is placed other than as the file holds it.
+    bool unsaved() const;
 };
-
-// Whether the editor may move `object`: a renderer that is not baked. Lights
-// and cameras move what every bake reads, so they stay as authored here.
-bool placeable(const Object& object);
 
 // Every document the editor has open.
 struct Docs {
@@ -64,24 +76,24 @@ struct Edit {
     virtual ~Edit() = default;
     virtual void apply(Docs& docs) = 0;
     virtual void undo(Docs& docs) = 0;
-    // True when the edit changes what a bake reads, so the board needs a rebake to show it.
-    virtual bool needs_rebake() const = 0;
 };
 
-// Moves one object from `before` to `after`. Only placeable objects are
-// placed, and none of those feeds a bake.
+// Where a Place takes an object from and to.
+struct Move {
+    Placement before, after;
+};
+
+// Moves one object from `move.before` to `move.after`.
 class Place final : public Edit {
   public:
-    Place(std::string object, Placement before, Placement after);
+    Place(std::string object, const Move& move);
     void apply(Docs& docs) override;
     void undo(Docs& docs) override;
-    bool needs_rebake() const override;
-    const std::string& object() const;
 
   private:
     void set(Docs& docs, const Placement& placement) const;
     std::string object_;
-    Placement before_, after_;
+    Move move_;
 };
 
 // The one undo history. A push applies the edit and drops whatever was
@@ -94,13 +106,10 @@ class EditStack {
     bool redo(Docs& docs);
     bool can_undo() const;
     bool can_redo() const;
-    // The edit the last push, undo or redo touched; null before any.
-    const Edit* last() const;
 
   private:
     std::vector<std::unique_ptr<Edit>> edits_;
     size_t done_ = 0; // edits_[0, done_) are applied
-    const Edit* last_ = nullptr;
 };
 
 } // namespace loupe::editor

@@ -1,11 +1,11 @@
 // Frames::place: a placed object draws where it was put on the shown frame at
 // once, and on every frame after, sought or stepped; placed back where the
-// scene had it, every frame is the straight run's again. An unknown name is
+// scene had it, every frame is the straight run's again. After the first, a
+// place redraws in one engine frame, as a drag needs. An unknown name is
 // refused. view_camera() frames the shown frame, with the active camera's own
 // axes: the shown frame is the panel's picture turned back upright.
 #include <cmath>
 #include <cstdio>
-#include <limits>
 #include <memory>
 #include <span>
 #include <string>
@@ -24,8 +24,9 @@ const char* const RENDERERS[] = {"atrium_fitted_full", "atrium_fitted", "atrium_
 constexpr int EVERY = loupe::Frames::CHECKPOINT_EVERY;
 constexpr int SHOWN = EVERY + 10;
 constexpr int LATER = SHOWN + 5;
-// How far the renderers move: a tenth of a metre up.
+// How far the renderers move: a tenth of a metre up, then a drag's next step.
 constexpr float LIFT = 0.1F;
+constexpr float NUDGE = 0.01F;
 constexpr float CLOSE = 1e-4F;
 
 bool
@@ -40,8 +41,11 @@ level(const loupe::ViewCamera& camera) {
     return std::fabs(camera.right.y) <= CLOSE && camera.up.y > 0.0F;
 }
 
+// Every renderer at `height` above where the scene has it.
 bool
-place_all(loupe::Frames& frames, const loupe::editor::Placement& placement) {
+place_all(loupe::Frames& frames, float height) {
+    loupe::editor::Placement placement;
+    placement.position = {0.0F, height, 0.0F};
     bool ok = true;
     for (const char* name : RENDERERS) {
         ok &= frames.place(name, loupe::editor::to_transform(placement));
@@ -53,13 +57,13 @@ place_all(loupe::Frames& frames, const loupe::editor::Placement& placement) {
 
 int
 main(int argc, char** argv) {
+    loupe::test::Straight straight;
+    bool ok = false;
     std::unique_ptr<loupe::Frames> frames =
-        loupe::test::open_test(TEST, std::span(argv, static_cast<size_t>(argc)), 3, "SCENE.apak out.bmp");
+        loupe::test::open_stepped(TEST, std::span(argv, static_cast<size_t>(argc)), LATER + 1, &straight, &ok);
     if (frames == nullptr) {
         return 1;
     }
-    loupe::test::Straight straight;
-    bool ok = loupe::test::step_straight(*frames, LATER + 1, {}, &straight);
     ok &= frames->seek(SHOWN);
     ok &= check(!frames->place("no_such_object", transformf_identity()), "an unknown object is refused");
     ok &= check(!frames->parent_world("no_such_object").has_value(), "an unknown object has no parent");
@@ -69,19 +73,26 @@ main(int argc, char** argv) {
     ok &= check(camera && level(*camera), "the view camera's right is level and its up points up, as sponza's camera");
 
     // Sponza's renderers are baked, so the scene has them at identity.
-    loupe::editor::Placement lifted;
-    lifted.position = {0.0F, LIFT, 0.0F};
-    const int64_t drawn = frames->drawn();
-    ok &= check(place_all(*frames, lifted), "every renderer places");
-    ok &= check(frames->index() - 1 == SHOWN && frames->drawn() > drawn, "the shown frame is drawn again");
+    const int64_t before = frames->drawn();
+    ok &= check(place_all(*frames, LIFT), "every renderer places");
+    ok &= check(frames->index() - 1 == SHOWN && frames->drawn() > before, "the shown frame is drawn again");
     const std::vector<uint8_t> placed = loupe::test::pixels(*frames);
     ok &= check(placed != straight[SHOWN], "the placed frame differs from the straight run's");
-    ok &= frames->seek(LATER);
-    const std::vector<uint8_t> placed_later = loupe::test::pixels(*frames);
-    ok &= check(placed_later != straight[LATER], "a later frame draws the placement too");
+    const int64_t held = frames->drawn();
+    ok &= check(place_all(*frames, LIFT + NUDGE) && frames->drawn() - held == std::ssize(RENDERERS),
+                "each place after the first draws one engine frame");
+    ok &= check(place_all(*frames, LIFT), "the renderers place back to the first lift");
+    ok &= check(loupe::test::pixels(*frames) == placed, "placed back to the same lift, the same frame");
+
+    while (frames->index() <= LATER) {
+        ok &= frames->step(frames->dt_ms());
+    }
+    const std::vector<uint8_t> stepped_later = loupe::test::pixels(*frames);
+    ok &= check(stepped_later != straight[LATER], "a later frame, stepped to, draws the placement");
+    ok &= loupe::test::same(TEST, *frames, LATER, stepped_later, "the later frame sought to is the one stepped to");
     ok &= loupe::test::same(TEST, *frames, SHOWN, placed, "placed, sought back to");
 
-    ok &= check(place_all(*frames, loupe::editor::Placement{}), "every renderer places back");
+    ok &= check(place_all(*frames, 0.0F), "every renderer places back");
     ok &= loupe::test::same(TEST, *frames, SHOWN, straight[SHOWN], "placed back");
     ok &= loupe::test::same(TEST, *frames, LATER, straight[LATER], "placed back, later");
     return frames->close() && ok ? 0 : 1;

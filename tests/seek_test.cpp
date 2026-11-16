@@ -22,14 +22,13 @@ const int RETIMED[] = {RETIMED_FROM + 1, RETIMED_TO};
 
 int
 main(int argc, char** argv) {
+    loupe::test::Straight straight;
+    bool ok = false;
     std::unique_ptr<loupe::Frames> frames =
-        loupe::test::open_test(TEST, std::span(argv, static_cast<size_t>(argc)), 3, "SCENE.apak out.bmp");
+        loupe::test::open_stepped(TEST, std::span(argv, static_cast<size_t>(argc)), STRAIGHT_TO, &straight, &ok);
     if (frames == nullptr) {
         return 1;
     }
-
-    loupe::test::Straight straight;
-    bool ok = loupe::test::step_straight(*frames, STRAIGHT_TO, {}, &straight);
     ok &= loupe::test::same_each(TEST, *frames, TARGETS, straight, "straight");
 
     const uint32_t retimed_dt = 2 * frames->dt_ms();

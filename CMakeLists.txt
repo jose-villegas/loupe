@@ -59,6 +59,7 @@ autana_cpp_checks()
 add_library(loupe_core OBJECT
     src/editor/doc.cpp
     src/editor/placement.cpp
+    src/editor/scene_tool.cpp
     src/engine/frames.cpp
     src/library.cpp
     src/options.cpp
@@ -104,7 +105,8 @@ target_link_libraries(loupe_core PUBLIC math kinematics)
 target_link_libraries(loupe_core PUBLIC nlohmann_json::nlohmann_json mbedtls_sha256)
 # The pack tool's own programs, and where it keeps packs; --compare also
 # checks out revisions with git and lays the sides out with autana's
-# render_compare.py. Only src/tools.cpp runs them.
+# render_compare.py, and the editor saves through autana's scene_edit.py.
+# Only src/tools.cpp runs them.
 if(LOUPE_PACK_TOOL)
     find_package(Git REQUIRED)
     set_property(SOURCE src/tools.cpp APPEND PROPERTY COMPILE_DEFINITIONS LOUPE_PACK_TOOL=1
@@ -117,7 +119,6 @@ endif()
 # The window: SDL3, Vulkan through volk, Dear ImGui (third_party/CMakeLists.txt).
 # Only runs that write no file open it, so those need no GPU.
 add_library(loupe_window OBJECT
-    src/editor/scene_tool.cpp
     src/window/editor.cpp
     src/window/files.cpp
     src/window/frame_texture.cpp

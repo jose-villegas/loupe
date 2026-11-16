@@ -31,8 +31,8 @@ struct Frames::State {
     uint32_t dt_ms = 0;                                   // the run's, as it opened
     std::vector<uint32_t> dts;                            // each drawn frame's dt, for replaying it
     std::map<int, render_host_checkpoint_t*> checkpoints; // the state before drawing frame key
-    // While observing: the state before drawing the shown frame, apart from the
-    // kept checkpoints, which thinning may drop.
+    // While observing or placing: the state before drawing the shown frame,
+    // apart from the kept checkpoints, which thinning may drop.
     render_host_checkpoint_t* held = nullptr;
     int64_t drawn = 0; // engine frames, replays included
     // Objects the editor placed, by name: set on the scene before every frame is drawn.
@@ -148,18 +148,6 @@ entity_named(const std::string& name) {
         root = up;
     }
     return entity_find(root, name_hash(name.c_str()));
-}
-
-// `matrix` (m[row][col]) column-major.
-Matrix4
-column_major(const mat4f_t& matrix) {
-    Matrix4 out{};
-    for (int column = 0; column < 4; column++) {
-        for (int row = 0; row < 4; row++) {
-            out[static_cast<size_t>(column * 4 + row)] = matrix.m[row][column];
-        }
-    }
-    return out;
 }
 
 } // namespace
@@ -354,6 +342,17 @@ Frames::observe(std::optional<transformf_t> pose) {
     if (!pose) {
         return leave_observing();
     }
+    render_context_set_observer(context(), &*pose);
+    return redraw_held();
+}
+
+bool
+Frames::redraw_held() {
+    State& s = *state_;
+    const int shown = s.index - 1;
+    if (shown < 0) {
+        return true;
+    }
     if (s.held == nullptr) {
         // Once: back to just before the shown frame, and hold that state.
         if (!restore_before(shown)) {
@@ -362,7 +361,7 @@ Frames::observe(std::optional<transformf_t> pose) {
         step_to(shown - 1);
         s.held = render_host_save();
         if (s.held == nullptr) {
-            std::fprintf(stderr, "loupe: no checkpoint before frame %d to observe it from\n", shown);
+            std::fprintf(stderr, "loupe: no checkpoint before frame %d to redraw it from\n", shown);
             step_to(shown);
             return false;
         }
@@ -371,7 +370,6 @@ Frames::observe(std::optional<transformf_t> pose) {
     } else {
         return false;
     }
-    render_context_set_observer(context(), &*pose);
     return advance(s.dts[shown]);
 }
 
@@ -422,17 +420,17 @@ Frames::place(const std::string& object, const transformf_t& local) {
     }
     state_->placed[object] = local;
     transform_set_local(entity, local);
-    // The redraw sets every placement again before its frame; observing, the held checkpoint redraws in one step.
-    return state_->held != nullptr ? leave_observing() : redraw_shown();
+    // The redraw sets every placement again before its frame.
+    return redraw_held();
 }
 
-std::optional<Matrix4>
+std::optional<mat4f_t>
 Frames::parent_world(const std::string& object) const {
     const entity_t entity = entity_named(object);
     if (handle_is_none(entity)) {
         return std::nullopt;
     }
-    return column_major(transform_world_matrix(entity_parent(entity)));
+    return transform_world_matrix(entity_parent(entity));
 }
 
 std::optional<ViewCamera>

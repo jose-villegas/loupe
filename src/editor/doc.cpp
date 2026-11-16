@@ -18,46 +18,38 @@ SceneDoc::find(const std::string& path) const {
 }
 
 bool
-placeable(const Object& object) {
-    return (object.kind == "mesh_renderer" || object.kind == "skinned_renderer") && !object.baked;
+SceneDoc::unsaved() const {
+    return std::ranges::any_of(objects, [](const Object& object) { return object.local != object.saved; });
 }
 
-Place::Place(std::string object, Placement before, Placement after)
-    : object_(std::move(object)), before_(before), after_(after) {}
+bool
+placeable(const Object& object) {
+    return object.locked.empty();
+}
+
+Place::Place(std::string object, const Move& move) : object_(std::move(object)), move_(move) {}
 
 void
 Place::set(Docs& docs, const Placement& placement) const {
     if (Object* object = docs.scene.find(object_)) {
         object->local = placement;
-        docs.scene.changed.insert(object_);
     }
 }
 
 void
 Place::apply(Docs& docs) {
-    set(docs, after_);
+    set(docs, move_.after);
 }
 
 void
 Place::undo(Docs& docs) {
-    set(docs, before_);
-}
-
-bool
-Place::needs_rebake() const {
-    return false;
-}
-
-const std::string&
-Place::object() const {
-    return object_;
+    set(docs, move_.before);
 }
 
 void
 EditStack::push(std::unique_ptr<Edit> edit, Docs& docs) {
     edits_.resize(done_);
     edit->apply(docs);
-    last_ = edit.get();
     edits_.push_back(std::move(edit));
     done_ = edits_.size();
 }
@@ -69,7 +61,6 @@ EditStack::undo(Docs& docs) {
     }
     done_--;
     edits_[done_]->undo(docs);
-    last_ = edits_[done_].get();
     return true;
 }
 
@@ -79,7 +70,6 @@ EditStack::redo(Docs& docs) {
         return false;
     }
     edits_[done_]->apply(docs);
-    last_ = edits_[done_].get();
     done_++;
     return true;
 }
@@ -92,11 +82,6 @@ EditStack::can_undo() const {
 bool
 EditStack::can_redo() const {
     return done_ < edits_.size();
-}
-
-const Edit*
-EditStack::last() const {
-    return last_;
 }
 
 } // namespace loupe::editor
