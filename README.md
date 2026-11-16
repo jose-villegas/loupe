@@ -9,14 +9,15 @@ builds the pack of first.
 
 ```mermaid
 flowchart LR
-  cli["loupe"] --> window["loupe_window<br/>SDL3 · Vulkan (volk) · Dear ImGui"]
+  cli["loupe"] --> window["loupe_window<br/>SDL3 · Vulkan (volk) · Dear ImGui · ImGuizmo<br/>panels · editor"]
   cli --> path["loupe_path<br/>--frame · --compare"]
   cli --> core
   window --> core
   path --> core
-  core["loupe_core<br/>Frames · options · pack · tools · library"]
+  core["loupe_core<br/>Frames · documents · undo · options · pack · tools · library"]
   core -- "render_host_*" --> autana["autana::scene_provider<br/>third_party/autana"]
   core -- "pack tool builds only" --> tools["git · build_pack.py<br/>render_compare.py"]
+  window -- "save, pack tool builds only" --> edit["scene_edit.py<br/>bake.py list"]
 ```
 
 ## Download
@@ -123,6 +124,34 @@ autana's `fly_motion` flies it. Each move costs one engine frame, from a
 checkpoint held just before the shown frame. Unticked, or with another view
 picked, the frame is the straight run's again.
 
+## Edit a scene
+
+A scene opens as docked panels:
+
+| Panel | Shows |
+|---|---|
+| Viewport | the frame, the move, rotate and scale handles on the selected object (W, E, R; along its own axes or the world's), and a cube showing which way the camera looks |
+| Outliner | the scene's objects by parent |
+| Inspector | the selected object's position, rotation in degrees and scale as numbers, then the last save and which bakes it re-keys |
+| Frame debugger | Scenes, the view picker, the observer and the timeline, as above |
+
+A click on the frame selects the object whose origin lies nearest. A drag of a
+handle or a field is one step of Edit's undo (Ctrl+Z, Ctrl+Y), whichever panel
+it came from, and the frame shows the object where it is now, on every frame
+sought or played.
+
+Only renderers that are not baked move: skinned ones, and meshes without
+`bake = true`. A baked renderer is traced where it sits, so the inspector shows
+it locked, and lights and cameras keep their placement, since they change what
+every bake traces.
+
+Save (Ctrl+S) writes the moved values into the `.scene.toml` with autana's
+`launcher/tools/scene/scene_edit.py`, which keeps the file's comments and layout
+and changes only those values. Then `launcher/tools/bake/bake.py list --missing`
+names the bakes the saved scene re-keys, in the inspector; moving a skinned or
+unbaked object re-keys none. A pack (`.apak`) has no scene file, so it opens
+without the editor, and so does a build without the pack tool.
+
 ## Render a scene
 
 With `-o` or `--video`, Loupe writes the frames and exits, without a window:
@@ -207,6 +236,9 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `version` | `--version` names the project version, Loupe's commit, the configured channel and the autana commit |
 | `update` | SHA-256 on the standard's examples; GitHub's saved release answers give each system's download; which offers are newer; the setting; a check stages only a verified newer download and a local build never asks; a running copy, beside its samples and in `bin/`, is swapped for a staged one and says so at its next start |
 | `build_id` | `--version`'s line for each channel, and a copy counts as installed only with the setup's uninstaller beside it |
+| `editor_docs` | one undo stack across edits; only unbaked renderers place; a placement's matrix turns as autana's `quatf_from_euler` and comes back from it; the handles' matrices put a point where autana's pinhole does; a save sets only the fields that moved; the read's JSON parses, anything else is refused |
+| `place` | a placed object draws there on the shown frame at once and on frames sought after; placed back, every frame is the straight run's; an unknown name is refused |
+| `scene_save` | on a copy of the capybara scene, moving and scaling the capybara adds only its two lines; a baked renderer is refused, the file unchanged |
 | `include_gate` | only `src/engine/autana.hpp` includes autana's engine headers; autana's packages, below the engine, are open to every file |
 
 CI runs them on Linux and Windows at the pinned autana on every pull request,

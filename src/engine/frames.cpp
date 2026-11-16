@@ -35,6 +35,8 @@ struct Frames::State {
     // kept checkpoints, which thinning may drop.
     render_host_checkpoint_t* held = nullptr;
     int64_t drawn = 0; // engine frames, replays included
+    // Objects the editor placed, by name: set on the scene before every frame is drawn.
+    std::map<std::string, transformf_t> placed;
 
     // Checkpoints sit before frames FIRST_SEEKABLE, FIRST_SEEKABLE + every...
     bool
@@ -133,6 +135,31 @@ restore_keeping_view(render_host_checkpoint_t* checkpoint) {
         render_context_set_debug_view(drawing, picked);
     }
     return true;
+}
+
+// The scene object named `name` in the scene the active camera belongs to; none without a camera or such an object.
+entity_t
+entity_named(const std::string& name) {
+    entity_t root = camera_active();
+    if (handle_is_none(root)) {
+        return ENTITY_NONE;
+    }
+    for (entity_t up = entity_parent(root); !handle_is_none(up); up = entity_parent(up)) {
+        root = up;
+    }
+    return entity_find(root, name_hash(name.c_str()));
+}
+
+// `matrix` (m[row][col]) column-major.
+Matrix4
+column_major(const mat4f_t& matrix) {
+    Matrix4 out{};
+    for (int column = 0; column < 4; column++) {
+        for (int row = 0; row < 4; row++) {
+            out[static_cast<size_t>(column * 4 + row)] = matrix.m[row][column];
+        }
+    }
+    return out;
 }
 
 } // namespace
@@ -247,6 +274,12 @@ Frames::advance(uint32_t dt_ms) {
             s.thin();
         } else {
             std::fprintf(stderr, "loupe: no checkpoint before frame %d; seeks back past it will fail\n", s.index);
+        }
+    }
+    for (const auto& [name, local] : s.placed) {
+        const entity_t entity = entity_named(name);
+        if (!handle_is_none(entity)) {
+            transform_set_local(entity, local);
         }
     }
     const input_t input = {};
@@ -379,6 +412,53 @@ box3f_t
 Frames::scene_box() const {
     const entity_t camera = camera_active();
     return handle_is_none(camera) ? box3f_empty() : scene_bounds(camera);
+}
+
+bool
+Frames::place(const std::string& object, const transformf_t& local) {
+    const entity_t entity = entity_named(object);
+    if (handle_is_none(entity)) {
+        return false;
+    }
+    state_->placed[object] = local;
+    transform_set_local(entity, local);
+    // The redraw sets every placement again before its frame; observing, the held checkpoint redraws in one step.
+    return state_->held != nullptr ? leave_observing() : redraw_shown();
+}
+
+std::optional<Matrix4>
+Frames::parent_world(const std::string& object) const {
+    const entity_t entity = entity_named(object);
+    if (handle_is_none(entity)) {
+        return std::nullopt;
+    }
+    return column_major(transform_world_matrix(entity_parent(entity)));
+}
+
+std::optional<ViewCamera>
+Frames::view_camera() const {
+    const entity_t camera = camera_active();
+    const Frame shown = frame();
+    if (handle_is_none(camera) || shown.width <= 0) {
+        return std::nullopt;
+    }
+    const lens_t* lens = camera_lens(camera);
+    const transformf_t pose = transform_world(camera);
+    // The shown frame is the picture turned back upright from the panel, so its axes are the camera's own: quarter 0.
+    render_view_t view = render_view_make(&pose, lens->half_fov_short_tan, lens->near_z,
+                                          viewport_t{.width = shown.width, .height = shown.height, .quarter = 0});
+    render_view_set_shift(&view, lens->shift);
+    return ViewCamera{.eye = view.position,
+                      .right = vec3f_normalize(view.screen_x),
+                      .up = vec3f_scale(vec3f_normalize(view.screen_y), -1.0F),
+                      .forward = vec3f_normalize(view.forward),
+                      .fx = view.lens.fx,
+                      .fy = view.lens.fy,
+                      .cx = view.lens.cx,
+                      .cy = view.lens.cy,
+                      .near_z = view.lens.near_z,
+                      .width = shown.width,
+                      .height = shown.height};
 }
 
 int64_t

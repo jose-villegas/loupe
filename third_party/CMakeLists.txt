@@ -18,7 +18,7 @@ add_subdirectory(SDL SYSTEM)
 set(VULKAN_HEADERS_INSTALL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Vulkan-Headers" CACHE PATH "The Vulkan headers volk builds with")
 add_subdirectory(volk SYSTEM)
 
-# Dear ImGui with its SDL3 and Vulkan backends, the Vulkan one calling through volk.
+# Dear ImGui's docking line with its SDL3 and Vulkan backends, the Vulkan one calling through volk.
 set(imgui "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
 add_library(imgui STATIC
     "${imgui}/imgui.cpp" "${imgui}/imgui_draw.cpp" "${imgui}/imgui_tables.cpp" "${imgui}/imgui_widgets.cpp"
@@ -27,6 +27,12 @@ target_include_directories(imgui SYSTEM PUBLIC "${imgui}" "${imgui}/backends")
 target_compile_definitions(imgui PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK IMGUI_DISABLE_OBSOLETE_FUNCTIONS
                                         IMGUI_DISABLE_DEMO_WINDOWS)
 target_link_libraries(imgui PUBLIC SDL3::SDL3-static volk::volk)
+
+# ImGuizmo: the editor's move/rotate/scale handles and the view cube (ImGuizmo.cpp alone).
+set(imguizmo "${CMAKE_CURRENT_SOURCE_DIR}/ImGuizmo/src")
+add_library(imguizmo STATIC "${imguizmo}/ImGuizmo.cpp")
+target_include_directories(imguizmo SYSTEM PUBLIC "${imguizmo}")
+target_link_libraries(imguizmo PUBLIC imgui)
 
 # nlohmann/json: GitHub's release answers, for the self-update.
 set(JSON_BuildTests OFF CACHE BOOL "Build nlohmann/json's tests")

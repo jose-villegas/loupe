@@ -21,7 +21,7 @@
 	path = third_party/imgui
 	url = https://github.com/ocornut/imgui.git
 	shallow = true
-	branch = v1.93.0
+	branch = v1.93.0-docking
 [submodule "third_party/json"]
 	path = third_party/json
 	url = https://github.com/nlohmann/json.git
@@ -32,3 +32,8 @@
 	url = https://github.com/Mbed-TLS/mbedtls.git
 	shallow = true
 	branch = mbedtls-3.6.7
+[submodule "third_party/ImGuizmo"]
+	path = third_party/ImGuizmo
+	url = https://github.com/CedricGuillemet/ImGuizmo.git
+	shallow = true
+	branch = master

@@ -21,6 +21,8 @@ struct PackBuild {
 bool builds_packs();
 // The autana checkout loupe is built against.
 std::filesystem::path autana_dir();
+// The Python autana's tools run on; empty without the pack tool.
+std::filesystem::path python();
 // Where packs built from a .scene.toml are kept, one folder per scene file.
 std::filesystem::path pack_cache();
 // Runs `build`; false with `why` set when it failed.

@@ -35,9 +35,16 @@ scene_list(const char* heading, const std::vector<std::filesystem::path>& scenes
 } // namespace
 
 bool
-draw_menu(About& about) {
+draw_menu(About& about, EditMenu& edit) {
     bool open = false;
     if (ImGui::BeginMenuBar()) {
+        if (edit.shown && ImGui::BeginMenu("Edit")) {
+            edit.undo = ImGui::MenuItem("Undo", "Ctrl+Z", false, edit.can_undo);
+            edit.redo = ImGui::MenuItem("Redo", "Ctrl+Y", false, edit.can_redo);
+            ImGui::Separator();
+            edit.save = ImGui::MenuItem("Save", "Ctrl+S", false, edit.can_save);
+            ImGui::EndMenu();
+        }
         open = ImGui::MenuItem(ABOUT);
         ImGui::EndMenuBar();
     }
@@ -129,7 +136,7 @@ draw_view_picker(const std::vector<DebugView>& views, int* view) {
     return changed;
 }
 
-void
+FrameRect
 draw_frame(const FrameTexture& texture) {
     const ImVec2 room = ImGui::GetContentRegionAvail();
     const int zoom =
@@ -143,6 +150,7 @@ draw_frame(const FrameTexture& texture) {
     list->AddCallback(ImGui::GetPlatformIO().DrawCallback_SetSamplerNearest, nullptr);
     ImGui::Image(texture.ref(), size);
     list->AddCallback(ImGui::GetPlatformIO().DrawCallback_SetSamplerLinear, nullptr);
+    return {.min = ImGui::GetItemRectMin(), .max = ImGui::GetItemRectMax()};
 }
 
 } // namespace loupe::window

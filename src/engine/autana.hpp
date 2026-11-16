@@ -10,6 +10,7 @@ extern "C" {
 #include "render_host.h"
 #include "scene/camera/camera.h"
 #include "scene/scene.h"
+#include "scene/transform/transform.h"
 #include "scene_viewer.h"
 }
 #undef _Static_assert

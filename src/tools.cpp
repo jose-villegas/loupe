@@ -56,6 +56,11 @@ autana_dir() {
 }
 
 fs::path
+python() {
+    return PYTHON;
+}
+
+fs::path
 pack_cache() {
     return PACK_CACHE;
 }

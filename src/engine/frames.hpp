@@ -2,6 +2,7 @@
 // exact seek. One Frames is open at a time: the loop is autana's one run.
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -27,6 +28,17 @@ struct DebugView {
     int id = 0;
     std::string name;
 };
+
+// The camera the shown frame was drawn through, in the frame's pixels: its
+// eye and unit axes (right, picture-up, forward) in world space, and its lens.
+struct ViewCamera {
+    vec3f_t eye, right, up, forward;
+    float fx = 0, fy = 0, cx = 0, cy = 0, near_z = 0;
+    int width = 0, height = 0;
+};
+
+// A 4x4 matrix, column-major (element [column * 4 + row]).
+using Matrix4 = std::array<float, 16>;
 
 // Every view a render context can draw, shaded first, in autana's table order.
 std::vector<DebugView> debug_views();
@@ -84,6 +96,17 @@ class Frames {
     // The world box around what the shown frame's scene draws (scene_bounds);
     // empty with no camera drawing. An observer's start speed is read from it.
     box3f_t scene_box() const;
+    // Places the scene object named `object` at `local` (relative to its
+    // parent) from here on: kept across steps and seeks, as every frame is
+    // drawn with it, and the shown frame is drawn again with it now. False when
+    // the scene holds no such object or the redraw failed.
+    bool place(const std::string& object, const transformf_t& local);
+    // The world matrix of `object`'s parent (the scene root for a top-level
+    // object); none when the scene holds no such object.
+    std::optional<Matrix4> parent_world(const std::string& object) const;
+    // The active camera as the shown frame drew it, its axes the frame's own on
+    // a turned panel too; none without a camera.
+    std::optional<ViewCamera> view_camera() const;
     // Engine frames drawn since open, replays included: what seeks and observes cost.
     int64_t drawn() const;
     // Draws frame index(), `dt_ms` after the one before it; false when a checkpoint

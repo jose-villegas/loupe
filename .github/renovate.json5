@@ -1,5 +1,5 @@
 // Bump pull requests for every pin Loupe holds: the submodules (autana, and
-// the window's SDL3, Vulkan-Headers, volk and Dear ImGui, nlohmann/json and Mbed TLS), the GitHub Actions
+// the window's SDL3, Vulkan-Headers, volk, Dear ImGui (its docking line) and ImGuizmo, nlohmann/json and Mbed TLS), the GitHub Actions
 // and the CI tools in tools/ci/requirements.txt. Validated by
 // .github/workflows/standards.yml.
 {
@@ -45,7 +45,8 @@
     {
       matchManagers: ['git-submodules'],
       matchDepNames: ['third_party/imgui'],
-      versioning: 'regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$',
+      // The docking line: the release tag with -docking, which the editor's panels dock with.
+      versioning: 'regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)-docking$',
       groupName: 'Dear ImGui',
       groupSlug: 'imgui',
     },
@@ -73,6 +74,8 @@
       groupName: 'Vulkan SDK',
       groupSlug: 'vulkan-sdk',
     },
+    // ImGuizmo has no release tags that keep up: it follows master's head.
+    {matchManagers: ['git-submodules'], matchDepNames: ['third_party/ImGuizmo'], groupName: 'ImGuizmo', groupSlug: 'imguizmo'},
     {matchManagers: ['github-actions'], groupName: 'GitHub Actions', groupSlug: 'github-actions'},
     {matchManagers: ['pip_requirements'], groupName: 'CI tools', groupSlug: 'ci-tools'},
   ],

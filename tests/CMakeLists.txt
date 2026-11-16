@@ -168,6 +168,26 @@ add_executable(process_test process_test.cpp)
 target_link_libraries(process_test PRIVATE loupe_core)
 add_test(NAME run_logged COMMAND process_test "${CMAKE_CURRENT_BINARY_DIR}/run_logged")
 
+# The editor: its documents, undo and matrices; Frames::place on the sponza
+# pack; and a save through autana's scene_edit.py on a copy of the capybara
+# scene, so the test never writes autana's own files.
+add_executable(editor_test editor_test.cpp)
+target_link_libraries(editor_test PRIVATE loupe_core loupe_window)
+add_test(NAME editor_docs COMMAND editor_test)
+add_executable(place_test place_test.cpp)
+target_link_libraries(place_test PRIVATE loupe_core)
+add_test(NAME place COMMAND place_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/place.bmp")
+on_packs(place)
+if(LOUPE_PACK_TOOL)
+    set(capybara_copy "${CMAKE_CURRENT_BINARY_DIR}/scene_save/capybara")
+    add_test(NAME scene_save_copy COMMAND "${CMAKE_COMMAND}" -E copy_directory "${demo}/capybara" "${capybara_copy}")
+    set_tests_properties(scene_save_copy PROPERTIES FIXTURES_SETUP scene_save_copy)
+    add_executable(scene_save_test scene_save_test.cpp)
+    target_link_libraries(scene_save_test PRIVATE loupe_core loupe_window)
+    add_test(NAME scene_save COMMAND scene_save_test "${capybara_copy}/capybara.scene.toml")
+    set_tests_properties(scene_save PROPERTIES FIXTURES_REQUIRED scene_save_copy)
+endif()
+
 add_executable(library_test library_test.cpp)
 target_link_libraries(library_test PRIVATE loupe_core)
 add_test(NAME library COMMAND library_test "${CMAKE_CURRENT_BINARY_DIR}/library")
