@@ -161,7 +161,7 @@ Loupe draws those frames again with autana's own renderer, so a frame from the
 board takes the debug views, the cull view and the observer like a scene's.
 
 On the start panel, List boards runs `autana devices --json` and lists the
-boards the board pool knows. Record on a free board starts `autana -b BOARD
+boards the board pool knows. Record on a free board plugged in here starts `autana -b BOARD
 record` and opens its stream in this window; frames fill the timeline as they
 arrive, and play draws each one in turn.
 

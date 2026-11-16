@@ -91,9 +91,10 @@ window_flags_fit(const Options& options, std::string* why) {
         *why = "--checkpoint-mb and --ticks are for the window, not for -o or --video";
         return false;
     }
-    // The window draws frames again as it seeks, so only a straight run records.
-    if (windowed && !options.record.empty()) {
-        *why = "--record writes the frames a -o or --video run draws";
+    // The window draws frames again as it seeks, and a path's frame or compare
+    // runs its own sides, so only a straight run records.
+    if (!options.record.empty() && (windowed || options.frame || !options.compare.empty())) {
+        *why = "--record writes the frames a straight -o or --video run draws, not --frame's or --compare's";
         return false;
     }
     return true;

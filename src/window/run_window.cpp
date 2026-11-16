@@ -91,12 +91,18 @@ open_recording(const Options& options, const std::filesystem::path& packs, std::
 
 // Where a recording from `board` is kept: <config>/recordings/<board>-<local time>.framerec,
 // the board's serial without its colons, which a Windows file name cannot hold.
+// A second recording within the same second takes -2, -3, ... rather than overwrite.
 std::filesystem::path
 recording_file(const std::filesystem::path& config, std::string board) {
     std::erase(board, ':');
     const auto now = std::chrono::zoned_time(
         std::chrono::current_zone(), std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now()));
-    return config / "recordings" / std::format("{}-{:%Y%m%d-%H%M%S}{}", board, now, RECORDING_SUFFIX);
+    const std::string stem = std::format("{}-{:%Y%m%d-%H%M%S}", board, now);
+    std::filesystem::path file = config / "recordings" / std::format("{}{}", stem, RECORDING_SUFFIX);
+    for (int n = 2; std::filesystem::exists(file); n++) {
+        file = config / "recordings" / std::format("{}-{}{}", stem, n, RECORDING_SUFFIX);
+    }
+    return file;
 }
 
 // The open scene's run and what the window keeps for it.

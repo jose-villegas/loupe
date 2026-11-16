@@ -114,7 +114,8 @@ draw_attach(Attach& attach) {
     }
     for (const Board& board : attach.list.boards) {
         ImGui::PushID(board.id.c_str());
-        ImGui::BeginDisabled(!board.free);
+        // autana record reads the board's USB port, so only a free board plugged in here records.
+        ImGui::BeginDisabled(!board.free || board.port.empty());
         if (ImGui::Button("Record")) {
             attach.record = board.id;
         }
