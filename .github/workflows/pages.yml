@@ -1,0 +1,71 @@
+name: Pages
+
+# The architecture explorer: a C4 model of Loupe drawn from its tracked
+# sources by autana's scripts/architecture/, from the submodule, with what
+# the code cannot say read from tools/architecture/project.json. The site's
+# root opens the context diagram. A push to main publishes it; a pull request
+# builds it without publishing, so a source the model cannot describe fails
+# there first. Needs the repository setting Pages > Source set to
+# "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && 'main' || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  ARCHITECTURE: third_party/autana/scripts/architecture
+
+jobs:
+  build:
+    name: Build the explorer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Full history: each box links its file at the newest commit main has.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: autana, the only submodule the explorer reads
+        run: git submodule update --init --depth 1 third_party/autana
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: third_party/autana/.python-version
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: third_party/autana/.node-version
+      - name: LikeC4, at the version autana pins
+        run: npm ci --prefix "$ARCHITECTURE"
+      - name: Model
+        run: python "$ARCHITECTURE/build.py" --project tools/architecture/project.json -o build/architecture
+      - name: Site
+        run: >-
+          python "$ARCHITECTURE/site.py" build/architecture -o _site
+          --base "/${{ github.event.repository.name }}/" --open index
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+
+  deploy:
+    name: Publish to Pages
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

@@ -1,0 +1,28 @@
+{
+  "people": [
+    {"id": "developer", "name": "Developer",
+     "description": "Opens a scene, steps through its frames, moves its objects and saves them back."}
+  ],
+  "systems": [
+    {"id": "autana", "name": "autana",
+     "description": "The engine whose drawing code Loupe runs, scenes and packs included.",
+     "folder": "third_party/autana"},
+    {"id": "ci", "name": "GitHub Actions",
+     "description": "Builds and tests Loupe on every pull request and publishes its releases.",
+     "folder": ".github/workflows"}
+  ],
+  "containers": [
+    {"id": "loupe", "name": "Loupe", "technology": "C++20 · SDL3 · Vulkan · Dear ImGui", "file": "src/main.cpp"}
+  ],
+  "relations": [
+    {"from": "developer", "to": "loupe", "label": "opens scenes, edits, renders"},
+    {"from": "loupe", "to": "autana", "label": "draws with its code, builds its packs"},
+    {"from": "ci", "to": "loupe", "label": "builds, tests, releases"}
+  ],
+  "detail": "loupe",
+  "scan": ["src", "tests"],
+  "include_roots": ["src", "tests"],
+  "headers": [".hpp", ".h"],
+  "sources": [".cpp"],
+  "vendor_includes": "^(SDL3/|imgui|ImGuizmo|volk|vulkan/|nlohmann/|mbedtls/|asset/|core/|hash/|kinematics/|math/|scene/|render_host|scene_viewer)"
+}
