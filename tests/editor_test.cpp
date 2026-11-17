@@ -114,7 +114,7 @@ placement_round_trips() {
     for (const Placement& placement : placements) {
         const std::optional<Placement> back = loupe::editor::to_placement(loupe::editor::to_matrix(placement));
         bool same = back.has_value();
-        for (size_t i = 0; same && i < 3; i++) {
+        for (size_t i = 0; back && same && i < 3; i++) {
             same &= near(back->position[i], placement.position[i])
                     && near(back->rotation_deg[i], placement.rotation_deg[i], CLOSE_DEGREES)
                     && near(back->scale[i], placement.scale[i]);

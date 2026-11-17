@@ -142,7 +142,7 @@ entity_t
 entity_named(const std::string& name) {
     entity_t root = camera_active();
     if (handle_is_none(root)) {
-        return ENTITY_NONE;
+        return entity_t{}; // ENTITY_NONE, the zero handle, without its C compound literal
     }
     for (entity_t up = entity_parent(root); !handle_is_none(up); up = entity_parent(up)) {
         root = up;
@@ -334,8 +334,7 @@ Frames::can_observe() const {
 
 bool
 Frames::observe(std::optional<transformf_t> pose) {
-    State& s = *state_;
-    const int shown = s.index - 1;
+    const int shown = state_->index - 1;
     if (!can_observe() || shown < 0) {
         return false;
     }
@@ -553,7 +552,7 @@ Frames::close() {
 
 bool
 render(const Options& options, std::string* why) {
-    std::unique_ptr<Frames> frames = Frames::open(options, why);
+    const std::unique_ptr<Frames> frames = Frames::open(options, why);
     if (frames == nullptr) {
         return false;
     }

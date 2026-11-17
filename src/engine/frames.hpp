@@ -32,7 +32,7 @@ struct DebugView {
 // The camera the shown frame was drawn through, in the frame's pixels: its
 // eye and unit axes (right, picture-up, forward) in world space, and its lens.
 struct ViewCamera {
-    vec3f_t eye, right, up, forward;
+    vec3f_t eye{}, right{}, up{}, forward{};
     float fx = 0, fy = 0, cx = 0, cy = 0, near_z = 0;
     int width = 0, height = 0;
 };

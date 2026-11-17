@@ -66,10 +66,11 @@ end_drag(Editor& editor) {
     editor.drag.reset();
 }
 
-// `placement` with the handle's own part taken from `moved`, rounded; the other parts stay exact.
+// `drag.before` with the handle's own part taken from `drag.after`, rounded; the other parts stay exact.
 editor::Placement
-handle_result(Handle handle, const editor::Placement& placement, const editor::Placement& moved) {
-    editor::Placement out = placement;
+handle_result(Handle handle, const editor::Move& drag) {
+    editor::Placement out = drag.before;
+    const editor::Placement& moved = drag.after;
     const auto round = [](const std::array<float, 3>& values, float step) {
         return std::array<float, 3>{editor::rounded(values[0], step), editor::rounded(values[1], step),
                                     editor::rounded(values[2], step)};
@@ -93,9 +94,10 @@ operation(Handle handle) {
 }
 
 // Where `world` (unmirrored) puts its origin on screen through `clip_from_world` (projection * view, mirrored world)
-// over the frame at `min`..`max`; none behind the eye.
+// over `frame`; none behind the eye.
 std::optional<ImVec2>
-screen_origin(const mat4f_t& world, const mat4f_t& clip_from_world, ImVec2 min, ImVec2 max) {
+screen_origin(const mat4f_t& world, const mat4f_t& clip_from_world, const FrameRect& frame) {
+    const ImVec2 min = frame.min, max = frame.max;
     const mat4f_t clip = mat4f_mul(clip_from_world, editor::mirror_z(world));
     const float w = clip.m[3][3];
     if (w <= 0.0F) {
@@ -107,7 +109,7 @@ screen_origin(const mat4f_t& world, const mat4f_t& clip_from_world, ImVec2 min, 
 
 // Selects the object whose origin lands nearest the click at `mouse`, within PICK_RADIUS_PX.
 void
-pick(Editor& editor, const Frames& frames, const mat4f_t& clip_from_world, ImVec2 min, ImVec2 max, ImVec2 mouse) {
+pick(Editor& editor, const Frames& frames, const mat4f_t& clip_from_world, const FrameRect& frame, ImVec2 mouse) {
     float nearest = PICK_RADIUS_PX * PICK_RADIUS_PX;
     for (const editor::Object& object : editor.docs.scene.objects) {
         const std::optional<mat4f_t> parent = frames.parent_world(object.path);
@@ -115,7 +117,7 @@ pick(Editor& editor, const Frames& frames, const mat4f_t& clip_from_world, ImVec
             continue;
         }
         const mat4f_t world = mat4f_mul(*parent, editor::to_matrix(shown_placement(editor, object)));
-        if (const std::optional<ImVec2> at = screen_origin(world, clip_from_world, min, max)) {
+        if (const std::optional<ImVec2> at = screen_origin(world, clip_from_world, frame)) {
             const float dx = at->x - mouse.x, dy = at->y - mouse.y;
             if (dx * dx + dy * dy < nearest) {
                 nearest = dx * dx + dy * dy;
@@ -181,6 +183,48 @@ hint(const char* text) {
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
     ImGui::TextWrapped("%s", text);
     ImGui::PopStyleColor();
+}
+
+// What the last save's bake check found, or that it is still asking.
+void
+draw_bake_check(const Editor& editor) {
+    if (editor.checking.result.valid()) {
+        ImGui::TextDisabled("Asking the bakes what this re-keys...");
+    } else if (editor.checked) {
+        if (!editor.checked->ok) {
+            ImGui::TextWrapped("Bake check failed: %s", editor.checked->why.c_str());
+        } else if (editor.checked->rebake_rows.empty()) {
+            ImGui::TextUnformatted("Re-keys no bakes");
+        } else {
+            ImGui::Text("Re-keys %zu bakes:", editor.checked->rebake_rows.size());
+            for (const std::string& row : editor.checked->rebake_rows) {
+                ImGui::BulletText("%s", row.c_str());
+            }
+        }
+    }
+}
+
+// The selected `object`'s handles under `parent`: a drag moves it, and letting
+// go ends the drag in one edit. True while the mouse is over them.
+bool
+object_handles(Editor& editor, const editor::Object& object, const mat4f_t& parent, const GizmoMatrix& view,
+               const GizmoMatrix& projection) {
+    const editor::Placement now = shown_placement(editor, object);
+    GizmoMatrix moved = gizmo(editor::mirror_z(mat4f_mul(parent, editor::to_matrix(now))));
+    const ImGuizmo::MODE mode = editor.local_axes ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+    if (ImGuizmo::Manipulate(view.data(), projection.data(), operation(editor.handle), mode, moved.data())) {
+        const mat4f_t local = mat4f_mul(mat4f_invert_affine(parent), editor::mirror_z(from_gizmo(moved)));
+        // A turn about the world's axes under an unevenly scaled parent can shear; a placement cannot hold that.
+        if (const std::optional<editor::Placement> placed = editor::to_placement(local)) {
+            drag_to(editor, object, handle_result(editor.handle, {.before = now, .after = *placed}));
+        }
+    }
+    const bool held = ImGuizmo::IsUsing();
+    if (editor.handles_held && !held) {
+        end_drag(editor);
+    }
+    editor.handles_held = held;
+    return ImGuizmo::IsOver();
 }
 
 } // namespace
@@ -318,20 +362,7 @@ draw_inspector(Editor& editor) {
     if (!editor.status.empty()) {
         ImGui::TextWrapped("%s", editor.status.c_str());
     }
-    if (editor.checking.result.valid()) {
-        ImGui::TextDisabled("Asking the bakes what this re-keys...");
-    } else if (editor.checked) {
-        if (!editor.checked->ok) {
-            ImGui::TextWrapped("Bake check failed: %s", editor.checked->why.c_str());
-        } else if (editor.checked->rebake_rows.empty()) {
-            ImGui::TextUnformatted("Re-keys no bakes");
-        } else {
-            ImGui::Text("Re-keys %zu bakes:", editor.checked->rebake_rows.size());
-            for (const std::string& row : editor.checked->rebake_rows) {
-                ImGui::BulletText("%s", row.c_str());
-            }
-        }
-    }
+    draw_bake_check(editor);
 }
 
 void
@@ -348,7 +379,7 @@ draw_handle_bar(Editor& editor) {
 }
 
 void
-draw_handles(Editor& editor, const Frames& frames, ImVec2 min, ImVec2 max) {
+draw_handles(Editor& editor, const Frames& frames, const FrameRect& frame) {
     const std::optional<ViewCamera> camera = frames.view_camera();
     if (!camera) {
         return;
@@ -356,6 +387,7 @@ draw_handles(Editor& editor, const Frames& frames, ImVec2 min, ImVec2 max) {
     const mat4f_t view = editor::view_matrix(*camera);
     const mat4f_t projection = editor::projection_matrix(*camera, camera->near_z * FAR_IN_NEARS);
     const GizmoMatrix gizmo_view = gizmo(view), gizmo_projection = gizmo(projection);
+    const ImVec2 min = frame.min, max = frame.max;
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
     ImGuizmo::SetOrthographic(false);
     ImGuizmo::SetRect(min.x, min.y, max.x - min.x, max.y - min.y);
@@ -363,23 +395,7 @@ draw_handles(Editor& editor, const Frames& frames, ImVec2 min, ImVec2 max) {
     const std::optional<mat4f_t> parent = object != nullptr ? frames.parent_world(object->path) : std::nullopt;
     bool over_handles = false;
     if (object != nullptr && parent && editor::placeable(*object)) {
-        const editor::Placement now = shown_placement(editor, *object);
-        GizmoMatrix moved = gizmo(editor::mirror_z(mat4f_mul(*parent, editor::to_matrix(now))));
-        const ImGuizmo::MODE mode = editor.local_axes ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
-        if (ImGuizmo::Manipulate(gizmo_view.data(), gizmo_projection.data(), operation(editor.handle), mode,
-                                 moved.data())) {
-            const mat4f_t local = mat4f_mul(mat4f_invert_affine(*parent), editor::mirror_z(from_gizmo(moved)));
-            // A turn about the world's axes under an unevenly scaled parent can shear; a placement cannot hold that.
-            if (const std::optional<editor::Placement> placed = editor::to_placement(local)) {
-                drag_to(editor, *object, handle_result(editor.handle, now, *placed));
-            }
-        }
-        over_handles = ImGuizmo::IsOver();
-        const bool held = ImGuizmo::IsUsing();
-        if (editor.handles_held && !held) {
-            end_drag(editor);
-        }
-        editor.handles_held = held;
+        over_handles = object_handles(editor, *object, *parent, gizmo_view, gizmo_projection);
     } else if (editor.handles_held) {
         // The object went away or stopped placing mid-drag: the drag ends here.
         end_drag(editor);
@@ -394,7 +410,7 @@ draw_handles(Editor& editor, const Frames& frames, ImVec2 min, ImVec2 max) {
     const bool inside = mouse.x >= min.x && mouse.x < max.x && mouse.y >= min.y && mouse.y < max.y;
     if (inside && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !over_handles && !editor.handles_held
         && !ImGuizmo::IsViewManipulateHovered()) {
-        pick(editor, frames, mat4f_mul(projection, view), min, max, mouse);
+        pick(editor, frames, mat4f_mul(projection, view), frame, mouse);
     }
 }
 

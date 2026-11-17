@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <future>
@@ -20,13 +21,14 @@
 #include "engine/frames.hpp"
 #include "imgui.h"
 #include "scratch.hpp"
+#include "window/panels.hpp"
 // After imgui.h, whose types its header uses without including it.
 #include "ImGuizmo.h"
 
 namespace loupe::window {
 
 // The handles' operation: which part of the placement a drag moves.
-enum class Handle { Move, Rotate, Scale };
+enum class Handle : uint8_t { Move, Rotate, Scale };
 
 // While a handle or an inspector field is dragged: the object, where it
 // started, and where it is now. The drag ends in one Place edit.
@@ -103,7 +105,7 @@ void draw_inspector(Editor& editor);
 void draw_handle_bar(Editor& editor);
 // The handles on the selected object over the frame drawn at `min`..`max`,
 // and the view cube in its corner; a finished drag pushes one Place edit.
-void draw_handles(Editor& editor, const Frames& frames, ImVec2 min, ImVec2 max);
+void draw_handles(Editor& editor, const Frames& frames, const FrameRect& frame);
 // Puts an object somewhere in the engine: Frames::place, or a test's stand-in.
 using PlaceFn = std::function<bool(const std::string& object, const transformf_t& local)>;
 // Places every object whose placement differs from what the engine was last

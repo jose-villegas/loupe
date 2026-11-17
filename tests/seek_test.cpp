@@ -24,7 +24,7 @@ int
 main(int argc, char** argv) {
     loupe::test::Straight straight;
     bool ok = false;
-    std::unique_ptr<loupe::Frames> frames =
+    const std::unique_ptr<loupe::Frames> frames =
         loupe::test::open_stepped(TEST, std::span(argv, static_cast<size_t>(argc)), STRAIGHT_TO, &straight, &ok);
     if (frames == nullptr) {
         return 1;
