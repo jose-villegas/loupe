@@ -147,14 +147,14 @@ fill(Canvas& canvas, const Triangle& v, const ImVec4& clip, ImTextureData* textu
     if (area == 0.0F) {
         return;
     }
-    const int x0 =
-        std::max({0, static_cast<int>(clip.x), static_cast<int>(std::min({v[0]->pos.x, v[1]->pos.x, v[2]->pos.x}))});
-    const int y0 =
-        std::max({0, static_cast<int>(clip.y), static_cast<int>(std::min({v[0]->pos.y, v[1]->pos.y, v[2]->pos.y}))});
-    const int x1 = std::min({canvas.width, static_cast<int>(std::ceil(clip.z)),
-                             static_cast<int>(std::ceil(std::max({v[0]->pos.x, v[1]->pos.x, v[2]->pos.x})))});
-    const int y1 = std::min({canvas.height, static_cast<int>(std::ceil(clip.w)),
-                             static_cast<int>(std::ceil(std::max({v[0]->pos.y, v[1]->pos.y, v[2]->pos.y})))});
+    // The triangle's box, inside the clip and the canvas.
+    ImRect box(v[0]->pos, v[0]->pos);
+    box.Add(v[1]->pos);
+    box.Add(v[2]->pos);
+    box.ClipWithFull(ImRect(clip.x, clip.y, clip.z, clip.w));
+    box.ClipWithFull(ImRect(0.0F, 0.0F, static_cast<float>(canvas.width), static_cast<float>(canvas.height)));
+    const int x0 = static_cast<int>(box.Min.x), y0 = static_cast<int>(box.Min.y);
+    const int x1 = static_cast<int>(std::ceil(box.Max.x)), y1 = static_cast<int>(std::ceil(box.Max.y));
     for (int y = y0; y < y1; y++) {
         for (int x = x0; x < x1; x++) {
             const std::optional<std::array<float, 3>> w =
