@@ -79,97 +79,132 @@ take_textures() {
     }
 }
 
+// A shot being drawn: linear RGB, `width` by `height`, rows top down.
+struct Canvas {
+    std::vector<float> rgb;
+    int width = 0, height = 0;
+};
+
+using Triangle = std::array<const ImDrawVert*, 3>;
+
+// `point`'s barycentric weights in `v`, whose doubled signed area is `area`;
+// none when it lies outside.
+std::optional<std::array<float, 3>>
+weights(const Triangle& v, float area, ImVec2 point) {
+    std::array<float, 3> w{};
+    for (size_t k = 0; k < 3; k++) {
+        const ImVec2 a = v[(k + 1) % 3]->pos;
+        const ImVec2 b = v[(k + 2) % 3]->pos;
+        w[k] = (((b.x - a.x) * (point.y - a.y)) - ((b.y - a.y) * (point.x - a.x))) / area;
+    }
+    if (w[0] < 0.0F || w[1] < 0.0F || w[2] < 0.0F) {
+        return std::nullopt;
+    }
+    return w;
+}
+
+// The texel of `texture` at `uv` scaling `colour`, as ImGui's renderer does.
+void
+sample(ImTextureData* texture, ImVec2 uv, std::array<float, 4>& colour) {
+    if (texture == nullptr || texture->Pixels == nullptr) {
+        return;
+    }
+    const int tx = std::clamp(static_cast<int>(uv.x * static_cast<float>(texture->Width)), 0, texture->Width - 1);
+    const int ty = std::clamp(static_cast<int>(uv.y * static_cast<float>(texture->Height)), 0, texture->Height - 1);
+    const auto* texel = static_cast<const uint8_t*>(texture->GetPixelsAt(tx, ty));
+    if (texture->Format == ImTextureFormat_Alpha8) {
+        colour[3] *= static_cast<float>(texel[0]) / 255.0F;
+        return;
+    }
+    for (size_t c = 0; c < colour.size(); c++) {
+        colour[c] *= static_cast<float>(texel[c]) / 255.0F;
+    }
+}
+
+// The colour `v` gives where its weights are `w`, textured.
+std::array<float, 4>
+shade(const Triangle& v, const std::array<float, 3>& w, ImTextureData* texture) {
+    std::array<float, 4> colour{};
+    ImVec2 uv(0.0F, 0.0F);
+    for (size_t k = 0; k < 3; k++) {
+        const ImVec4 c = ImGui::ColorConvertU32ToFloat4(v[k]->col);
+        colour[0] += w[k] * c.x;
+        colour[1] += w[k] * c.y;
+        colour[2] += w[k] * c.z;
+        colour[3] += w[k] * c.w;
+        uv.x += w[k] * v[k]->uv.x;
+        uv.y += w[k] * v[k]->uv.y;
+    }
+    sample(texture, uv, colour);
+    return colour;
+}
+
+// `v` blended over `canvas` inside `clip`.
+void
+fill(Canvas& canvas, const Triangle& v, const ImVec4& clip, ImTextureData* texture) {
+    const float area = ((v[1]->pos.x - v[0]->pos.x) * (v[2]->pos.y - v[0]->pos.y))
+                       - ((v[2]->pos.x - v[0]->pos.x) * (v[1]->pos.y - v[0]->pos.y));
+    if (area == 0.0F) {
+        return;
+    }
+    const int x0 =
+        std::max({0, static_cast<int>(clip.x), static_cast<int>(std::min({v[0]->pos.x, v[1]->pos.x, v[2]->pos.x}))});
+    const int y0 =
+        std::max({0, static_cast<int>(clip.y), static_cast<int>(std::min({v[0]->pos.y, v[1]->pos.y, v[2]->pos.y}))});
+    const int x1 = std::min({canvas.width, static_cast<int>(std::ceil(clip.z)),
+                             static_cast<int>(std::ceil(std::max({v[0]->pos.x, v[1]->pos.x, v[2]->pos.x})))});
+    const int y1 = std::min({canvas.height, static_cast<int>(std::ceil(clip.w)),
+                             static_cast<int>(std::ceil(std::max({v[0]->pos.y, v[1]->pos.y, v[2]->pos.y})))});
+    for (int y = y0; y < y1; y++) {
+        for (int x = x0; x < x1; x++) {
+            const std::optional<std::array<float, 3>> w =
+                weights(v, area, ImVec2(static_cast<float>(x) + 0.5F, static_cast<float>(y) + 0.5F));
+            if (!w) {
+                continue;
+            }
+            const std::array<float, 4> colour = shade(v, *w, texture);
+            float* out = &canvas.rgb[(static_cast<size_t>(y * canvas.width) + static_cast<size_t>(x)) * 3];
+            for (size_t c = 0; c < 3; c++) {
+                out[c] += ((colour[c] * 255.0F) - out[c]) * colour[3];
+            }
+        }
+    }
+}
+
 // The draw data's triangles over BACKGROUND, `width` by `height`, as BGR rows top down.
 std::vector<uint8_t>
 rasterize(const ImDrawData& data, int width, int height) {
-    std::vector<float> rgb(static_cast<size_t>(width * height) * 3);
-    for (size_t i = 0; i < rgb.size(); i++) {
-        rgb[i] = BACKGROUND[i % 3];
+    Canvas canvas{.rgb = std::vector<float>(static_cast<size_t>(width * height) * 3), .width = width, .height = height};
+    for (size_t i = 0; i < canvas.rgb.size(); i++) {
+        canvas.rgb[i] = BACKGROUND[i % 3];
     }
     for (const ImDrawList* list : data.CmdLists) {
         for (const ImDrawCmd& cmd : list->CmdBuffer) {
-            ImTextureData* texture = cmd.TexRef._TexData;
-            const int x0 = std::max(0, static_cast<int>(cmd.ClipRect.x));
-            const int y0 = std::max(0, static_cast<int>(cmd.ClipRect.y));
-            const int x1 = std::min(width, static_cast<int>(std::ceil(cmd.ClipRect.z)));
-            const int y1 = std::min(height, static_cast<int>(std::ceil(cmd.ClipRect.w)));
             for (unsigned t = 0; t + 2 < cmd.ElemCount; t += 3) {
-                const ImDrawVert* v[3];
+                Triangle v{};
                 for (unsigned k = 0; k < 3; k++) {
                     v[k] = &list->VtxBuffer[static_cast<int>(
                         cmd.VtxOffset + list->IdxBuffer[static_cast<int>(cmd.IdxOffset + t + k)])];
                 }
-                const float area = ((v[1]->pos.x - v[0]->pos.x) * (v[2]->pos.y - v[0]->pos.y))
-                                   - ((v[2]->pos.x - v[0]->pos.x) * (v[1]->pos.y - v[0]->pos.y));
-                if (area == 0.0F) {
-                    continue;
-                }
-                const int bx0 = std::max(x0, static_cast<int>(std::min({v[0]->pos.x, v[1]->pos.x, v[2]->pos.x})));
-                const int by0 = std::max(y0, static_cast<int>(std::min({v[0]->pos.y, v[1]->pos.y, v[2]->pos.y})));
-                const int bx1 =
-                    std::min(x1, static_cast<int>(std::ceil(std::max({v[0]->pos.x, v[1]->pos.x, v[2]->pos.x}))));
-                const int by1 =
-                    std::min(y1, static_cast<int>(std::ceil(std::max({v[0]->pos.y, v[1]->pos.y, v[2]->pos.y}))));
-                for (int y = by0; y < by1; y++) {
-                    for (int x = bx0; x < bx1; x++) {
-                        const float px = static_cast<float>(x) + 0.5F, py = static_cast<float>(y) + 0.5F;
-                        std::array<float, 3> w{};
-                        for (int k = 0; k < 3; k++) {
-                            const ImDrawVert& a = *v[(k + 1) % 3];
-                            const ImDrawVert& b = *v[(k + 2) % 3];
-                            w[k] = (((b.pos.x - a.pos.x) * (py - a.pos.y)) - ((b.pos.y - a.pos.y) * (px - a.pos.x)))
-                                   / area;
-                        }
-                        if (w[0] < 0.0F || w[1] < 0.0F || w[2] < 0.0F) {
-                            continue;
-                        }
-                        std::array<float, 4> colour{};
-                        float u = 0.0F, uv_y = 0.0F;
-                        for (int k = 0; k < 3; k++) {
-                            const ImVec4 c = ImGui::ColorConvertU32ToFloat4(v[k]->col);
-                            colour[0] += w[k] * c.x;
-                            colour[1] += w[k] * c.y;
-                            colour[2] += w[k] * c.z;
-                            colour[3] += w[k] * c.w;
-                            u += w[k] * v[k]->uv.x;
-                            uv_y += w[k] * v[k]->uv.y;
-                        }
-                        if (texture != nullptr && texture->Pixels != nullptr) {
-                            const int tx = std::clamp(static_cast<int>(u * static_cast<float>(texture->Width)), 0,
-                                                      texture->Width - 1);
-                            const int ty = std::clamp(static_cast<int>(uv_y * static_cast<float>(texture->Height)), 0,
-                                                      texture->Height - 1);
-                            const auto* texel = static_cast<const uint8_t*>(texture->GetPixelsAt(tx, ty));
-                            if (texture->Format == ImTextureFormat_Alpha8) {
-                                colour[3] *= static_cast<float>(texel[0]) / 255.0F;
-                            } else {
-                                for (int c = 0; c < 4; c++) {
-                                    colour[static_cast<size_t>(c)] *= static_cast<float>(texel[c]) / 255.0F;
-                                }
-                            }
-                        }
-                        float* out = &rgb[(static_cast<size_t>(y * width) + static_cast<size_t>(x)) * 3];
-                        for (int c = 0; c < 3; c++) {
-                            out[c] += (colour[static_cast<size_t>(c)] * 255.0F - out[c]) * colour[3];
-                        }
-                    }
-                }
+                fill(canvas, v, cmd.ClipRect, cmd.TexRef._TexData);
             }
         }
     }
-    std::vector<uint8_t> bgr(rgb.size());
-    for (size_t i = 0; i < rgb.size(); i += 3) {
+    std::vector<uint8_t> bgr(canvas.rgb.size());
+    for (size_t i = 0; i < canvas.rgb.size(); i += 3) {
         for (size_t c = 0; c < 3; c++) {
-            bgr[i + c] = static_cast<uint8_t>(std::clamp(rgb[i + 2 - c], 0.0F, 255.0F));
+            bgr[i + c] = static_cast<uint8_t>(std::clamp(canvas.rgb[i + 2 - c], 0.0F, 255.0F));
         }
     }
     return bgr;
 }
 
+// `value` as little-endian bytes, as wide as its type.
+template <typename Value>
 void
-put(std::vector<uint8_t>& out, uint32_t value, int bytes) {
-    for (int i = 0; i < bytes; i++) {
-        out.push_back(static_cast<uint8_t>(value >> (8 * i)));
+put(std::vector<uint8_t>& out, Value value) {
+    for (size_t i = 0; i < sizeof(Value); i++) {
+        out.push_back(static_cast<uint8_t>(static_cast<uint32_t>(value) >> (8 * i)));
     }
 }
 
@@ -178,16 +213,16 @@ bool
 write_bmp(const fs::path& file, const std::vector<uint8_t>& bgr, int width, int height) {
     const int stride = ((width * 3) + 3) & ~3;
     std::vector<uint8_t> out = {'B', 'M'};
-    put(out, static_cast<uint32_t>(BMP_HEADER + (stride * height)), 4);
-    put(out, 0, 4);
-    put(out, BMP_HEADER, 4);
-    put(out, BMP_INFO, 4);
-    put(out, static_cast<uint32_t>(width), 4);
-    put(out, static_cast<uint32_t>(height), 4);
-    put(out, 1, 2);
-    put(out, BMP_BITS, 2);
+    put(out, static_cast<uint32_t>(BMP_HEADER + (stride * height)));
+    put(out, uint32_t{0});
+    put(out, static_cast<uint32_t>(BMP_HEADER));
+    put(out, static_cast<uint32_t>(BMP_INFO));
+    put(out, static_cast<uint32_t>(width));
+    put(out, static_cast<uint32_t>(height));
+    put(out, uint16_t{1});
+    put(out, static_cast<uint16_t>(BMP_BITS));
     for (int i = 0; i < BMP_ZERO_FIELDS; i++) {
-        put(out, 0, 4);
+        put(out, uint32_t{0});
     }
     for (int y = height - 1; y >= 0; y--) {
         const auto row = bgr.begin() + (static_cast<std::ptrdiff_t>(y) * width * 3);
