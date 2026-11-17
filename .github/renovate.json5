@@ -1,4 +1,4 @@
-// Bump pull requests for every pin Loupe holds: the submodules (autana, and
+// Bump pull requests for every pin Loupe holds: the submodules (autana, c4tree, and
 // the window's SDL3, Vulkan-Headers, volk, Dear ImGui (its docking line) and ImGuizmo, nlohmann/json and Mbed TLS), the GitHub Actions
 // and the CI tools in tools/ci/requirements.txt. Validated by
 // .github/workflows/standards.yml.
@@ -32,9 +32,10 @@
   packageRules: [
     // A major is a migration with its own ticket, opened from the dependency dashboard.
     {matchUpdateTypes: ['major'], dependencyDashboardApproval: true},
-    // autana follows its main; the window's libraries follow the release tag
+    // autana and c4tree follow their main; the window's libraries follow the release tag
     // .gitmodules names as their branch, each library its own group.
     {matchManagers: ['git-submodules'], matchDepNames: ['third_party/autana'], groupName: 'autana', groupSlug: 'autana'},
+    {matchManagers: ['git-submodules'], matchDepNames: ['third_party/c4tree'], groupName: 'c4tree', groupSlug: 'c4tree'},
     {
       matchManagers: ['git-submodules'],
       matchDepNames: ['third_party/SDL'],

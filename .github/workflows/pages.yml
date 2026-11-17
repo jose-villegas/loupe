@@ -1,8 +1,8 @@
 name: Pages
 
 # The architecture explorer: a C4 model of Loupe drawn from its tracked
-# sources by autana's scripts/architecture/, from the submodule, with what
-# the code cannot say read from tools/architecture/project.json. The site's
+# sources by c4tree, the submodule at third_party/c4tree, with what the code
+# cannot say read from tools/architecture/project.json. The site's
 # root opens the context diagram. A push to main publishes it; a pull request
 # builds it without publishing, so a source the model cannot describe fails
 # there first. Needs the repository setting Pages > Source set to
@@ -22,7 +22,7 @@ permissions:
   contents: read
 
 env:
-  ARCHITECTURE: third_party/autana/scripts/architecture
+  C4TREE: third_party/c4tree
 
 jobs:
   build:
@@ -34,21 +34,23 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - name: autana, the only submodule the explorer reads
-        run: git submodule update --init --depth 1 third_party/autana
+      - name: c4tree, the only submodule the explorer reads
+        run: git submodule update --init --depth 1 "$C4TREE"
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version-file: third_party/autana/.python-version
+          python-version-file: third_party/c4tree/.python-version
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version-file: third_party/autana/.node-version
-      - name: LikeC4, at the version autana pins
-        run: npm ci --prefix "$ARCHITECTURE"
+          node-version-file: third_party/c4tree/.node-version
+      - name: c4tree's Python packages and LikeC4, at the versions it pins
+        run: |
+          python -m pip install -r "$C4TREE/requirements.txt"
+          npm ci --prefix "$C4TREE"
       - name: Model
-        run: python "$ARCHITECTURE/draw.py" --project tools/architecture/project.json -o build/architecture
+        run: python "$C4TREE/draw.py" --project tools/architecture/project.json -o build/architecture
       - name: Site
         run: >-
-          python "$ARCHITECTURE/site.py" build/architecture -o _site
+          python "$C4TREE/site.py" build/architecture -o _site
           --base "/${{ github.event.repository.name }}/" --open index
       - if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

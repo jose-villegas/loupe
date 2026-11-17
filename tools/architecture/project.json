@@ -24,5 +24,6 @@
   "include_roots": ["src", "tests"],
   "headers": [".hpp", ".h"],
   "sources": [".cpp"],
-  "vendor_includes": "^(SDL3/|imgui|ImGuizmo|volk|vulkan/|nlohmann/|mbedtls/|asset/|core/|hash/|kinematics/|math/|scene/|render_host|scene_viewer)"
+  "vendor_includes": "^(SDL3/|imgui|ImGuizmo|volk|vulkan/|nlohmann/|mbedtls/|asset/|core/|hash/|kinematics/|math/|scene/|render_host|scene_viewer)",
+  "generated": null
 }
