@@ -103,9 +103,10 @@ build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml
 
 Run without a scene, the window opens on a start panel: the sample packs beside
 `loupe` (`scenes/`, or `../share/loupe/scenes/` when installed), the last 10
-scenes opened, and Open... for any other. A scene picked there opens in this
-window with the scene's own defaults. Scenes, in a
-scene's window, closes the scene and goes back to the panel. The recent list is `recent.txt` in
+scenes or recordings opened, and Open... for any other. A scene picked there
+opens in this window with the scene's own defaults. Scenes, in a scene's window,
+closes the scene and goes back to the panel, stopping a recording first (Record
+a board). The recent list is `recent.txt` in
 `%APPDATA%\autana\loupe` on Windows and `~/.local/share/autana/loupe` on Linux.
 
 The window shows the engine's frame at the largest whole zoom that fits. Play
@@ -179,17 +180,19 @@ timeline as they arrive, and Play draws each one in turn.
 
 | Control | Sends to the board |
 |---|---|
-| Freeze board | `FREEZE`: the board's frame loop stops where it is; the frames it already drew still arrive |
+| Freeze board | `FREEZE`: the board's frame loop stops where it is |
 | Step board | `STEP`: one more frame, while frozen; that frame waits for room on the board rather than being dropped |
 | Unfreeze board | `RESUME`: the frame loop runs again |
 | Stop recording | closes `autana record`'s input: the board sends what it still holds and the recording ends |
 
 The board's controls are its own: the timeline's Play and Pause only move
 through the frames already received. The panel counts the frames received and
-those that came after a drop on the board, and shows autana's reason when the
-stream is refused. Scenes during a recording stops it first, and the window
-shows the board draining until autana ends, 30 s at most; quitting waits as
-long, then lets autana finish on its own.
+how many of them came right after a drop on the board, and shows autana's
+reason when the stream is refused.
+
+Scenes during a recording stops it first, and the window shows the board
+draining until autana ends; autana gives the board 30 s. Quitting waits up to
+35 s, then ends autana's process.
 
 ### Where recordings are kept
 
@@ -212,11 +215,13 @@ autana -b BOARD record -o ten.framerec --seconds 10
 loupe scene.apak --frames 120 --video out.avi --record run.framerec
 ```
 
-Without `--seconds`, `autana record` reads console lines from its input, so
-typing `FREEZE`, `STEP` and `RESUME` there drives the board as the window's
-controls do, and it stops when its input ends (Ctrl+Z then Enter on Windows,
-Ctrl+D on Linux). With `--seconds` it reads nothing and stops after them. Loupe's `--record` goes beside `-o` or
-`--video` only: a windowed run, `--frame` and `--compare` refuse it.
+Without `--seconds`, `autana record` reads console lines from its input:
+typing `FREEZE`, `STEP` or `RESUME` drives the board as the window's controls
+do. It stops when its input ends (Ctrl+Z then Enter on Windows, Ctrl+D on
+Linux). With `--seconds` it reads no input and stops after them.
+
+Loupe's `--record` goes beside `-o` or `--video` only; a windowed run,
+`--frame` and `--compare` refuse it.
 
 ### Replay a recording
 
