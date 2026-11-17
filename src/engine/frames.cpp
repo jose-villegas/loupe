@@ -263,7 +263,8 @@ Frames::has_views() const {
 
 int
 Frames::view() const {
-    return has_views() ? context()->debug_view : RENDER_DEBUG_VIEW_SHADED;
+    const render_context_t* drawing = context();
+    return drawing != nullptr ? drawing->debug_view : RENDER_DEBUG_VIEW_SHADED;
 }
 
 bool

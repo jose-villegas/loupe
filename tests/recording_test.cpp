@@ -6,14 +6,13 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "board/boards.hpp"
 #include "paths.hpp"
+#include "read_bytes.hpp"
 #include "window/recording.hpp"
 
 namespace fs = std::filesystem;
@@ -45,12 +44,6 @@ bool
 expect(bool ok, const char* what) {
     std::fprintf(stderr, "%s: %s %s\n", TEST, what, ok ? "ok" : "FAILED");
     return ok;
-}
-
-std::vector<uint8_t>
-read_bytes(const fs::path& file) {
-    std::ifstream in(file, std::ios::binary);
-    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
 }
 
 bool
@@ -100,7 +93,7 @@ ends_on_stop(const fs::path& fake, const fs::path& folder, const std::vector<uin
     const std::vector<std::string> log = loupe::read_lines(fs::path(saved).concat(".log"));
     ok &= expect(log.size() == 3 && log[0] == "FREEZE" && log[1] == "STEP", "the child read the lines sent");
     recording.reset();
-    ok &= expect(read_bytes(saved) == payload, "the saved file holds the stream");
+    ok &= expect(loupe::test::read_bytes(saved) == payload, "the saved file holds the stream");
     return ok;
 }
 

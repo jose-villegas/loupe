@@ -7,14 +7,13 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <span>
 #include <string>
 #include <vector>
 
 #include "frames_fixture.hpp"
 #include "paths.hpp"
+#include "read_bytes.hpp"
 
 namespace fs = std::filesystem;
 
@@ -39,12 +38,6 @@ bool
 expect(bool ok, const char* what) {
     std::fprintf(stderr, "%s: %s %s\n", TEST, what, ok ? "ok" : "FAILED");
     return ok;
-}
-
-std::vector<uint8_t>
-read_bytes(const fs::path& file) {
-    std::ifstream in(file, std::ios::binary);
-    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
 }
 
 // Records `FRAMES` frames of `scene` into STREAM; false when the run failed.
@@ -83,15 +76,25 @@ forward(loupe::Frames& frames, loupe::test::Straight* drawn) {
     return stepped && same > 0 && differ == 0;
 }
 
-bool
-saved_stream(const Folders& at, loupe::test::Straight* drawn) {
+// The stream `id`, from `scene` (live when empty), writing `<id>.bmp`; null,
+// said on stderr, when it does not open.
+std::unique_ptr<loupe::Frames>
+open(const Folders& at, const std::string& id, const fs::path& scene = {}) {
     loupe::Options options;
-    options.scene = at.out / STREAM;
-    options.out_bmp = loupe::utf8(at.out / "saved.bmp");
+    options.scene = scene;
+    options.out_bmp = loupe::utf8(at.out / (id + ".bmp"));
     std::string why;
-    const std::unique_ptr<loupe::Frames> frames = loupe::Frames::open_stream(options, at.packs, "saved", &why);
+    std::unique_ptr<loupe::Frames> frames = loupe::Frames::open_stream(options, at.packs, id, &why);
     if (frames == nullptr) {
         std::fprintf(stderr, "%s: %s\n", TEST, why.c_str());
+    }
+    return frames;
+}
+
+bool
+saved_stream(const Folders& at, loupe::test::Straight* drawn) {
+    const std::unique_ptr<loupe::Frames> frames = open(at, "saved", at.out / STREAM);
+    if (frames == nullptr) {
         return false;
     }
     bool ok = expect(frames->count() == FRAMES && !frames->live(), "the saved stream holds every frame");
@@ -103,12 +106,8 @@ saved_stream(const Folders& at, loupe::test::Straight* drawn) {
 
 bool
 live_stream(const std::vector<uint8_t>& bytes, const Folders& at, const loupe::test::Straight& drawn) {
-    loupe::Options options;
-    options.out_bmp = loupe::utf8(at.out / "live.bmp");
-    std::string why;
-    const std::unique_ptr<loupe::Frames> frames = loupe::Frames::open_stream(options, at.packs, "live", &why);
+    const std::unique_ptr<loupe::Frames> frames = open(at, "live");
     if (frames == nullptr) {
-        std::fprintf(stderr, "%s: %s\n", TEST, why.c_str());
         return false;
     }
     bool ok = expect(frames->live() && frames->count() == 0, "a live stream opens empty");
@@ -128,10 +127,7 @@ live_stream(const std::vector<uint8_t>& bytes, const Folders& at, const loupe::t
 
 bool
 refused(const Folders& at) {
-    loupe::Options options;
-    options.out_bmp = loupe::utf8(at.out / "refused.bmp");
-    std::string why;
-    const std::unique_ptr<loupe::Frames> frames = loupe::Frames::open_stream(options, at.packs, "refused", &why);
+    const std::unique_ptr<loupe::Frames> frames = open(at, "refused");
     if (frames == nullptr) {
         return false;
     }
@@ -161,7 +157,7 @@ main(int argc, char** argv) {
     }
     loupe::test::Straight drawn;
     bool ok = saved_stream(at, &drawn);
-    ok &= live_stream(read_bytes(at.out / STREAM), at, drawn);
+    ok &= live_stream(loupe::test::read_bytes(at.out / STREAM), at, drawn);
     ok &= refused(at);
     return ok ? 0 : 1;
 }
