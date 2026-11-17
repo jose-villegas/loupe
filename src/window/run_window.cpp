@@ -253,7 +253,7 @@ draw_viewport(Shown& shown) {
     const window::FrameRect rect = window::draw_frame(shown.texture);
     const bool moved = shown.observer.on && window::drive_observer(shown.observer, ImGui::GetIO().DeltaTime);
     if (editing) {
-        window::draw_handles(*shown.editor, *shown.frames, rect.min, rect.max);
+        window::draw_handles(*shown.editor, *shown.frames, rect);
     }
     return moved;
 }
