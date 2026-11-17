@@ -87,6 +87,11 @@ window_flags_fit(const Options& options, std::string* why) {
         *why = "-o and --video need a scene file";
         return false;
     }
+    // A recording is drawn by the window's stream, which -o and --video do not run.
+    if (!windowed && utf8(options.scene.filename()).ends_with(RECORDING_SUFFIX)) {
+        *why = "a .framerec opens in the window; -o and --video draw a scene";
+        return false;
+    }
     if (!windowed && (options.checkpoint_mb || options.ticks)) {
         *why = "--checkpoint-mb and --ticks are for the window, not for -o or --video";
         return false;

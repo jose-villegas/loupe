@@ -62,6 +62,8 @@ check_refusals() {
         {.args = {"s.apak", "--frame", "2", "-o", "f.png"}, .refusal = ""},
         {.args = {"s.apak", "-o", "f.bmp", "--record", "r.framerec"}, .refusal = ""},
         {.args = {"s.apak", "--record", "r.framerec"}, .refusal = "--record writes"},
+        {.args = {"r.framerec"}, .refusal = ""},
+        {.args = {"r.framerec", "-o", "f.bmp"}, .refusal = "a .framerec opens in the window"},
         {.args = {"s.apak", "--frame", "2", "-o", "f.png", "--record", "r.framerec"}, .refusal = "--record writes"},
         {.args = {"s.apak", "--frame", "2"}, .refusal = "--frame N writes -o"},
         {.args = {"s.apak", "--frame", "2", "-o", "f.png", "--video", "v.avi"}, .refusal = "--frame N writes -o"},

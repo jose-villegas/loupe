@@ -154,40 +154,84 @@ without the editor, and so does a build without the pack tool.
 
 ## Record a board
 
-A board running autana streams the render input of every frame it draws over
-USB: the views, meshes, poses and settings, and a crc of each keyframe's
-picture ([Frame-Record-Format](third_party/autana/docs/tools/Frame-Record-Format.md)).
+A board running a development build of autana streams the render input of every
+frame it draws over USB: the views, meshes, poses and settings, and a crc of
+each keyframe's picture
+([Frame-Record-Format](third_party/autana/docs/tools/Frame-Record-Format.md)).
 Loupe draws those frames again with autana's own renderer, so a frame from the
 board takes the debug views, the cull view and the observer like a scene's.
 
+```mermaid
+flowchart LR
+  board["board<br/>FRAMEREC stream"] -- USB --> rec["autana -b BOARD record"]
+  rec -- "stdout" --> loupe["Loupe window<br/>timeline fills as frames arrive"]
+  loupe -- "stdin: FREEZE · STEP · RESUME" --> rec
+  loupe -- "kept as it arrives" --> file["recordings/BOARD-TIME.framerec"]
+  file -- "Open... · recent · command line" --> replay["Loupe replays it"]
+```
+
+### From the window
+
 On the start panel, List boards runs `autana devices --json` and lists the
-boards the board pool knows. Record on a free board plugged in here starts `autana -b BOARD
-record` and opens its stream in this window; frames fill the timeline as they
-arrive, and play draws each one in turn.
+boards the board pool knows. Record, on a free board plugged in here, starts
+`autana -b BOARD record` and opens its stream in this window: frames fill the
+timeline as they arrive, and Play draws each one in turn.
 
 | Control | Sends to the board |
 |---|---|
-| Freeze / Unfreeze board | `FREEZE` / `RESUME`: the board holds one frame on screen, so it arrives whole |
-| Step board | `STEP`: one more frame, while frozen |
-| Stop recording | closes `autana record`'s input: the board sends what it holds and the recording ends |
+| Freeze board | `FREEZE`: the board's frame loop stops where it is; the frames it already drew still arrive |
+| Step board | `STEP`: one more frame, while frozen; that frame waits for room on the board rather than being dropped |
+| Unfreeze board | `RESUME`: the frame loop runs again |
+| Stop recording | closes `autana record`'s input: the board sends what it still holds and the recording ends |
 
-Scenes during a recording stops it first, and the window shows the board
-draining until autana ends, 30 s at most; quitting waits as long, then lets
-autana finish on its own.
+The board's controls are its own: the timeline's Play and Pause only move
+through the frames already received. The panel counts the frames received and
+those that came after a drop on the board, and shows autana's reason when the
+stream is refused. Scenes during a recording stops it first, and the window
+shows the board draining until autana ends, 30 s at most; quitting waits as
+long, then lets autana finish on its own.
 
-The panel counts the frames received and those that came after a drop on the
-board. Each recording is kept, as it arrives, as
-`recordings/<board>-<time>.framerec` in Loupe's settings folder, beside its
-`autana record` log, and joins the recent list once anything has arrived. A `.framerec` opens like a
-scene file: on the command line, from Open..., or from recent.
+### Where recordings are kept
+
+Each recording is written as it arrives to
+`recordings/<board>-<yyyymmdd>-<hhmmss>.framerec` in Loupe's settings folder
+(`%APPDATA%\autana\loupe` on Windows, `~/.local/share/autana/loupe` on Linux),
+the board's serial without its colons; a second one within the same second
+takes `-2`, `-3`, and so on. Beside it, `<same name>.framerec.log` holds
+`autana record`'s own output. A recording joins the recent list once anything
+has arrived.
+
+### From the command line
+
+`autana record` writes the same stream to a file, and a run of Loupe records
+the frames it draws itself:
+
+```bash
+autana -b BOARD record -o board.framerec
+autana -b BOARD record -o ten.framerec --seconds 10
+loupe scene.apak --frames 120 --video out.avi --record run.framerec
+```
+
+Without `--seconds`, `autana record` reads console lines from its input, so
+typing `FREEZE`, `STEP` and `RESUME` there drives the board as the window's
+controls do, and it stops when its input ends (Ctrl+Z then Enter on Windows,
+Ctrl+D on Linux). With `--seconds` it reads nothing and stops after them. Loupe's `--record` goes beside `-o` or
+`--video` only: a windowed run, `--frame` and `--compare` refuse it.
+
+### Replay a recording
+
+A `.framerec` opens like a scene file: on the command line, from Open..., or
+from recent. It opens in the window only: `-o` and `--video` refuse one, since
+they draw a scene.
+
+```bash
+loupe board.framerec
+```
 
 The stream names its packs by name and crc, and Loupe loads them from its
-samples folder. A pack whose crc differs from the board's refuses the
-stream, saying which. So the board runs a build of the autana commit Loupe
-is pinned to (`third_party/autana`): from that checkout, `autana flash dev`.
-
-A run of Loupe's own records too: `--record out.framerec` beside `-o` or
-`--video` writes the stream of the frames it draws.
+samples folder. A pack whose crc differs from the board's refuses the stream,
+saying which. So the board runs a build of the autana commit Loupe is pinned
+to (`third_party/autana`): from that checkout, `autana flash dev`.
 
 ## Render a scene
 
@@ -205,11 +249,12 @@ build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml --
 | `--frames N`, `--dt MS` | how many frames, how far apart (30 at 16 ms) |
 | `--set owner.name=value` | a tunable; repeatable |
 | `-o out.bmp`, `--video out.avi` | the last frame, every frame |
+| `--record out.framerec` | also write the stream of the frames drawn (Record a board) |
 | `--checkpoint-mb MB` | the window's checkpoint memory (1024); past it, every other checkpoint goes |
 | `--ticks N` | closes the window after N ticks, for scripted runs |
 | `--version` | prints the build's version, commit, channel and autana commit (Download), and exits |
 
-The flags but the last three are autana's `third_party/autana/launcher/tools/render/scene_viewer.sh` flags, and the output is the same bytes.
+The flags but the last four are autana's `third_party/autana/launcher/tools/render/scene_viewer.sh` flags, and the output is the same bytes.
 A `.apak` opens as it is: its folder is the asset dir, its name the scene id.
 A `.scene.toml` run first brings the scene's pack in `build/packs` up to date
 with autana's `third_party/autana/launcher/tools/r3d/build_pack.py`; a build
@@ -257,7 +302,7 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `scene_toml_refused`, `compare_refused` | without the pack tool, a `.scene.toml` exits 1 and `--compare` exits 2, saying why |
 | `wrong_version_refused` | a pack of another format version exits 1 with autana's reason |
 | `reopen_*` | a scene opened again after another closed, in one process, draws what it drew opened first; a pack of the same name from another folder is read afresh, so the window switches scenes in one process |
-| `path_flags` | `--frame`, `--compare` and `--b-args` parse only with what they need, and B takes `--b-args`' flags in place of A's |
+| `path_flags` | `--frame`, `--compare`, `--b-args` and `--record` parse only with what they need, a `.framerec` only in the window, and B takes `--b-args`' flags in place of A's |
 | `path_timing` | a path is timed as described under Frames of a camera path |
 | `frame`, `frame_compare`, `frame_compare_head` | `--frame`'s PNG, alone and for both sides against a folder and against `HEAD`, holds the pixels a straight run to that frame writes; under other `--b-args`, B's differs from A's |
 | `compare_same`, `compare_view` | a compare video's difference is nothing on every frame against the same pack, and something under another `--view`; skipped without ffmpeg, numpy or Pillow |
@@ -277,7 +322,7 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `place` | a placed object draws there on the shown frame at once and on frames sought after; placed back, every frame is the straight run's; an unknown name is refused |
 | `scene_save` | on a copy of the capybara scene, moving and scaling the capybara adds only its two lines; a baked renderer is refused, the file unchanged |
 | `stream` | a run's `--record`, opened as a `.framerec`, draws every frame with each keyframe's CHECK the same, and seeks back draw the bytes stepping forward drew; fed live in pieces its count grows to every frame and draws them alike; bytes that are no stream are refused |
-| `recording` | against a stand-in for `autana record`, every stream byte arrives in order and in the saved file, console lines reach its input, and Stop ends it; `autana devices --json` parses into free, held and remote boards |
+| `recording` | against a stand-in for `autana record`, every stream byte arrives in order and in the saved file, console lines reach its input, Stop ends it, and one that hangs is let go within its bound; `autana devices --json` parses into free, held and remote boards |
 | `include_gate` | only `src/engine/autana.hpp` includes autana's engine headers; autana's packages, below the engine, are open to every file |
 
 CI runs them on Linux and Windows at the pinned autana on every pull request,
