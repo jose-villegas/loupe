@@ -132,6 +132,12 @@ add_executable(observer_test observer_test.cpp)
 target_link_libraries(observer_test PRIVATE loupe_core loupe_window)
 add_test(NAME observer_steer COMMAND observer_test)
 
+# The panels drawn headless at several widths fit them, and are kept as BMPs to look at.
+add_executable(panel_fit_test panel_fit_test.cpp)
+target_link_libraries(panel_fit_test PRIVATE loupe_core loupe_window)
+add_test(NAME panel_fit COMMAND panel_fit_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/panel_fit")
+on_packs(panel_fit)
+
 add_executable(whole_path_test whole_path_test.cpp)
 target_link_libraries(whole_path_test PRIVATE loupe_core)
 add_test(NAME whole_path COMMAND whole_path_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/whole_path.bmp")

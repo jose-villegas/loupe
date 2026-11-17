@@ -14,6 +14,7 @@
 #include "library.hpp"
 #include "update/update.hpp"
 #include "window/frame_texture.hpp"
+#include "window/observer.hpp"
 #include "window/recording.hpp"
 
 namespace loupe::window {
@@ -77,8 +78,25 @@ void draw_attach(Attach& attach);
 void draw_record_controls(const Frames::StreamState& stream, const Recording::Status& status, RecordControls& controls);
 // Play or pause, a step back and forward, and a scrubber over the run's frames.
 void draw_timeline(const Frames& frames, Timeline& timeline);
+// How wide draw_view_picker() draws, label included, when the line has room.
+float view_picker_width(const std::vector<DebugView>& views);
 // The debug-view picker; true when `view` changed.
 bool draw_view_picker(const std::vector<DebugView>& views, int* view);
+
+// What the frame debugger shows: the run, its views, and for a stream its
+// counts and, while it records, the recording's state.
+struct Debugger {
+    const Frames& frames;
+    const std::vector<DebugView>& views;
+    std::optional<Frames::StreamState> stream;
+    const Recording::Status* recording = nullptr;
+};
+
+// Scenes, the view picker and the observer; a stream's line, with a
+// recording's controls; then the timeline. Each row wraps at the panel's
+// edge. True when Scenes was pressed; a picked view goes into `*view`.
+bool draw_debugger(const Debugger& shown, RecordControls& controls, Observer& observer, Timeline& timeline,
+                   std::optional<int>* view);
 
 // Where draw_frame put the frame, in screen pixels.
 struct FrameRect {

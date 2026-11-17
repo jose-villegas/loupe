@@ -123,6 +123,7 @@ endif()
 add_library(loupe_window OBJECT
     src/window/editor.cpp
     src/window/files.cpp
+    src/window/flow.cpp
     src/window/frame_texture.cpp
     src/window/gpu.cpp
     src/window/observer.cpp

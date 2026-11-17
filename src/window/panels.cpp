@@ -3,9 +3,12 @@
 #include <algorithm>
 #include <cfloat>
 #include <cstddef>
+#include <format>
+#include <string>
 
 #include "imgui.h"
 #include "paths.hpp"
+#include "window/flow.hpp"
 
 namespace loupe::window {
 
@@ -16,6 +19,10 @@ constexpr const char ABOUT[] = "About";
 constexpr const char FREEZE[] = "FREEZE";
 constexpr const char RESUME[] = "RESUME";
 constexpr const char STEP[] = "STEP";
+// The scrubber's least width beside the step buttons; narrower, it takes a line of its own.
+constexpr float SCRUBBER_MIN_FONTS = 8.0F;
+// The view picker's label.
+constexpr const char VIEW[] = "view";
 
 // One selectable row per scene under `heading`, labelled by `label`; a click picks it.
 template <typename Label>
@@ -133,21 +140,24 @@ draw_record_controls(const Frames::StreamState& stream, const Recording::Status&
     ImGui::PushID("board");
     ImGui::BeginDisabled(status.stopped || !status.running);
     controls.stop = ImGui::Button("Stop recording");
-    ImGui::SameLine();
-    if (ImGui::Button(controls.paused ? "Unfreeze board" : "Freeze board")) {
+    const char* freeze = controls.paused ? "Unfreeze board" : "Freeze board";
+    flow(button_width(freeze));
+    if (ImGui::Button(freeze)) {
         controls.send = controls.paused ? RESUME : FREEZE;
         controls.paused = !controls.paused;
     }
-    ImGui::SameLine();
+    const char* step = "Step board";
+    flow(button_width(step));
     ImGui::BeginDisabled(!controls.paused);
-    if (ImGui::Button("Step board")) {
+    if (ImGui::Button(step)) {
         controls.send = STEP;
     }
     ImGui::EndDisabled();
     ImGui::EndDisabled();
     ImGui::PopID();
-    ImGui::SameLine();
-    ImGui::Text("%d frames, %d dropped", stream.frames, stream.dropped);
+    const std::string counts = std::format("{} frames, {} dropped", stream.frames, stream.dropped);
+    flow(text_width(counts.c_str()));
+    ImGui::TextUnformatted(counts.c_str());
     if (stream.refused) {
         ImGui::TextWrapped("Refused: %s", stream.why.c_str());
     }
@@ -166,19 +176,19 @@ draw_timeline(const Frames& frames, Timeline& timeline) {
     if (ImGui::Button(timeline.playing ? "Pause" : "Play")) {
         timeline.playing = !timeline.playing;
     }
-    ImGui::SameLine();
+    flow(ImGui::GetFrameHeight());
     ImGui::BeginDisabled(shown <= first);
     if (ImGui::ArrowButton("back", ImGuiDir_Left)) {
         timeline.seek_to = shown - 1;
     }
     ImGui::EndDisabled();
-    ImGui::SameLine();
+    flow(ImGui::GetFrameHeight());
     ImGui::BeginDisabled(shown >= last);
     if (ImGui::ArrowButton("forward", ImGuiDir_Right)) {
         timeline.seek_to = shown + 1;
     }
     ImGui::EndDisabled();
-    ImGui::SameLine();
+    flow(ImGui::GetFontSize() * SCRUBBER_MIN_FONTS);
     int picked = shown;
     ImGui::SetNextItemWidth(-FLT_MIN);
     if (ImGui::SliderInt("##frame", &picked, first, last, "frame %d")) {
@@ -187,10 +197,47 @@ draw_timeline(const Frames& frames, Timeline& timeline) {
 }
 
 bool
+draw_debugger(const Debugger& shown, RecordControls& controls, Observer& observer, Timeline& timeline,
+              std::optional<int>* view) {
+    const bool back = ImGui::Button("Scenes");
+    if (!shown.views.empty()) {
+        int picked = shown.frames.view();
+        flow(view_picker_width(shown.views));
+        if (draw_view_picker(shown.views, &picked)) {
+            *view = picked;
+        }
+    }
+    draw_observer_toggle(shown.frames, observer);
+    if (shown.stream && shown.recording != nullptr) {
+        draw_record_controls(*shown.stream, *shown.recording, controls);
+    } else if (shown.stream) {
+        ImGui::Text("%d frames, %d dropped", shown.stream->frames, shown.stream->dropped);
+    }
+    ImGui::BeginDisabled(observer.on);
+    draw_timeline(shown.frames, timeline);
+    ImGui::EndDisabled();
+    return back;
+}
+
+float
+view_picker_width(const std::vector<DebugView>& views) {
+    float widest = 0.0F;
+    for (const DebugView& row : views) {
+        widest = std::max(widest, text_width(row.name.c_str()));
+    }
+    const ImGuiStyle& style = ImGui::GetStyle();
+    return widest + (style.FramePadding.x * 2) + ImGui::GetFrameHeight() + style.ItemInnerSpacing.x + text_width(VIEW);
+}
+
+bool
 draw_view_picker(const std::vector<DebugView>& views, int* view) {
     const auto current = std::ranges::find(views, *view, &DebugView::id);
     bool changed = false;
-    if (ImGui::BeginCombo("view", current == views.end() ? "" : current->name.c_str())) {
+    // As wide as its widest name, or what is left of the line beside its label.
+    const float label = ImGui::GetStyle().ItemInnerSpacing.x + text_width(VIEW);
+    ImGui::SetNextItemWidth(std::max(ImGui::GetFrameHeight(),
+                                     std::min(view_picker_width(views), ImGui::GetContentRegionAvail().x) - label));
+    if (ImGui::BeginCombo(VIEW, current == views.end() ? "" : current->name.c_str())) {
         for (const DebugView& row : views) {
             const bool selected = row.id == *view;
             if (ImGui::Selectable(row.name.c_str(), selected) && !selected) {

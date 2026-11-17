@@ -28,6 +28,7 @@
 #include "version.hpp"
 #include "window/editor.hpp"
 #include "window/files.hpp"
+#include "window/flow.hpp"
 #include "window/frame_texture.hpp"
 #include "window/gpu.hpp"
 #include "window/observer.hpp"
@@ -189,16 +190,6 @@ lay_out(ImGuiID dock, ImVec2 size) {
     ImGui::DockBuilderFinish(dock);
 }
 
-// A stream's line: a recording's controls, or a saved stream's counts.
-void
-draw_stream(Shown& shown, const Frames::StreamState& stream) {
-    if (shown.recording) {
-        window::draw_record_controls(stream, shown.recording->status(), shown.controls);
-    } else {
-        ImGui::Text("%d frames, %d dropped", stream.frames, stream.dropped);
-    }
-}
-
 // What a recording's controls asked, sent to the board, then the bytes it
 // sent since the last tick fed to the stream.
 void
@@ -218,28 +209,6 @@ drive_recording(Shown& shown) {
     if (shown.recording->take(bytes) > 0) {
         (void)shown.frames->feed(bytes);
     }
-}
-
-// The frame debugger: Scenes, a stream's line, the view picker, the observer and the timeline.
-// True when Scenes was pressed; a picked view goes into `asked`.
-bool
-draw_debugger(Shown& shown, Asked& asked) {
-    const bool back = ImGui::Button("Scenes");
-    if (const std::optional<Frames::StreamState> stream = shown.frames->stream_state()) {
-        ImGui::SameLine();
-        draw_stream(shown, *stream);
-    }
-    ImGui::SameLine();
-    int view = shown.frames->view();
-    if (!shown.views.empty() && window::draw_view_picker(shown.views, &view)) {
-        asked.view = view;
-    }
-    ImGui::SameLine();
-    window::draw_observer_toggle(*shown.frames, shown.observer);
-    ImGui::BeginDisabled(shown.observer.on);
-    window::draw_timeline(*shown.frames, shown.timeline);
-    ImGui::EndDisabled();
-    return back;
 }
 
 // The viewport: the handle picker, the frame, and over it the observer's
@@ -272,7 +241,13 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
     const bool was_on = shown.observer.on;
     bool back = false;
     if (ImGui::Begin(DEBUGGER)) {
-        back = draw_debugger(shown, asked);
+        const std::optional<window::Recording::Status> recording =
+            shown.recording ? std::optional(shown.recording->status()) : std::nullopt;
+        back = window::draw_debugger({.frames = *shown.frames,
+                                      .views = shown.views,
+                                      .stream = shown.frames->stream_state(),
+                                      .recording = recording ? &*recording : nullptr},
+                                     shown.controls, shown.observer, shown.timeline, &asked.view);
     }
     ImGui::End();
     bool moved = false;
@@ -280,7 +255,8 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
         moved = draw_viewport(shown);
     }
     ImGui::End();
-    if (ImGui::Begin(OUTLINER)) {
+    // A tree row cannot wrap: an object named wider than the panel scrolls sideways.
+    if (ImGui::Begin(OUTLINER, nullptr, ImGuiWindowFlags_HorizontalScrollbar)) {
         if (shown.editor) {
             window::draw_outliner(*shown.editor);
         } else {
