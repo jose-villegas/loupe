@@ -45,7 +45,7 @@ jobs:
       - name: LikeC4, at the version autana pins
         run: npm ci --prefix "$ARCHITECTURE"
       - name: Model
-        run: python "$ARCHITECTURE/build.py" --project tools/architecture/project.json -o build/architecture
+        run: python "$ARCHITECTURE/draw.py" --project tools/architecture/project.json -o build/architecture
       - name: Site
         run: >-
           python "$ARCHITECTURE/site.py" build/architecture -o _site
