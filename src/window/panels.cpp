@@ -25,9 +25,6 @@ constexpr const char STEP[] = "STEP";
 constexpr float SCRUBBER_MIN_FONTS = 8.0F;
 // The view picker's label.
 constexpr const char VIEW[] = "view";
-// The line autana record writes once the board has started recording (its
-// console's FRAMEREC_BEGIN, Console-Framing.md in autana's docs).
-constexpr std::string_view RECORDING_BEGAN = "FRAMEREC_BEGIN";
 
 // A stream's frame and drop counts.
 std::string
@@ -270,11 +267,11 @@ WaitLine
 waiting_for_frames(const Recording::Status& status, const Frames::StreamState& stream, const std::string& board) {
     const double seconds = std::chrono::duration<double>(status.elapsed).count();
     const std::string log = utf8(status.log);
-    if (stream.refused) {
-        return {.phase = Waiting::Refused, .text = std::format("The stream was refused: {}\nLog: {}", stream.why, log)};
-    }
     if (stream.frames > 0) {
         return {.phase = Waiting::Shown, .text = ""};
+    }
+    if (stream.refused) {
+        return {.phase = Waiting::Refused, .text = std::format("The stream was refused: {}\nLog: {}", stream.why, log)};
     }
     if (!status.running) {
         return {.phase = Waiting::Ended,
@@ -287,7 +284,7 @@ waiting_for_frames(const Recording::Status& status, const Frames::StreamState& s
                     "Reading {}'s stream: {} bytes so far; its header, packs and first frame next ({:.1f} s)", board,
                     status.received, seconds)};
     }
-    if (status.latest.starts_with(RECORDING_BEGAN)) {
+    if (status.began) {
         return {.phase = Waiting::Recording,
                 .text = std::format("{} is recording; waiting for its first frame ({:.1f} s)", board, seconds)};
     }

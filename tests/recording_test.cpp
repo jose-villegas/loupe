@@ -79,6 +79,17 @@ ends_on_stop(const fs::path& fake, const fs::path& folder, const std::vector<uin
         recording->take(taken);
         std::this_thread::sleep_for(POLL);
     }
+    // While it runs, the log's lines come in as written: STEP, echoed after
+    // FRAMEREC_BEGIN, is the latest, and the begin stays seen past it.
+    loupe::window::Recording::Status running = recording->status();
+    while (running.latest != "STEP" && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(POLL);
+        running = recording->status();
+    }
+    ok &= expect(running.running && running.latest == "STEP" && running.began,
+                 "the latest log line is read while it runs, and the begin before it is kept");
+    ok &= expect(running.received == payload.size(), "every stream byte is counted as received");
+    ok &= expect(running.log == fs::path(saved).concat(".log"), "the status names the log");
     recording->stop();
     ok &= expect(!recording->send("RESUME"), "nothing is sent after stop");
     loupe::window::Recording::Status status = recording->status();
@@ -91,7 +102,7 @@ ends_on_stop(const fs::path& fake, const fs::path& folder, const std::vector<uin
     ok &= expect(taken == payload, "take() gave every stream byte, in order");
     ok &= expect(status.last_line == DONE, "the last stderr line is read back");
     const std::vector<std::string> log = loupe::read_lines(fs::path(saved).concat(".log"));
-    ok &= expect(log.size() == 3 && log[0] == "FREEZE" && log[1] == "STEP", "the child read the lines sent");
+    ok &= expect(log.size() == 4 && log[1] == "FREEZE" && log[2] == "STEP", "the child read the lines sent");
     recording.reset();
     ok &= expect(loupe::test::read_bytes(saved) == payload, "the saved file holds the stream");
     return ok;

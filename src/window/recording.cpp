@@ -24,16 +24,11 @@ constexpr auto IDLE_WAIT = std::chrono::milliseconds(2);
 // How often the destructor looks whether the child has ended.
 constexpr auto END_POLL = std::chrono::milliseconds(20);
 
-// The last non-empty line of `file`; empty when it has none.
-std::string
-last_line(const fs::path& file) {
-    const std::vector<std::string> lines = read_lines(file);
-    for (auto it = lines.rbegin(); it != lines.rend(); ++it) {
-        if (!it->empty()) {
-            return *it;
-        }
-    }
-    return {};
+// Reads what `pipe` holds now into `buffer`; how many bytes, and false once it has closed.
+bool
+read_some(SDL_IOStream* pipe, std::array<uint8_t, READ_BYTES>& buffer, size_t* count) {
+    *count = pipe == nullptr ? 0 : SDL_ReadIO(pipe, buffer.data(), buffer.size());
+    return *count > 0 || (pipe != nullptr && SDL_GetIOStatus(pipe) == SDL_IO_STATUS_NOT_READY);
 }
 
 } // namespace
@@ -47,9 +42,8 @@ Recording::start(const std::vector<std::string>& command, const fs::path& save_t
     recording->saved_ = save_to;
     recording->log_ = fs::path(save_to).concat(".log");
     recording->end_within_ = end_within;
-    SDL_IOStream* log = SDL_IOFromFile(utf8(recording->log_).c_str(), "w");
-    if (log == nullptr) {
-        *why = "cannot write " + utf8(recording->log_) + ": " + SDL_GetError();
+    if (!std::ofstream(recording->log_)) {
+        *why = "cannot write " + utf8(recording->log_);
         return nullptr;
     }
     std::vector<char*> argv = argv_of(command);
@@ -57,19 +51,19 @@ Recording::start(const std::vector<std::string>& command, const fs::path& save_t
     SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_ARGS_POINTER, static_cast<void*>(argv.data()));
     SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDIN_NUMBER, SDL_PROCESS_STDIO_APP);
     SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDOUT_NUMBER, SDL_PROCESS_STDIO_APP);
-    SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDERR_NUMBER, SDL_PROCESS_STDIO_REDIRECT);
-    SDL_SetPointerProperty(props, SDL_PROP_PROCESS_CREATE_STDERR_POINTER, log);
+    // Read here, not redirected to the log: a file SDL opens to write is
+    // not readable by anyone else on Windows, so its lines could not be
+    // followed while the child runs.
+    SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDERR_NUMBER, SDL_PROCESS_STDIO_APP);
     recording->process_ = SDL_CreateProcessWithProperties(props);
     SDL_DestroyProperties(props);
-    // The child holds its own handle to the log now.
-    SDL_CloseIO(log);
     if (recording->process_ == nullptr) {
         *why = std::string("cannot start autana record: ") + SDL_GetError();
         return nullptr;
     }
     recording->reader_ = std::jthread([raw = recording.get()](const std::stop_token& stop) {
         try {
-            raw->read_stdout(stop);
+            raw->read_pipes(stop);
         } catch (const std::exception& failure) {
             // No memory for the bytes: the stream stops here, and the saved file holds what came.
             std::fprintf(stderr, "loupe: recording stopped reading: %s\n", failure.what());
@@ -79,25 +73,58 @@ Recording::start(const std::vector<std::string>& command, const fs::path& save_t
 }
 
 void
-Recording::read_stdout(const std::stop_token& stop) {
+Recording::read_pipes(const std::stop_token& stop) {
     SDL_IOStream* out = SDL_GetProcessOutput(process_);
+    SDL_IOStream* err = static_cast<SDL_IOStream*>(
+        SDL_GetPointerProperty(SDL_GetProcessProperties(process_), SDL_PROP_PROCESS_STDERR_POINTER, nullptr));
     std::ofstream save(saved_, std::ios::binary);
+    std::ofstream log(log_, std::ios::binary);
     std::array<uint8_t, READ_BYTES> buffer{};
-    while (out != nullptr && !stop.stop_requested()) {
-        const size_t count = SDL_ReadIO(out, buffer.data(), buffer.size());
-        if (count == 0) {
-            if (SDL_GetIOStatus(out) != SDL_IO_STATUS_NOT_READY) {
-                break; // the child closed stdout: it has ended
-            }
-            std::this_thread::sleep_for(IDLE_WAIT);
-            continue;
+    while ((out != nullptr || err != nullptr) && !stop.stop_requested()) {
+        size_t count = 0;
+        if (!read_some(out, buffer, &count)) {
+            out = nullptr; // the child closed stdout
+        } else if (count > 0) {
+            received_ += count;
+            save.write(reinterpret_cast<const char*>(buffer.data()), static_cast<std::streamsize>(count));
+            save.flush();
+            const std::scoped_lock lock(mutex_);
+            pending_.insert(pending_.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(count));
         }
-        received_ += count;
-        save.write(reinterpret_cast<const char*>(buffer.data()), static_cast<std::streamsize>(count));
-        save.flush();
-        const std::scoped_lock lock(mutex_);
-        pending_.insert(pending_.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(count));
+        const bool wrote = count > 0;
+        if (!read_some(err, buffer, &count)) {
+            err = nullptr;
+        } else if (count > 0) {
+            log.write(reinterpret_cast<const char*>(buffer.data()), static_cast<std::streamsize>(count));
+            log.flush();
+            take_lines(std::string_view(reinterpret_cast<const char*>(buffer.data()), count));
+        }
+        if (!wrote && count == 0) {
+            std::this_thread::sleep_for(IDLE_WAIT);
+        }
     }
+    if (out == nullptr && err == nullptr) {
+        drained_ = true;
+    }
+}
+
+void
+Recording::take_lines(std::string_view bytes) {
+    partial_ += bytes;
+    size_t start = 0;
+    for (size_t end = partial_.find('\n'); end != std::string::npos; end = partial_.find('\n', start)) {
+        std::string line = partial_.substr(start, end - start);
+        start = end + 1;
+        if (line.ends_with('\r')) {
+            line.pop_back();
+        }
+        if (!line.empty()) {
+            const std::scoped_lock lock(mutex_);
+            began_ = began_ || line.starts_with(RECORDING_BEGAN);
+            latest_ = std::move(line);
+        }
+    }
+    partial_.erase(0, start);
 }
 
 Recording::~Recording() {
@@ -149,25 +176,20 @@ Recording::stop() {
     }
 }
 
-// The log is read again only when it has grown, and once more when the child has ended.
 Recording::Status
 Recording::status() {
     int code = 0;
     if (!exit_ && SDL_WaitProcess(process_, false, &code)) {
         exit_ = code;
-        last_line_ = last_line(log_);
     }
-    std::error_code error;
-    const std::uintmax_t size = fs::file_size(log_, error);
-    if (!error && size != log_read_) {
-        log_read_ = size;
-        latest_ = last_line(log_);
-    }
-    return {.running = !exit_,
+    const bool running = !exit_ || !drained_;
+    const std::scoped_lock lock(mutex_);
+    return {.running = running,
             .stopped = stopped_,
             .exit = exit_,
-            .last_line = last_line_,
+            .last_line = running ? "" : latest_,
             .latest = latest_,
+            .began = began_,
             .received = received_.load(),
             .elapsed = std::chrono::steady_clock::now() - started_,
             .log = log_};

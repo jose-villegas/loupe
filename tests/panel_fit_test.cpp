@@ -230,14 +230,16 @@ fits(const char* name, float width, const fs::path& out, const std::function<voi
                                              + std::to_string(reach) + ", edge " + std::to_string(edge));
 }
 
-// A recording's state before its first frame, `latest` the last line autana wrote so far.
+// A recording's state before its first frame, `latest` the last line autana
+// wrote so far, `began` whether FRAMEREC_BEGIN was among them.
 loupe::window::Recording::Status
-waiting(const std::string& latest, uint64_t received, bool running = true) {
+waiting(const std::string& latest, uint64_t received, bool running = true, bool began = false) {
     loupe::window::Recording::Status status;
     status.running = running;
     status.exit = running ? std::nullopt : std::optional(1);
     status.last_line = running ? "" : "error: the board 907069FEA308 is held by someone@legion:4242";
     status.latest = latest;
+    status.began = began;
     status.received = received;
     status.elapsed = std::chrono::milliseconds(WAITED_MS);
     status.log = LOG;
@@ -256,10 +258,11 @@ wait_shots() {
     };
     return {{"wait_starting", line(waiting("", 0), none)},
             {"wait_autana", line(waiting("waiting for the board lock (held by ci@helios)", 0), none)},
-            {"wait_recording", line(waiting("FRAMEREC_BEGIN ring=98304 keyframe_every=30", 0), none)},
-            {"wait_reading", line(waiting("FRAMEREC_BEGIN ring=98304 keyframe_every=30", 4096), none)},
+            // A board line after FRAMEREC_BEGIN: still recording.
+            {"wait_recording", line(waiting("I (55612) render_lab: scene sponza", 0, true, true), none)},
+            {"wait_reading", line(waiting("FRAMEREC_BEGIN ring=98304 keyframe_every=30", 4096, true, true), none)},
             {"wait_ended", line(waiting("", 0, false), none)},
-            {"wait_refused", line(waiting("FRAMEREC_BEGIN ring=98304 keyframe_every=30", 4096), refused)}};
+            {"wait_refused", line(waiting("FRAMEREC_BEGIN ring=98304 keyframe_every=30", 4096, true, true), refused)}};
 }
 
 // Each step of the wait comes from what autana wrote, in order, and a frame ends it.
@@ -279,6 +282,9 @@ waits() {
     shown.frames = 1;
     (void)expect(loupe::window::waiting_for_frames(waiting("", 1), shown, BOARD).phase == Waiting::Shown,
                  "the first frame ends the wait");
+    shown.refused = true;
+    (void)expect(loupe::window::waiting_for_frames(waiting("", 1), shown, BOARD).phase == Waiting::Shown,
+                 "a refusal after frames showed keeps the frame (the debugger says why)");
 }
 
 } // namespace

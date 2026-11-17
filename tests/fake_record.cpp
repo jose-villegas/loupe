@@ -1,5 +1,5 @@
-// A stand-in for `autana record`: writes PAYLOAD's bytes to stdout in pieces,
-// echoes each stdin line to stderr, and ends once stdin closes, as autana
+// A stand-in for `autana record`: says on stderr that the board records,
+// writes PAYLOAD's bytes to stdout in pieces, echoes each stdin line to stderr, and ends once stdin closes, as autana
 // stops when its stdin ends. With --hang it never ends, as a stuck autana.
 #include <algorithm>
 #include <chrono>
@@ -21,6 +21,8 @@ namespace {
 
 // A pipe-sized piece, so the reader sees the stream arrive in several reads.
 constexpr size_t PIECE = 4096;
+// What it writes first, as autana once the board records.
+constexpr const char BEGAN[] = "FRAMEREC_BEGIN ring=98304 keyframe_every=30";
 // What it writes last, which Recording::Status::last_line reads back.
 constexpr const char DONE[] = "fake_record: done";
 constexpr std::string_view HANG = "--hang";
@@ -38,6 +40,8 @@ main(int argc, char** argv) {
 #if defined(_WIN32)
     (void)_setmode(_fileno(stdout), _O_BINARY);
 #endif
+    std::fprintf(stderr, "%s\n", BEGAN);
+    std::fflush(stderr);
     std::ifstream file(argv[1], std::ios::binary);
     const std::vector<char> payload((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
     for (size_t at = 0; at < payload.size(); at += PIECE) {

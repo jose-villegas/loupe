@@ -112,7 +112,7 @@ struct WaitLine {
 // `board` names the board, as "A308 (COM5)".
 WaitLine waiting_for_frames(const Recording::Status& status, const Frames::StreamState& stream,
                             const std::string& board);
-// `line` wrapped and centred in the room left in the window.
+// `line` wrapped to the room left in the window, centred top to bottom.
 void draw_waiting(const WaitLine& line);
 
 // Where draw_frame put the frame, in screen pixels.

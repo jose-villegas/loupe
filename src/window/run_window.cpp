@@ -114,7 +114,7 @@ struct Shown {
     // The recorded board as the viewport names it while waiting, "A308 (COM5)",
     // and where the wait stood last tick, logged as it moves on.
     std::string board;
-    window::Waiting waited = window::Waiting::Starting;
+    std::optional<window::Waiting> waited;
     window::RecordControls controls;
     window::FrameTexture texture;
     window::Timeline timeline;
@@ -219,16 +219,15 @@ drive_recording(Shown& shown) {
 // shows; each step is logged with its time, so the wait can be measured.
 // Waiting::Shown for a scene or a saved recording.
 window::Waiting
-draw_wait(Shown& shown) {
+draw_wait(Shown& shown, const std::optional<window::Recording::Status>& status) {
     const std::optional<Frames::StreamState> stream = shown.frames->stream_state();
-    if (!shown.recording || !stream) {
+    if (!status || !stream) {
         return window::Waiting::Shown;
     }
-    const window::Recording::Status status = shown.recording->status();
-    const window::WaitLine line = window::waiting_for_frames(status, *stream, shown.board);
+    const window::WaitLine line = window::waiting_for_frames(*status, *stream, shown.board);
     if (line.phase != shown.waited) {
         std::fprintf(stderr, "loupe: recording %s: wait step %d at %.3f s\n", shown.board.c_str(),
-                     static_cast<int>(line.phase), std::chrono::duration<double>(status.elapsed).count());
+                     static_cast<int>(line.phase), std::chrono::duration<double>(status->elapsed).count());
         shown.waited = line.phase;
     }
     if (line.phase != window::Waiting::Shown) {
@@ -240,8 +239,8 @@ draw_wait(Shown& shown) {
 // The viewport: the handle picker, the frame, and over it the observer's
 // steering or the editor's handles. True when the observer moved.
 bool
-draw_viewport(Shown& shown) {
-    if (draw_wait(shown) != window::Waiting::Shown) {
+draw_viewport(Shown& shown, const std::optional<window::Recording::Status>& status) {
+    if (draw_wait(shown, status) != window::Waiting::Shown) {
         return false;
     }
     const bool editing = shown.editor && !shown.observer.on;
@@ -269,18 +268,19 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
     Asked asked;
     const bool was_on = shown.observer.on;
     bool back = false;
+    const std::optional<window::Recording::Status> status =
+        shown.recording ? std::optional(shown.recording->status()) : std::nullopt;
     if (ImGui::Begin(DEBUGGER)) {
-        back = window::draw_debugger(
-            {.frames = *shown.frames,
-             .views = shown.views,
-             .stream = shown.frames->stream_state(),
-             .recording = shown.recording ? std::optional(shown.recording->status()) : std::nullopt},
-            shown.controls, shown.observer, shown.timeline, &asked.view);
+        back = window::draw_debugger({.frames = *shown.frames,
+                                      .views = shown.views,
+                                      .stream = shown.frames->stream_state(),
+                                      .recording = status},
+                                     shown.controls, shown.observer, shown.timeline, &asked.view);
     }
     ImGui::End();
     bool moved = false;
     if (ImGui::Begin(VIEWPORT)) {
-        moved = draw_viewport(shown);
+        moved = draw_viewport(shown, status);
     }
     ImGui::End();
     // A tree row cannot wrap: an object named wider than the panel scrolls sideways.
@@ -465,6 +465,7 @@ void
 Window::list_boards() {
     if (attach_.refresh && !attach_.listing.valid()) {
         attach_.listing = std::async(std::launch::async, loupe::list_boards, scratch_.path() / "devices.log");
+        attach_.refresh = false;
     }
     if (attach_.listing.valid() && attach_.listing.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         attach_.list = attach_.listing.get();
@@ -476,8 +477,7 @@ void
 Window::close() {
     if (shown_) {
         // A recording joins the recent list once it holds bytes; one refused at once does not.
-        std::error_code missing;
-        if (shown_->recording && std::filesystem::file_size(shown_->recording->saved(), missing) > 0) {
+        if (shown_->recording && shown_->recording->status().received > 0) {
             (void)remember(folders_, shown_->recording->saved());
         }
         ok_ &= shown_->frames->close();
