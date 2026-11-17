@@ -111,6 +111,10 @@ struct Shown {
     std::unique_ptr<Frames> frames;
     // A board's recording feeding a live stream; none for a scene or a saved recording.
     std::unique_ptr<window::Recording> recording;
+    // The recorded board as the viewport names it while waiting, "A308 (COM5)",
+    // and where the wait stood last tick, logged as it moves on.
+    std::string board;
+    window::Waiting waited = window::Waiting::Starting;
     window::RecordControls controls;
     window::FrameTexture texture;
     window::Timeline timeline;
@@ -211,10 +215,35 @@ drive_recording(Shown& shown) {
     }
 }
 
+// What the viewport says in place of a recording's frame until the first one
+// shows; each step is logged with its time, so the wait can be measured.
+// Waiting::Shown for a scene or a saved recording.
+window::Waiting
+draw_wait(Shown& shown) {
+    const std::optional<Frames::StreamState> stream = shown.frames->stream_state();
+    if (!shown.recording || !stream) {
+        return window::Waiting::Shown;
+    }
+    const window::Recording::Status status = shown.recording->status();
+    const window::WaitLine line = window::waiting_for_frames(status, *stream, shown.board);
+    if (line.phase != shown.waited) {
+        std::fprintf(stderr, "loupe: recording %s: wait step %d at %.3f s\n", shown.board.c_str(),
+                     static_cast<int>(line.phase), std::chrono::duration<double>(status.elapsed).count());
+        shown.waited = line.phase;
+    }
+    if (line.phase != window::Waiting::Shown) {
+        window::draw_waiting(line);
+    }
+    return line.phase;
+}
+
 // The viewport: the handle picker, the frame, and over it the observer's
 // steering or the editor's handles. True when the observer moved.
 bool
 draw_viewport(Shown& shown) {
+    if (draw_wait(shown) != window::Waiting::Shown) {
+        return false;
+    }
     const bool editing = shown.editor && !shown.observer.on;
     if (editing) {
         window::draw_handle_bar(*shown.editor);
@@ -241,13 +270,12 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
     const bool was_on = shown.observer.on;
     bool back = false;
     if (ImGui::Begin(DEBUGGER)) {
-        const std::optional<window::Recording::Status> recording =
-            shown.recording ? std::optional(shown.recording->status()) : std::nullopt;
-        back = window::draw_debugger({.frames = *shown.frames,
-                                      .views = shown.views,
-                                      .stream = shown.frames->stream_state(),
-                                      .recording = recording ? &*recording : nullptr},
-                                     shown.controls, shown.observer, shown.timeline, &asked.view);
+        back = window::draw_debugger(
+            {.frames = *shown.frames,
+             .views = shown.views,
+             .stream = shown.frames->stream_state(),
+             .recording = shown.recording ? std::optional(shown.recording->status()) : std::nullopt},
+            shown.controls, shown.observer, shown.timeline, &asked.view);
     }
     ImGui::End();
     bool moved = false;
@@ -511,6 +539,10 @@ Window::attach(const std::string& board) {
     gpu_.set_title(std::format("{}: {} (recording)", TITLE, board));
     shown_.emplace(gpu_, std::move(frames));
     shown_->recording = std::move(recording);
+    const auto listed = std::ranges::find(attach_.list.boards, board, &Board::id);
+    shown_->board = listed == attach_.list.boards.end() || listed->port.empty()
+                        ? board
+                        : std::format("{} ({})", board, listed->port);
     shown_->editor_why = RECORDING_NO_EDITOR;
     // Play draws each frame as it arrives.
     shown_->timeline.playing = true;

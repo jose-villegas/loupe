@@ -4,15 +4,18 @@
 // CPU to OUT/<panel>-<width>.bmp, so a person can look at the layout.
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <future>
 #include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "frames_fixture.hpp"
@@ -29,6 +32,7 @@ namespace {
 constexpr const char TEST[] = "panel_fit_test";
 // The frame debugger's width in a 1280-wide window, and narrow ones.
 constexpr std::array<float, 3> WIDTHS = {900.0F, 320.0F, 200.0F};
+// Tall enough for the debugger's rows at the narrowest width; the check is on width only.
 constexpr float HEIGHT = 260.0F;
 // How far past the edge counts as past it: rounding, not an item.
 constexpr float SLACK = 0.5F;
@@ -38,11 +42,20 @@ constexpr const char LAST_LINE[] =
     "C:\\Users\\someone\\AppData\\Roaming\\autana\\loupe\\recordings\\907069FEA308-20261117-214512.framerec";
 // The background a shot is drawn over, as the window's own.
 constexpr std::array<uint8_t, 3> BACKGROUND = {15, 15, 15};
-constexpr int BMP_HEADER = 54;
-constexpr int BMP_BITS = 24;
+constexpr int BMP_FILE_HEADER = 14;
 constexpr int BMP_INFO = 40;
+constexpr int BMP_HEADER = BMP_FILE_HEADER + BMP_INFO;
+constexpr int BMP_BITS = 24;
+// The info header's fields after the bit count: compression, image size,
+// resolution x and y, colours used and important, all zero.
+constexpr int BMP_ZERO_FIELDS = 6;
 
 int failures = 0;
+// The board and log a waiting viewport names, and how long it has waited.
+constexpr const char BOARD[] = "907069FEA308 (COM5)";
+constexpr const char LOG[] =
+    "C:\\Users\\someone\\AppData\\Roaming\\autana\\loupe\\recordings\\907069FEA308-20261117-214512.framerec.log";
+constexpr int WAITED_MS = 2400;
 
 bool
 expect(bool ok, const std::string& what) {
@@ -173,7 +186,9 @@ write_bmp(const fs::path& file, const std::vector<uint8_t>& bgr, int width, int 
     put(out, static_cast<uint32_t>(height), 4);
     put(out, 1, 2);
     put(out, BMP_BITS, 2);
-    put(out, 0, 4 * 6);
+    for (int i = 0; i < BMP_ZERO_FIELDS; i++) {
+        put(out, 0, 4);
+    }
     for (int y = height - 1; y >= 0; y--) {
         const auto row = bgr.begin() + (static_cast<std::ptrdiff_t>(y) * width * 3);
         out.insert(out.end(), row, row + (static_cast<std::ptrdiff_t>(width) * 3));
@@ -187,16 +202,19 @@ write_bmp(const fs::path& file, const std::vector<uint8_t>& bgr, int width, int 
 // One frame with `panel` drawn in a window `width` wide; true when nothing it
 // drew reaches past the window's content. The frame is kept as OUT/<name>-<width>.bmp.
 bool
-fits(const char* name, float width, const fs::path& out, const std::function<void()>& panel) {
+fits(const char* name, float width, const fs::path& out, const std::function<void()>& panel,
+     ImGuiWindowFlags flags = 0) {
     ImGui::GetIO().DisplaySize = {width, HEIGHT};
-    // Twice: a row's widths are measured from the last frame's items.
+    // Twice: the first frame decides whether the window shows a scrollbar,
+    // which narrows its content; the second is drawn and checked at that width.
     float reach = 0.0F, edge = 0.0F;
     for (int pass = 0; pass < 2; pass++) {
         take_textures();
         ImGui::NewFrame();
         ImGui::SetNextWindowPos({0.0F, 0.0F});
         ImGui::SetNextWindowSize({width, HEIGHT});
-        ImGui::Begin(name, nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
+        ImGui::Begin(name, nullptr,
+                     flags | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse);
         panel();
         const ImGuiWindow* window = ImGui::GetCurrentWindow();
         reach = window->DC.CursorMaxPos.x;
@@ -210,6 +228,57 @@ fits(const char* name, float width, const fs::path& out, const std::function<voi
                     rasterize(*ImGui::GetDrawData(), w, h), w, h);
     return expect(reach <= edge + SLACK, std::string(name) + " at " + std::to_string(w) + " px: reaches "
                                              + std::to_string(reach) + ", edge " + std::to_string(edge));
+}
+
+// A recording's state before its first frame, `latest` the last line autana wrote so far.
+loupe::window::Recording::Status
+waiting(const std::string& latest, uint64_t received, bool running = true) {
+    loupe::window::Recording::Status status;
+    status.running = running;
+    status.exit = running ? std::nullopt : std::optional(1);
+    status.last_line = running ? "" : "error: the board 907069FEA308 is held by someone@legion:4242";
+    status.latest = latest;
+    status.received = received;
+    status.elapsed = std::chrono::milliseconds(WAITED_MS);
+    status.log = LOG;
+    return status;
+}
+
+// Each step of the wait, as the viewport says it.
+std::vector<std::pair<std::string, loupe::window::WaitLine>>
+wait_shots() {
+    const loupe::Frames::StreamState none;
+    loupe::Frames::StreamState refused;
+    refused.refused = true;
+    refused.why = "pack sponza: crc 1a2b3c4d here, 5e6f7a8b on the board";
+    const auto line = [&](const loupe::window::Recording::Status& status, const loupe::Frames::StreamState& stream) {
+        return loupe::window::waiting_for_frames(status, stream, BOARD);
+    };
+    return {{"wait_starting", line(waiting("", 0), none)},
+            {"wait_autana", line(waiting("waiting for the board lock (held by ci@helios)", 0), none)},
+            {"wait_recording", line(waiting("FRAMEREC_BEGIN ring=98304 keyframe_every=30", 0), none)},
+            {"wait_reading", line(waiting("FRAMEREC_BEGIN ring=98304 keyframe_every=30", 4096), none)},
+            {"wait_ended", line(waiting("", 0, false), none)},
+            {"wait_refused", line(waiting("FRAMEREC_BEGIN ring=98304 keyframe_every=30", 4096), refused)}};
+}
+
+// Each step of the wait comes from what autana wrote, in order, and a frame ends it.
+void
+waits() {
+    using loupe::window::Waiting;
+    const std::vector<std::pair<std::string, loupe::window::WaitLine>> shots = wait_shots();
+    const std::array<Waiting, 6> phases = {Waiting::Starting, Waiting::Autana, Waiting::Recording,
+                                           Waiting::Reading,  Waiting::Ended,  Waiting::Refused};
+    for (size_t i = 0; i < phases.size(); i++) {
+        (void)expect(shots[i].second.phase == phases[i] && !shots[i].second.text.empty(),
+                     shots[i].first + " is its step");
+    }
+    (void)expect(shots[4].second.text.find(LOG) != std::string::npos, "an end before any frame names the log");
+    (void)expect(shots[5].second.text.find("crc") != std::string::npos, "a refusal says why");
+    loupe::Frames::StreamState shown;
+    shown.frames = 1;
+    (void)expect(loupe::window::waiting_for_frames(waiting("", 1), shown, BOARD).phase == Waiting::Shown,
+                 "the first frame ends the wait");
 }
 
 } // namespace
@@ -242,10 +311,28 @@ main(int argc, char** argv) {
     loupe::window::Timeline timeline;
     std::optional<int> view;
     const loupe::Frames::StreamState counts = {.frames = 1234, .dropped = 5, .refused = false, .why = ""};
-    const loupe::window::Recording::Status live = {
-        .running = true, .stopped = false, .exit = std::nullopt, .last_line = ""};
-    const loupe::window::Recording::Status ended = {
-        .running = false, .stopped = true, .exit = 0, .last_line = LAST_LINE};
+    loupe::window::Recording::Status live;
+    live.running = true;
+    loupe::window::Recording::Status stopping = live;
+    stopping.stopped = true;
+    loupe::window::Recording::Status ended;
+    ended.stopped = true;
+    ended.exit = 0;
+    ended.last_line = LAST_LINE;
+    loupe::Frames::StreamState refused = counts;
+    refused.refused = true;
+    refused.why = "pack sponza: crc 1a2b3c4d here, 5e6f7a8b on the board; flash the build this window reads";
+
+    loupe::window::Attach attach;
+    attach.listed = true;
+    attach.list.boards = {{.id = "907069FEA308", .port = "COM5", .free = true},
+                          {.id = "A0B1C2D3E4F5",
+                           .port = "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit-if00",
+                           .free = false},
+                          {.id = "0123456789AB", .port = "", .free = true}};
+    std::promise<loupe::editor::Rebuild> asking;
+    attach.listing = std::async(std::launch::deferred, [] { return loupe::BoardList{}; });
+    waits();
 
     loupe::editor::SceneDoc doc;
     doc.objects.push_back({.path = "capybara_body",
@@ -259,19 +346,36 @@ main(int argc, char** argv) {
     editor.selected = doc.objects[0].path;
 
     for (const float width : WIDTHS) {
-        (void)fits("debugger_recording", width, out, [&] {
-            (void)loupe::window::draw_debugger(
-                {.frames = *frames, .views = views, .stream = counts, .recording = &live}, controls, observer, timeline,
-                &view);
-        });
-        (void)fits("debugger_ended", width, out, [&] {
-            (void)loupe::window::draw_debugger(
-                {.frames = *frames, .views = views, .stream = counts, .recording = &ended}, controls, observer,
-                timeline, &view);
-        });
+        const auto debugger = [&](const char* name, const loupe::Frames::StreamState& stream,
+                                  const std::optional<loupe::window::Recording::Status>& recording) {
+            (void)fits(name, width, out, [&] {
+                (void)loupe::window::draw_debugger(
+                    {.frames = *frames, .views = views, .stream = stream, .recording = recording}, controls, observer,
+                    timeline, &view);
+            });
+        };
+        debugger("debugger_recording", counts, live);
+        debugger("debugger_stopping", counts, stopping);
+        debugger("debugger_ended", counts, ended);
+        debugger("debugger_refused", refused, live);
+        debugger("debugger_saved", counts, std::nullopt);
+        (void)fits("attach", width, out, [&] { loupe::window::draw_attach(attach); });
+        editor.checked.reset();
+        editor.checking.result = asking.get_future();
+        (void)fits("inspector_checking", width, out, [&] { loupe::window::draw_inspector(editor); });
+        asking.set_value({.ok = true,
+                          .rebake_rows = {"sponza/lightmap  scenes/sponza/sponza.toml changed: sun.direction",
+                                          "sponza/probes  scenes/sponza/sponza.toml changed: sun.direction"},
+                          .why = ""});
+        asking = {};
         (void)fits("inspector", width, out, [&] { loupe::window::draw_inspector(editor); });
-        (void)fits("outliner", width, out, [&] { loupe::window::draw_outliner(editor); });
+        (void)fits(
+            "outliner", width, out, [&] { loupe::window::draw_outliner(editor); },
+            ImGuiWindowFlags_HorizontalScrollbar);
         (void)fits("handle_bar", width, out, [&] { loupe::window::draw_handle_bar(editor); });
+        for (const auto& [name, wait] : wait_shots()) {
+            (void)fits(name.c_str(), width, out, [&] { loupe::window::draw_waiting(wait); });
+        }
     }
     ImGui::DestroyContext();
     (void)frames->close();

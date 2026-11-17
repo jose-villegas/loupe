@@ -2,14 +2,10 @@
 
 #include "imgui.h"
 #include "imgui_internal.h"
-#include "window/flow.hpp"
 
 namespace loupe::window {
 
 namespace {
-
-// The toggle's label.
-constexpr const char OBSERVER[] = "observer";
 
 float
 axis(ImGuiKey positive, ImGuiKey negative) {
@@ -57,7 +53,6 @@ draw_observer_toggle(const Frames& frames, Observer& observer) {
         return;
     }
     const bool was = observer.on;
-    flow(check_width(OBSERVER));
     ImGui::Checkbox(OBSERVER, &observer.on);
     if (observer.on && !was) {
         observer.fly = fly_motion_start(frames.observer_pose().value_or(observer.fly.pose),

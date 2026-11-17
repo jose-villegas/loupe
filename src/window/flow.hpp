@@ -14,5 +14,7 @@ float button_width(const char* label);
 float check_width(const char* label);
 // How wide ImGui draws `text` as plain text.
 float text_width(const char* text);
+// `text` in the disabled colour, wrapped at the panel's edge.
+void hint(const char* text);
 
 } // namespace loupe::window

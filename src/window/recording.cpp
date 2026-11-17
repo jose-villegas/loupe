@@ -92,6 +92,7 @@ Recording::read_stdout(const std::stop_token& stop) {
             std::this_thread::sleep_for(IDLE_WAIT);
             continue;
         }
+        received_ += count;
         save.write(reinterpret_cast<const char*>(buffer.data()), static_cast<std::streamsize>(count));
         save.flush();
         const std::scoped_lock lock(mutex_);
@@ -148,7 +149,7 @@ Recording::stop() {
     }
 }
 
-// The log is read once, when the child has ended: the panel shows its last line then.
+// The log is read again only when it has grown, and once more when the child has ended.
 Recording::Status
 Recording::status() {
     int code = 0;
@@ -156,7 +157,20 @@ Recording::status() {
         exit_ = code;
         last_line_ = last_line(log_);
     }
-    return {.running = !exit_, .stopped = stopped_, .exit = exit_, .last_line = last_line_};
+    std::error_code error;
+    const std::uintmax_t size = fs::file_size(log_, error);
+    if (!error && size != log_read_) {
+        log_read_ = size;
+        latest_ = last_line(log_);
+    }
+    return {.running = !exit_,
+            .stopped = stopped_,
+            .exit = exit_,
+            .last_line = last_line_,
+            .latest = latest_,
+            .received = received_.load(),
+            .elapsed = std::chrono::steady_clock::now() - started_,
+            .log = log_};
 }
 
 const fs::path&

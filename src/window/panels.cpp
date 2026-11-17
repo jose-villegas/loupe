@@ -2,9 +2,11 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <chrono>
 #include <cstddef>
 #include <format>
 #include <string>
+#include <string_view>
 
 #include "imgui.h"
 #include "paths.hpp"
@@ -23,6 +25,15 @@ constexpr const char STEP[] = "STEP";
 constexpr float SCRUBBER_MIN_FONTS = 8.0F;
 // The view picker's label.
 constexpr const char VIEW[] = "view";
+// The line autana record writes once the board has started recording (its
+// console's FRAMEREC_BEGIN, Console-Framing.md in autana's docs).
+constexpr std::string_view RECORDING_BEGAN = "FRAMEREC_BEGIN";
+
+// A stream's frame and drop counts.
+std::string
+counts_line(const Frames::StreamState& stream) {
+    return std::format("{} frames, {} dropped", stream.frames, stream.dropped);
+}
 
 // One selectable row per scene under `heading`, labelled by `label`; a click picks it.
 template <typename Label>
@@ -111,8 +122,9 @@ draw_attach(Attach& attach) {
     attach.refresh = ImGui::Button(attach.listed ? "List again" : "List boards");
     ImGui::EndDisabled();
     if (listing) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("asking the board pool");
+        const char* asking = "asking the board pool";
+        flow(text_width(asking));
+        hint(asking);
     }
     if (!attach.list.why.empty()) {
         ImGui::TextWrapped("%s", attach.list.why.c_str());
@@ -127,9 +139,10 @@ draw_attach(Attach& attach) {
             attach.record = board.id;
         }
         ImGui::EndDisabled();
-        ImGui::SameLine();
-        ImGui::Text("%s  %s%s", board.id.c_str(), board.port.empty() ? "on another host" : board.port.c_str(),
-                    board.free ? "" : "  (held)");
+        const std::string where = std::format("{}  {}{}", board.id, board.port.empty() ? "on another host" : board.port,
+                                              board.free ? "" : "  (held)");
+        flow(text_width(where.c_str()));
+        ImGui::TextWrapped("%s", where.c_str());
         ImGui::PopID();
     }
 }
@@ -155,16 +168,16 @@ draw_record_controls(const Frames::StreamState& stream, const Recording::Status&
     ImGui::EndDisabled();
     ImGui::EndDisabled();
     ImGui::PopID();
-    const std::string counts = std::format("{} frames, {} dropped", stream.frames, stream.dropped);
+    const std::string counts = counts_line(stream);
     flow(text_width(counts.c_str()));
-    ImGui::TextUnformatted(counts.c_str());
+    ImGui::TextWrapped("%s", counts.c_str());
     if (stream.refused) {
         ImGui::TextWrapped("Refused: %s", stream.why.c_str());
     }
     if (!status.running) {
         ImGui::TextWrapped("Recording ended (exit %d): %s", status.exit.value_or(-1), status.last_line.c_str());
     } else if (status.stopped) {
-        ImGui::TextDisabled("Stopping: the board drains what it holds");
+        hint("Stopping: the board drains what it holds");
     }
 }
 
@@ -207,11 +220,14 @@ draw_debugger(const Debugger& shown, RecordControls& controls, Observer& observe
             *view = picked;
         }
     }
-    draw_observer_toggle(shown.frames, observer);
-    if (shown.stream && shown.recording != nullptr) {
+    if (shown.frames.can_observe()) {
+        flow(check_width(OBSERVER));
+        draw_observer_toggle(shown.frames, observer);
+    }
+    if (shown.stream && shown.recording) {
         draw_record_controls(*shown.stream, *shown.recording, controls);
     } else if (shown.stream) {
-        ImGui::Text("%d frames, %d dropped", shown.stream->frames, shown.stream->dropped);
+        ImGui::TextWrapped("%s", counts_line(*shown.stream).c_str());
     }
     ImGui::BeginDisabled(observer.on);
     draw_timeline(shown.frames, timeline);
@@ -234,9 +250,9 @@ draw_view_picker(const std::vector<DebugView>& views, int* view) {
     const auto current = std::ranges::find(views, *view, &DebugView::id);
     bool changed = false;
     // As wide as its widest name, or what is left of the line beside its label.
-    const float label = ImGui::GetStyle().ItemInnerSpacing.x + text_width(VIEW);
-    ImGui::SetNextItemWidth(std::max(ImGui::GetFrameHeight(),
-                                     std::min(view_picker_width(views), ImGui::GetContentRegionAvail().x) - label));
+    const float label_width = ImGui::GetStyle().ItemInnerSpacing.x + text_width(VIEW);
+    ImGui::SetNextItemWidth(std::max(
+        ImGui::GetFrameHeight(), std::min(view_picker_width(views), ImGui::GetContentRegionAvail().x) - label_width));
     if (ImGui::BeginCombo(VIEW, current == views.end() ? "" : current->name.c_str())) {
         for (const DebugView& row : views) {
             const bool selected = row.id == *view;
@@ -248,6 +264,51 @@ draw_view_picker(const std::vector<DebugView>& views, int* view) {
         ImGui::EndCombo();
     }
     return changed;
+}
+
+WaitLine
+waiting_for_frames(const Recording::Status& status, const Frames::StreamState& stream, const std::string& board) {
+    const double seconds = std::chrono::duration<double>(status.elapsed).count();
+    const std::string log = utf8(status.log);
+    if (stream.refused) {
+        return {.phase = Waiting::Refused, .text = std::format("The stream was refused: {}\nLog: {}", stream.why, log)};
+    }
+    if (stream.frames > 0) {
+        return {.phase = Waiting::Shown, .text = ""};
+    }
+    if (!status.running) {
+        return {.phase = Waiting::Ended,
+                .text = std::format("autana record ended (exit {}) before any frame: {}\nLog: {}",
+                                    status.exit.value_or(-1), status.last_line, log)};
+    }
+    if (status.received > 0) {
+        return {.phase = Waiting::Reading,
+                .text = std::format(
+                    "Reading {}'s stream: {} bytes so far; its header, packs and first frame next ({:.1f} s)", board,
+                    status.received, seconds)};
+    }
+    if (status.latest.starts_with(RECORDING_BEGAN)) {
+        return {.phase = Waiting::Recording,
+                .text = std::format("{} is recording; waiting for its first frame ({:.1f} s)", board, seconds)};
+    }
+    if (!status.latest.empty()) {
+        return {.phase = Waiting::Autana, .text = std::format("autana: {} ({:.1f} s)", status.latest, seconds)};
+    }
+    return {.phase = Waiting::Starting,
+            .text = std::format("Starting autana record for {}: taking the board and opening its port ({:.1f} s)",
+                                board, seconds)};
+}
+
+void
+draw_waiting(const WaitLine& line) {
+    const ImVec2 room = ImGui::GetContentRegionAvail();
+    const ImVec2 at = ImGui::GetCursorPos();
+    const float wrap = room.x;
+    const ImVec2 size = ImGui::CalcTextSize(line.text.c_str(), nullptr, false, wrap);
+    ImGui::SetCursorPos(ImVec2(at.x, at.y + std::max(0.0F, (room.y - size.y) / 2)));
+    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + wrap);
+    ImGui::TextUnformatted(line.text.c_str());
+    ImGui::PopTextWrapPos();
 }
 
 FrameRect

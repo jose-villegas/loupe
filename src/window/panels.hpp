@@ -2,6 +2,7 @@
 // (run_window.cpp) applies it to Frames.
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <future>
 #include <optional>
@@ -89,7 +90,7 @@ struct Debugger {
     const Frames& frames;
     const std::vector<DebugView>& views;
     std::optional<Frames::StreamState> stream;
-    const Recording::Status* recording = nullptr;
+    std::optional<Recording::Status> recording;
 };
 
 // Scenes, the view picker and the observer; a stream's line, with a
@@ -97,6 +98,22 @@ struct Debugger {
 // edge. True when Scenes was pressed; a picked view goes into `*view`.
 bool draw_debugger(const Debugger& shown, RecordControls& controls, Observer& observer, Timeline& timeline,
                    std::optional<int>* view);
+
+// Where a recording stands until its first frame shows, from what autana has
+// written so far: started, its own lines, the board recording, stream bytes
+// read; or why it ended or was refused before any frame.
+enum class Waiting : uint8_t { Starting, Autana, Recording, Reading, Shown, Ended, Refused };
+
+struct WaitLine {
+    Waiting phase = Waiting::Starting;
+    std::string text; // empty once Shown
+};
+
+// `board` names the board, as "A308 (COM5)".
+WaitLine waiting_for_frames(const Recording::Status& status, const Frames::StreamState& stream,
+                            const std::string& board);
+// `line` wrapped and centred in the room left in the window.
+void draw_waiting(const WaitLine& line);
 
 // Where draw_frame put the frame, in screen pixels.
 struct FrameRect {

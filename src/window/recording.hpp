@@ -3,6 +3,7 @@
 // stdin. Through SDL3's processes, so it lives in the window layer.
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -55,6 +56,12 @@ class Recording {
         bool running = false, stopped = false;
         std::optional<int> exit; // once it has exited
         std::string last_line;   // the last line it wrote to stderr, once it has exited
+        // While it runs: the last line it has written to stderr so far, the
+        // stream bytes read so far, and how long since it started.
+        std::string latest;
+        uint64_t received = 0;
+        std::chrono::steady_clock::duration elapsed{};
+        std::filesystem::path log;
     };
 
     Status status();
@@ -70,6 +77,11 @@ class Recording {
     std::chrono::milliseconds end_within_{END_WITHIN};
     std::mutex mutex_; // guards pending_ alone
     std::vector<uint8_t> pending_;
+    std::atomic<uint64_t> received_{0};
+    std::chrono::steady_clock::time_point started_ = std::chrono::steady_clock::now();
+    // The log's size when `latest_` was read from it: read again only when it grew.
+    std::uintmax_t log_read_ = 0;
+    std::string latest_;
     bool stopped_ = false;
     std::optional<int> exit_;
     std::string last_line_;

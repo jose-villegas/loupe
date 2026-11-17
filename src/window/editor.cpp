@@ -162,7 +162,8 @@ void
 outliner_node(Editor& editor, size_t index) {
     const editor::Object& object = editor.docs.scene.objects[index];
     const std::vector<size_t>& children = editor.children[index];
-    ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen;
+    ImGuiTreeNodeFlags flags =
+        ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
     if (children.empty()) {
         flags |= ImGuiTreeNodeFlags_Leaf;
     }
@@ -175,7 +176,7 @@ outliner_node(Editor& editor, size_t index) {
     }
     const std::string kind = object.kind + (object.baked ? ", baked" : "");
     flow(text_width(kind.c_str()));
-    ImGui::TextDisabled("%s", kind.c_str());
+    hint(kind.c_str());
     if (open) {
         for (const size_t child : children) {
             outliner_node(editor, child);
@@ -193,28 +194,21 @@ collect_check(Editor& editor) {
     }
 }
 
-// `text` in the disabled colour, wrapped to the panel.
-void
-hint(const char* text) {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-    ImGui::TextWrapped("%s", text);
-    ImGui::PopStyleColor();
-}
-
 // What the last save's bake check found, or that it is still asking.
 void
 draw_bake_check(const Editor& editor) {
     if (editor.checking.result.valid()) {
-        ImGui::TextDisabled("Asking the bakes what this re-keys...");
+        hint("Asking the bakes what this re-keys...");
     } else if (editor.checked) {
         if (!editor.checked->ok) {
             ImGui::TextWrapped("Bake check failed: %s", editor.checked->why.c_str());
         } else if (editor.checked->rebake_rows.empty()) {
-            ImGui::TextUnformatted("Re-keys no bakes");
+            ImGui::TextWrapped("Re-keys no bakes");
         } else {
-            ImGui::Text("Re-keys %zu bakes:", editor.checked->rebake_rows.size());
+            ImGui::TextWrapped("Re-keys %zu bakes:", editor.checked->rebake_rows.size());
             for (const std::string& row : editor.checked->rebake_rows) {
-                ImGui::BulletText("%s", row.c_str());
+                ImGui::Bullet();
+                ImGui::TextWrapped("%s", row.c_str());
             }
         }
     }
@@ -360,9 +354,9 @@ draw_inspector(Editor& editor) {
     if (object == nullptr) {
         hint("Select an object in the outliner or the viewport");
     } else {
+        // The kind on its own line: the path may have wrapped.
         ImGui::TextWrapped("%s", object->path.c_str());
-        flow(text_width(object->kind.c_str()));
-        ImGui::TextDisabled("%s", object->kind.c_str());
+        hint(object->kind.c_str());
         if (object->baked) {
             ImGui::TextColored(BAKED_COLOUR, "Baked: locked");
             ImGui::SetItemTooltip("%s", object->locked.c_str());
