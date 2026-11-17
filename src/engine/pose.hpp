@@ -10,6 +10,7 @@
 extern "C" {
 #include "kinematics/fly/fly_motion.h"
 #include "math/geometry/box3f.h"
+#include "math/linear/quatf_euler.h"
 #include "math/linear/transformf.h"
 }
 #undef _Static_assert

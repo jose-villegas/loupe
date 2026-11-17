@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "engine/frames.hpp"
+#include "imgui.h"
 #include "library.hpp"
 #include "update/update.hpp"
 #include "window/frame_texture.hpp"
@@ -36,8 +37,15 @@ struct About {
     update::Follow follow = update::Follow::Off;
 };
 
-// The menu bar: About. True when the viewer picked another `about.follow`.
-bool draw_menu(About& about);
+// The menu bar's Edit menu, shown when a scene file is open: what it may do
+// (`can_*`), and what was picked this tick.
+struct EditMenu {
+    bool shown = false, can_undo = false, can_redo = false, can_save = false;
+    bool undo = false, redo = false, save = false;
+};
+
+// The menu bar: Edit, then About. True when the viewer picked another `about.follow`.
+bool draw_menu(About& about, EditMenu& edit);
 // The window without a scene: the samples, the recent scenes and Open...;
 // `refusal` says why the last scene picked did not open.
 void draw_start(const Library& library, const std::string& refusal, Start& start);
@@ -45,7 +53,13 @@ void draw_start(const Library& library, const std::string& refusal, Start& start
 void draw_timeline(const Frames& frames, Timeline& timeline);
 // The debug-view picker; true when `view` changed.
 bool draw_view_picker(const std::vector<DebugView>& views, int* view);
+
+// Where draw_frame put the frame, in screen pixels.
+struct FrameRect {
+    ImVec2 min, max;
+};
+
 // The frame at the largest whole zoom that fits, sampled nearest.
-void draw_frame(const FrameTexture& texture);
+FrameRect draw_frame(const FrameTexture& texture);
 
 } // namespace loupe::window

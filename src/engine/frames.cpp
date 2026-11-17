@@ -31,10 +31,12 @@ struct Frames::State {
     uint32_t dt_ms = 0;                                   // the run's, as it opened
     std::vector<uint32_t> dts;                            // each drawn frame's dt, for replaying it
     std::map<int, render_host_checkpoint_t*> checkpoints; // the state before drawing frame key
-    // While observing: the state before drawing the shown frame, apart from the
-    // kept checkpoints, which thinning may drop.
+    // While observing or placing: the state before drawing the shown frame,
+    // apart from the kept checkpoints, which thinning may drop.
     render_host_checkpoint_t* held = nullptr;
     int64_t drawn = 0; // engine frames, replays included
+    // Objects the editor placed, by name: set on the scene before every frame is drawn.
+    std::map<std::string, transformf_t> placed;
 
     // Checkpoints sit before frames FIRST_SEEKABLE, FIRST_SEEKABLE + every...
     bool
@@ -135,6 +137,19 @@ restore_keeping_view(render_host_checkpoint_t* checkpoint) {
     return true;
 }
 
+// The scene object named `name` in the scene the active camera belongs to; none without a camera or such an object.
+entity_t
+entity_named(const std::string& name) {
+    entity_t root = camera_active();
+    if (handle_is_none(root)) {
+        return entity_t{}; // ENTITY_NONE, the zero handle, without its C compound literal
+    }
+    for (entity_t up = entity_parent(root); !handle_is_none(up); up = entity_parent(up)) {
+        root = up;
+    }
+    return entity_find(root, name_hash(name.c_str()));
+}
+
 } // namespace
 
 Frames::Frames(std::unique_ptr<State> state) : state_(std::move(state)) {}
@@ -220,13 +235,13 @@ Frames::set_view(int view) {
     if (this->view() != view) {
         return false;
     }
-    // Observing, the held checkpoint redraws the shown frame in one step; restoring keeps the view set here.
-    return state_->held != nullptr ? leave_observing() : redraw_shown();
+    // Held (observing or placing), the checkpoint redraws the shown frame in one step; restoring keeps the view set here.
+    return state_->held != nullptr ? redraw_unheld() : redraw_shown();
 }
 
 bool
 Frames::step(uint32_t dt_ms) {
-    stop_observing();
+    release_hold();
     return advance(dt_ms);
 }
 
@@ -249,6 +264,12 @@ Frames::advance(uint32_t dt_ms) {
             std::fprintf(stderr, "loupe: no checkpoint before frame %d; seeks back past it will fail\n", s.index);
         }
     }
+    for (const auto& [name, local] : s.placed) {
+        const entity_t entity = entity_named(name);
+        if (!handle_is_none(entity)) {
+            transform_set_local(entity, local);
+        }
+    }
     const input_t input = {};
     render_host_step(dt_ms, &input);
     s.drawn++;
@@ -261,7 +282,7 @@ Frames::advance(uint32_t dt_ms) {
 
 bool
 Frames::seek(int index) {
-    if (index < 0 || !leave_observing() || (index < state_->index - 1 && !restore_before(index))) {
+    if (index < 0 || !redraw_unheld() || (index < state_->index - 1 && !restore_before(index))) {
         return false;
     }
     step_to(index);
@@ -313,13 +334,23 @@ Frames::can_observe() const {
 
 bool
 Frames::observe(std::optional<transformf_t> pose) {
-    State& s = *state_;
-    const int shown = s.index - 1;
+    const int shown = state_->index - 1;
     if (!can_observe() || shown < 0) {
         return false;
     }
     if (!pose) {
-        return leave_observing();
+        return redraw_unheld();
+    }
+    render_context_set_observer(context(), &*pose);
+    return redraw_held();
+}
+
+bool
+Frames::redraw_held() {
+    State& s = *state_;
+    const int shown = s.index - 1;
+    if (shown < 0) {
+        return true;
     }
     if (s.held == nullptr) {
         // Once: back to just before the shown frame, and hold that state.
@@ -329,7 +360,7 @@ Frames::observe(std::optional<transformf_t> pose) {
         step_to(shown - 1);
         s.held = render_host_save();
         if (s.held == nullptr) {
-            std::fprintf(stderr, "loupe: no checkpoint before frame %d to observe it from\n", shown);
+            std::fprintf(stderr, "loupe: no checkpoint before frame %d to redraw it from\n", shown);
             step_to(shown);
             return false;
         }
@@ -338,12 +369,11 @@ Frames::observe(std::optional<transformf_t> pose) {
     } else {
         return false;
     }
-    render_context_set_observer(context(), &*pose);
     return advance(s.dts[shown]);
 }
 
 bool
-Frames::leave_observing() {
+Frames::redraw_unheld() {
     State& s = *state_;
     if (s.held == nullptr) {
         return true;
@@ -355,7 +385,7 @@ Frames::leave_observing() {
         s.index = shown;
     }
     const bool drew = restored && advance(s.dts[shown]);
-    stop_observing();
+    release_hold();
     return drew;
 }
 
@@ -381,13 +411,60 @@ Frames::scene_box() const {
     return handle_is_none(camera) ? box3f_empty() : scene_bounds(camera);
 }
 
+bool
+Frames::place(const std::string& object, const transformf_t& local) {
+    const entity_t entity = entity_named(object);
+    if (handle_is_none(entity)) {
+        return false;
+    }
+    state_->placed[object] = local;
+    transform_set_local(entity, local);
+    // The redraw sets every placement again before its frame.
+    return redraw_held();
+}
+
+std::optional<mat4f_t>
+Frames::parent_world(const std::string& object) const {
+    const entity_t entity = entity_named(object);
+    if (handle_is_none(entity)) {
+        return std::nullopt;
+    }
+    return transform_world_matrix(entity_parent(entity));
+}
+
+std::optional<ViewCamera>
+Frames::view_camera() const {
+    const entity_t camera = camera_active();
+    const Frame shown = frame();
+    if (handle_is_none(camera) || shown.width <= 0) {
+        return std::nullopt;
+    }
+    const lens_t* lens = camera_lens(camera);
+    const transformf_t pose = transform_world(camera);
+    // The shown frame is the picture turned back upright from the panel, so its axes are the camera's own: quarter 0.
+    render_view_t view = render_view_make(&pose, lens->half_fov_short_tan, lens->near_z,
+                                          viewport_t{.width = shown.width, .height = shown.height, .quarter = 0});
+    render_view_set_shift(&view, lens->shift);
+    return ViewCamera{.eye = view.position,
+                      .right = vec3f_normalize(view.screen_x),
+                      .up = vec3f_scale(vec3f_normalize(view.screen_y), -1.0F),
+                      .forward = vec3f_normalize(view.forward),
+                      .fx = view.lens.fx,
+                      .fy = view.lens.fy,
+                      .cx = view.lens.cx,
+                      .cy = view.lens.cy,
+                      .near_z = view.lens.near_z,
+                      .width = shown.width,
+                      .height = shown.height};
+}
+
 int64_t
 Frames::drawn() const {
     return state_->drawn;
 }
 
 void
-Frames::stop_observing() {
+Frames::release_hold() {
     State& s = *state_;
     if (s.held == nullptr) {
         return;
@@ -467,7 +544,7 @@ Frames::close() {
         return true;
     }
     // The image close writes is the last drawn: the straight run's, not the observer's.
-    const bool redrawn = leave_observing();
+    const bool redrawn = redraw_unheld();
     state_->forget_after(-1);
     state_->open = false;
     return render_host_close() && redrawn;
@@ -475,7 +552,7 @@ Frames::close() {
 
 bool
 render(const Options& options, std::string* why) {
-    std::unique_ptr<Frames> frames = Frames::open(options, why);
+    const std::unique_ptr<Frames> frames = Frames::open(options, why);
     if (frames == nullptr) {
         return false;
     }

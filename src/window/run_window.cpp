@@ -12,12 +12,17 @@
 
 #include "engine/frames.hpp"
 #include "imgui.h"
+#include "imgui_internal.h"
+// After imgui.h, whose types its header uses without including it.
+#include "ImGuizmo.h"
 #include "library.hpp"
 #include "paths.hpp"
 #include "process.hpp"
 #include "scratch.hpp"
+#include "tools.hpp"
 #include "update/update.hpp"
 #include "version.hpp"
+#include "window/editor.hpp"
 #include "window/files.hpp"
 #include "window/frame_texture.hpp"
 #include "window/gpu.hpp"
@@ -29,6 +34,15 @@ namespace loupe {
 namespace {
 
 constexpr const char TITLE[] = "loupe";
+// The scene's panels, docked by lay_out().
+constexpr const char VIEWPORT[] = "Viewport";
+constexpr const char OUTLINER[] = "Outliner";
+constexpr const char INSPECTOR[] = "Inspector";
+constexpr const char DEBUGGER[] = "Frame debugger";
+// Each side panel's share of the window: outliner, inspector, frame debugger.
+constexpr float OUTLINER_SHARE = 0.18F;
+constexpr float INSPECTOR_SHARE = 0.26F;
+constexpr float DEBUGGER_SHARE = 0.16F;
 
 // `options`' run on `scene`, open on the first frame a seek reaches so every
 // control works from the start; null, with `why` set, when it cannot be shown.
@@ -63,6 +77,10 @@ struct Shown {
     window::Timeline timeline;
     window::Observer observer;
     std::vector<DebugView> views;
+    // The editor over the scene file; none for a pack, or without the pack tool, `editor_why` saying why.
+    std::optional<window::Editor> editor;
+    std::string editor_why;
+    bool laid_out = false;
 
     Shown(window::Gpu& gpu, std::unique_ptr<Frames> opened)
         : frames(std::move(opened)), texture(gpu, frames->frame()),
@@ -114,28 +132,110 @@ apply(Frames& frames, window::Timeline& timeline, window::Observer& observer, co
     return true;
 }
 
-// The open scene's tick: Scenes, the view picker, the timeline and the frame;
-// true when Scenes was pressed, to go back to the start panel.
+// Docks the panels into `dock`, `size` large: the outliner left, the
+// inspector right, the frame debugger below, the viewport in the middle.
+void
+lay_out(ImGuiID dock, ImVec2 size) {
+    ImGui::DockBuilderRemoveNode(dock);
+    ImGui::DockBuilderAddNode(dock, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dock, size);
+    ImGuiID middle = dock;
+    const ImGuiID left = ImGui::DockBuilderSplitNode(middle, ImGuiDir_Left, OUTLINER_SHARE, nullptr, &middle);
+    const ImGuiID right = ImGui::DockBuilderSplitNode(middle, ImGuiDir_Right, INSPECTOR_SHARE, nullptr, &middle);
+    const ImGuiID below = ImGui::DockBuilderSplitNode(middle, ImGuiDir_Down, DEBUGGER_SHARE, nullptr, &middle);
+    ImGui::DockBuilderDockWindow(OUTLINER, left);
+    ImGui::DockBuilderDockWindow(INSPECTOR, right);
+    ImGui::DockBuilderDockWindow(DEBUGGER, below);
+    ImGui::DockBuilderDockWindow(VIEWPORT, middle);
+    ImGui::DockBuilderFinish(dock);
+}
+
+// The frame debugger: Scenes, the view picker, the observer and the timeline.
+// True when Scenes was pressed; a picked view goes into `asked`.
 bool
-draw_shown(Shown& shown, bool* ok) {
+draw_debugger(Shown& shown, Asked& asked) {
     const bool back = ImGui::Button("Scenes");
     ImGui::SameLine();
     int view = shown.frames->view();
-    Asked asked;
     if (!shown.views.empty() && window::draw_view_picker(shown.views, &view)) {
         asked.view = view;
     }
     ImGui::SameLine();
-    const bool was_on = shown.observer.on;
     window::draw_observer_toggle(*shown.frames, shown.observer);
     ImGui::BeginDisabled(shown.observer.on);
     window::draw_timeline(*shown.frames, shown.timeline);
     ImGui::EndDisabled();
-    window::draw_frame(shown.texture);
+    return back;
+}
+
+// The viewport: the handle picker, the frame, and over it the observer's
+// steering or the editor's handles. True when the observer moved.
+bool
+draw_viewport(Shown& shown) {
+    const bool editing = shown.editor && !shown.observer.on;
+    if (editing) {
+        window::draw_handle_bar(*shown.editor);
+    }
+    const window::FrameRect rect = window::draw_frame(shown.texture);
     const bool moved = shown.observer.on && window::drive_observer(shown.observer, ImGui::GetIO().DeltaTime);
+    if (editing) {
+        window::draw_handles(*shown.editor, *shown.frames, rect);
+    }
+    return moved;
+}
+
+// The open scene's tick: its docked panels, then what they and the Edit menu
+// asked; true when Scenes was pressed, to go back to the start panel.
+bool
+draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
+    const ImGuiID dock = ImGui::GetID("panels");
+    if (!shown.laid_out) {
+        lay_out(dock, ImGui::GetContentRegionAvail());
+        shown.laid_out = true;
+    }
+    ImGui::DockSpace(dock);
+    Asked asked;
+    const bool was_on = shown.observer.on;
+    bool back = false;
+    if (ImGui::Begin(DEBUGGER)) {
+        back = draw_debugger(shown, asked);
+    }
+    ImGui::End();
+    bool moved = false;
+    if (ImGui::Begin(VIEWPORT)) {
+        moved = draw_viewport(shown);
+    }
+    ImGui::End();
+    if (ImGui::Begin(OUTLINER)) {
+        if (shown.editor) {
+            window::draw_outliner(*shown.editor);
+        } else {
+            ImGui::TextWrapped("%s", shown.editor_why.c_str());
+        }
+    }
+    ImGui::End();
+    if (ImGui::Begin(INSPECTOR) && shown.editor) {
+        window::draw_inspector(*shown.editor);
+    }
+    ImGui::End();
     asked.observe = moved || shown.observer.on != was_on;
     // Uploaded after the frame is drawn, for the observer's input over it; still this tick's picture.
-    if (apply(*shown.frames, shown.timeline, shown.observer, asked, ok)) {
+    bool changed = apply(*shown.frames, shown.timeline, shown.observer, asked, ok);
+    if (shown.editor) {
+        window::EditAsk ask = window::edit_keys(*shown.editor, !shown.observer.on);
+        ask.undo |= menu.undo;
+        ask.redo |= menu.redo;
+        ask.save |= menu.save;
+        window::apply(*shown.editor, ask);
+        if (!shown.observer.on) {
+            const int64_t drawn = shown.frames->drawn();
+            *ok &= window::sync(*shown.editor, [&shown](const std::string& object, const transformf_t& local) {
+                return shown.frames->place(object, local);
+            });
+            changed |= shown.frames->drawn() != drawn;
+        }
+    }
+    if (changed) {
         shown.texture.upload(shown.frames->frame());
     }
     return back;
@@ -196,14 +296,25 @@ Window::tick() {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
-    ImGui::Begin(TITLE, nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_MenuBar);
-    if (window::draw_menu(about_) && !update::set_follow(copy_, about_.follow)) {
+    ImGui::Begin(TITLE, nullptr,
+                 ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_MenuBar
+                     | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoBringToFrontOnFocus);
+    ImGuizmo::BeginFrame();
+    window::EditMenu menu;
+    if (shown_ && shown_->editor) {
+        const window::Editor& editor = *shown_->editor;
+        menu = {.shown = true,
+                .can_undo = editor.edits.can_undo(),
+                .can_redo = editor.edits.can_redo(),
+                .can_save = !editor.drag.has_value()};
+    }
+    if (window::draw_menu(about_, menu) && !update::set_follow(copy_, about_.follow)) {
         std::fprintf(stderr, "loupe: cannot save the update setting in %s\n", utf8(copy_.config).c_str());
     }
     window::Start start;
     bool back = false;
     if (shown_) {
-        back = draw_shown(*shown_, &ok_);
+        back = draw_shown(*shown_, menu, &ok_);
     } else {
         window::draw_start(library_, refusal_, start);
     }
@@ -267,6 +378,7 @@ Window::open(const Options& options) {
     (void)remember(folders_, options.scene);
     gpu_.set_title(std::format("{}: {}", TITLE, frames->scene_id()));
     shown_.emplace(gpu_, std::move(frames));
+    shown_->editor = window::open_editor(options.scene, &shown_->editor_why);
     return true;
 }
 
