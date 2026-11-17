@@ -54,7 +54,7 @@ main(int argc, char** argv) {
     const loupe::Scratch logs("scene_save_test-");
     std::string why;
     std::optional<loupe::editor::SceneDoc> doc = loupe::editor::read_scene(scene, logs.path(), &why);
-    if (!check(doc.has_value(), "the scene reads: " + why)) {
+    if (!check(doc.has_value(), "the scene reads: " + why) || !doc) {
         return 1;
     }
     loupe::editor::Docs docs{.scene = std::move(*doc)};

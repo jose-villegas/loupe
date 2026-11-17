@@ -15,6 +15,15 @@
 #include "pack.hpp"
 #include "paths.hpp"
 
+// autana's render host answers this with a weak definition, the quarter of the
+// frame it draws. Windows' MinGW (GCC 15.2 on the CI runner) links scene_shell.c's
+// call to nothing, so Loupe gives the same answer with a strong one.
+extern "C" int
+display_quarter_now(void) {
+    const provider_frame_t* frame = render_host_frame();
+    return frame != nullptr ? frame->quarter : 0;
+}
+
 namespace loupe {
 
 struct Frames::State {
