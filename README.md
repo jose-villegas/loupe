@@ -23,6 +23,9 @@ flowchart LR
   core -- "pack tool builds only" --> tools["git · build_pack.py · render_compare.py<br/>scene_edit.py · bake.py list"]
 ```
 
+The [architecture explorer](https://jose-villegas.github.io/loupe/) draws every module
+and include from the sources, rebuilt on each push to `main`.
+
 ## Download
 
 Each [release](https://github.com/jose-villegas/loupe/releases) has three

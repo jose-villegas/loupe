@@ -1,0 +1,99 @@
+name: Pages
+
+# The architecture explorer: a C4 model of Loupe drawn from its tracked
+# sources by c4tree, the submodule at third_party/c4tree, with what the code
+# cannot say read from tools/architecture/project.json. The site's
+# root opens the context diagram. A push to main commits it to the gh-pages
+# branch; a pull request builds it without publishing, so a source the model
+# cannot describe fails there first. Needs the repository setting Pages >
+# Source set to "Deploy from a branch", gh-pages at its root.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/main' && 'main' || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  C4TREE: third_party/c4tree
+
+jobs:
+  build:
+    name: Build the explorer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      # Full history: each box links its file at the newest commit main has.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: c4tree, the only submodule the explorer reads
+        run: git submodule update --init --depth 1 "$C4TREE"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: third_party/c4tree/.python-version
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: third_party/c4tree/.node-version
+      - name: c4tree's Python packages and LikeC4, at the versions it pins
+        run: |
+          python -m pip install -r "$C4TREE/requirements.txt"
+          npm ci --prefix "$C4TREE"
+      - name: Model
+        run: python "$C4TREE/draw.py" --project tools/architecture/project.json -o build/architecture
+      - name: Site
+        run: >-
+          python "$C4TREE/site.py" build/architecture -o _site
+          --base "/${{ github.event.repository.name }}/" --open index
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: site
+          path: _site
+          include-hidden-files: true
+          retention-days: 1
+
+  # The only job that can write: one commit on gh-pages per published push,
+  # on top of the last one. Runs on main wait for each other, and GitHub keeps
+  # only the newest waiting one, so the message names every main commit since
+  # the last published build. .nojekyll serves the files as built.
+  publish:
+    name: Publish to gh-pages
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: site
+          path: _site
+      - name: Commit and push
+        env:
+          REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+          SHA: ${{ github.sha }}
+        working-directory: _site
+        run: |
+          touch .nojekyll
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          built="$SHA"
+          if git fetch -q --depth 1 "$REMOTE" gh-pages; then
+            git reset -q --soft FETCH_HEAD
+            last=$(git log -1 --format=%s FETCH_HEAD | sed -nE 's/.*built from main ([0-9a-f]+\.\.)?([0-9a-f]{7,40}).*/\2/p')
+            if [ -n "$last" ] && [ "$last" != "$SHA" ]; then built="$last..$SHA"; fi
+          fi
+          git add -A
+          git commit -q --allow-empty -m "Architecture explorer built from main $built"
+          git push -q "$REMOTE" HEAD:gh-pages
