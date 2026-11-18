@@ -1,0 +1,1 @@
+import{t as e}from"./main-CBQ5avAP.js";var t={"Loupe architecture":async()=>await e(()=>import(`./drawio-C1vRhFb0.js`),[])};async function n(e){let n=t[e];if(!n){let n=Object.keys(t);throw console.error(`Unknown projectId: `+e+` (available: `+n+`)`),Error(`Project does not enable drawio export: `+e)}return await n()}export{n as loadDrawioSources};
