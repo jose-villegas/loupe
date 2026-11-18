@@ -37,3 +37,7 @@
 	url = https://github.com/CedricGuillemet/ImGuizmo.git
 	shallow = true
 	branch = master
+[submodule "third_party/c4tree"]
+	path = third_party/c4tree
+	url = https://github.com/jose-villegas/c4tree
+	shallow = true
