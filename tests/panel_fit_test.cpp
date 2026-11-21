@@ -53,6 +53,7 @@ constexpr int BMP_ZERO_FIELDS = 6;
 int failures = 0;
 // The board and log a waiting viewport names, and how long it has waited.
 constexpr const char BOARD[] = "907069FEA308 (COM5)";
+constexpr const char PACKS_AUTANA[] = "b71ea7171";
 constexpr const char LOG[] =
     "C:\\Users\\someone\\AppData\\Roaming\\autana\\loupe\\recordings\\907069FEA308-20261117-214512.framerec.log";
 constexpr int WAITED_MS = 2400;
@@ -289,7 +290,7 @@ wait_shots() {
     refused.refused = true;
     refused.why = "pack sponza: crc 1a2b3c4d here, 5e6f7a8b on the board";
     const auto line = [&](const loupe::window::Recording::Status& status, const loupe::Frames::StreamState& stream) {
-        return loupe::window::waiting_for_frames(status, stream, BOARD);
+        return loupe::window::waiting_for_frames(status, stream, {.board = BOARD, .packs_autana = PACKS_AUTANA});
     };
     return {{"wait_starting", line(waiting("", 0), none)},
             {"wait_autana", line(waiting("waiting for the board lock (held by ci@helios)", 0), none)},
@@ -313,13 +314,19 @@ waits() {
     }
     (void)expect(shots[4].second.text.find(LOG) != std::string::npos, "an end before any frame names the log");
     (void)expect(shots[5].second.text.find("crc") != std::string::npos, "a refusal says why");
+    (void)expect(shots[5].second.text.find(PACKS_AUTANA) != std::string::npos,
+                 "a refusal names the autana our packs come from");
+    loupe::window::WaitFor wait{.board = BOARD, .packs_autana = PACKS_AUTANA};
     loupe::Frames::StreamState shown;
     shown.frames = 1;
-    (void)expect(loupe::window::waiting_for_frames(waiting("", 1), shown, BOARD).phase == Waiting::Shown,
+    (void)expect(loupe::window::waiting_for_frames(waiting("", 1), shown, wait).phase == Waiting::Shown,
                  "the first frame ends the wait");
     shown.refused = true;
-    (void)expect(loupe::window::waiting_for_frames(waiting("", 1), shown, BOARD).phase == Waiting::Shown,
-                 "a refusal after frames showed keeps the frame (the debugger says why)");
+    (void)expect(loupe::window::waiting_for_frames(waiting("", 1), shown, wait).phase == Waiting::Refused,
+                 "a frame counted, then refused before it was drawn, says the refusal");
+    wait.drew = true;
+    (void)expect(loupe::window::waiting_for_frames(waiting("", 1), shown, wait).phase == Waiting::Shown,
+                 "a refusal after a frame was drawn keeps the frame (the debugger says why)");
 }
 
 } // namespace
@@ -366,11 +373,16 @@ main(int argc, char** argv) {
 
     loupe::window::Attach attach;
     attach.listed = true;
-    attach.list.boards = {{.id = "907069FEA308", .port = "COM5", .free = true},
+    attach.list.boards = {{.id = "907069FEA308", .port = "COM5", .holder = loupe::Holder::Nobody, .note = ""},
                           {.id = "A0B1C2D3E4F5",
                            .port = "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit-if00",
-                           .free = false},
-                          {.id = "0123456789AB", .port = "", .free = true}};
+                           .holder = loupe::Holder::Command,
+                           .note = ""},
+                          {.id = "0123456789AB", .port = "", .holder = loupe::Holder::Nobody, .note = ""},
+                          {.id = "907069FEA309",
+                           .port = "COM9",
+                           .holder = loupe::Holder::Person,
+                           .note = "checking the panel after the reflash"}};
     std::promise<loupe::editor::Rebuild> asking;
     attach.listing = std::async(std::launch::deferred, [] { return loupe::BoardList{}; });
     waits();

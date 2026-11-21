@@ -111,9 +111,10 @@ struct Shown {
     std::unique_ptr<Frames> frames;
     // A board's recording feeding a live stream; none for a scene or a saved recording.
     std::unique_ptr<window::Recording> recording;
-    // The recorded board as the viewport names it while waiting, "A308 (COM5)",
-    // and where the wait stood last tick, logged as it moves on.
-    std::string board;
+    // What the viewport names while waiting (the board, our packs' autana,
+    // whether a frame was drawn), and where the wait stood last tick, logged
+    // as it moves on.
+    window::WaitFor wait;
     std::optional<window::Waiting> waited;
     window::RecordControls controls;
     window::FrameTexture texture;
@@ -224,12 +225,13 @@ draw_wait(Shown& shown, const std::optional<window::Recording::Status>& status) 
     if (!status || !stream) {
         return window::Waiting::Shown;
     }
-    const window::WaitLine line = window::waiting_for_frames(*status, *stream, shown.board);
+    const window::WaitLine line = window::waiting_for_frames(*status, *stream, shown.wait);
     if (line.phase != shown.waited) {
-        std::fprintf(stderr, "loupe: recording %s: wait step %d at %.3f s\n", shown.board.c_str(),
+        std::fprintf(stderr, "loupe: recording %s: wait step %d at %.3f s\n", shown.wait.board.c_str(),
                      static_cast<int>(line.phase), std::chrono::duration<double>(status->elapsed).count());
         shown.waited = line.phase;
     }
+    shown.wait.drew = line.phase == window::Waiting::Shown;
     if (line.phase != window::Waiting::Shown) {
         window::draw_waiting(line);
     }
@@ -327,9 +329,10 @@ class Window {
     // Opens `options`' scene or recording in place of the open one; false,
     // said on the start panel, when it did not open.
     bool open(const Options& options);
-    // Records `board` into a live stream in place of the open scene; false,
-    // said on the start panel, when it did not start.
-    bool attach(const std::string& board);
+    // Records `board` into a live stream in place of the open scene, inside
+    // the lock `token` names when not empty; false, said on the start panel,
+    // when it did not start.
+    bool attach(const std::string& board, const std::string& token);
     // One tick's panels, then the scene they asked for.
     void tick();
     // Closes the open scene; false when a run failed along the way.
@@ -343,6 +346,9 @@ class Window {
     void leave();
     // Starts a board listing when asked, off this thread; takes it when done.
     void list_boards();
+    // Records the board Record was pressed for. A person's reservation is
+    // first taken off this thread, so the recording runs inside it.
+    void record_asked();
 
     window::Gpu& gpu_;
     // A window run's stand-in for -o: autana's close writes the last frame, to
@@ -418,10 +424,7 @@ Window::tick() {
         close();
     }
     list_boards();
-    if (attach_.record) {
-        (void)attach(*attach_.record);
-        attach_.record.reset();
-    }
+    record_asked();
     if (start.browse) {
         window::browse(gpu_.sdl_window());
     }
@@ -474,6 +477,32 @@ Window::list_boards() {
 }
 
 void
+Window::record_asked() {
+    if (attach_.record) {
+        const auto listed = std::ranges::find(attach_.list.boards, *attach_.record, &Board::id);
+        if (listed != attach_.list.boards.end() && listed->holder == Holder::Person) {
+            attach_.reserving = std::async(std::launch::async, [board = *listed, log = scratch_.path() / "hand.log"] {
+                window::Reserved reserved{.board = board.id, .token = "", .why = ""};
+                reserved.token = reservation_token(board, log, &reserved.why);
+                return reserved;
+            });
+        } else {
+            (void)attach(*attach_.record, "");
+        }
+        attach_.record.reset();
+    }
+    if (attach_.reserving.valid() && attach_.reserving.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        const window::Reserved reserved = attach_.reserving.get();
+        if (reserved.token.empty()) {
+            refusal_ = std::format("{}: {}", reserved.board, reserved.why);
+            std::fprintf(stderr, "loupe: %s\n", refusal_.c_str());
+            return;
+        }
+        (void)attach(reserved.board, reserved.token);
+    }
+}
+
+void
 Window::close() {
     if (shown_) {
         // A recording joins the recent list once it holds bytes; one refused at once does not.
@@ -517,7 +546,7 @@ Window::open(const Options& options) {
 }
 
 bool
-Window::attach(const std::string& board) {
+Window::attach(const std::string& board, const std::string& token) {
     close();
     std::string why = "no settings folder to keep the recording in";
     std::unique_ptr<Frames> frames;
@@ -527,8 +556,11 @@ Window::attach(const std::string& board) {
         Options live;
         live.out_bmp = utf8(scratch_.path() / "frame.bmp");
         frames = open_recording(live, samples_dir(folders_), board, &why);
-        recording =
-            frames != nullptr ? window::Recording::start(autana_command({"-b", board, "record"}), file, &why) : nullptr;
+        std::vector<std::string> args = {"-b", board, "record"};
+        if (!token.empty()) {
+            args.insert(args.begin(), {"--lock-token", token});
+        }
+        recording = frames != nullptr ? window::Recording::start(autana_command(args), file, &why) : nullptr;
     }
     if (recording == nullptr) {
         refusal_ = std::format("{}: {}", board, why);
@@ -540,9 +572,10 @@ Window::attach(const std::string& board) {
     shown_.emplace(gpu_, std::move(frames));
     shown_->recording = std::move(recording);
     const auto listed = std::ranges::find(attach_.list.boards, board, &Board::id);
-    shown_->board = listed == attach_.list.boards.end() || listed->port.empty()
-                        ? board
-                        : std::format("{} ({})", board, listed->port);
+    shown_->wait.board = listed == attach_.list.boards.end() || listed->port.empty()
+                             ? board
+                             : std::format("{} ({})", board, listed->port);
+    shown_->wait.packs_autana = copy_.id.autana_commit;
     shown_->editor_why = RECORDING_NO_EDITOR;
     // Play draws each frame as it arrives.
     shown_->timeline.playing = true;

@@ -33,6 +33,12 @@ struct Start {
     bool browse = false;
 };
 
+// A person's reservation taken to record inside it: the board, and its token
+// or why there is none.
+struct Reserved {
+    std::string board, token, why;
+};
+
 // The start panel's boards: the pool's last listing, why it failed, and
 // what was asked this tick: list them again, or record one.
 struct Attach {
@@ -41,6 +47,7 @@ struct Attach {
     bool refresh = false;
     std::future<BoardList> listing; // valid while `autana devices` runs
     std::optional<std::string> record;
+    std::future<Reserved> reserving; // valid while `autana lock hand` runs
 };
 
 // A live recording's controls: what was asked this tick. `paused` is the
@@ -109,9 +116,17 @@ struct WaitLine {
     std::string text; // empty once Shown
 };
 
-// `board` names the board, as "A308 (COM5)".
-WaitLine waiting_for_frames(const Recording::Status& status, const Frames::StreamState& stream,
-                            const std::string& board);
+// What the wait knows beside autana and the stream: the board, as
+// "A308 (COM5)"; the autana commit whose packs this Loupe carries, named when
+// a stream is refused; whether a frame has been drawn yet.
+struct WaitFor {
+    std::string board, packs_autana;
+    bool drew = false;
+};
+
+// Shown once a frame was drawn. A refusal before that is said in the frame's
+// place, as the stream may count a frame it then refuses to draw.
+WaitLine waiting_for_frames(const Recording::Status& status, const Frames::StreamState& stream, const WaitFor& wait);
 // `line` wrapped to the room left in the window, centred top to bottom.
 void draw_waiting(const WaitLine& line);
 

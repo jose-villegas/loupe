@@ -37,8 +37,15 @@ constexpr const char DEVICES[] =
     R"({"boards": [)"
     R"({"board": "90:70:69:FE:A3:08", "port": "COM5", "state": "unlocked", "holder": null}, )"
     R"({"board": "44:BD:8D:78:20:E8", "port": null, "state": "unlocked", "holder": null}, )"
-    R"({"board": "AA:BB:CC:DD:EE:FF", "port": "COM7", "state": "held", "holder": "someone"}]})"
+    R"({"board": "AA:BB:CC:DD:EE:FF", "port": "COM7", "state": "held", "holder": "someone"}, )"
+    R"({"board": "90:70:69:FE:A3:09", "port": "COM9", "state": "human", )"
+    R"("holder": {"owner": "sam@bench:39780", "purpose": "checking the panel"}}]})"
     "\n";
+
+// The boards DEVICES lists.
+constexpr size_t BOARDS = 4;
+// A lock token as autana prints it.
+constexpr const char TOKEN[] = "0123456789abcdef0123456789abcdef";
 
 bool
 expect(bool ok, const char* what) {
@@ -50,14 +57,34 @@ bool
 boards_parse() {
     const loupe::BoardList list = loupe::parse_boards(DEVICES);
     const std::vector<loupe::Board>& boards = list.boards;
-    bool ok = expect(boards.size() == 3 && list.why.empty(), "three boards listed past a stderr note");
-    ok &=
-        expect(boards.size() == 3 && boards[0].id == "90:70:69:FE:A3:08" && boards[0].port == "COM5" && boards[0].free,
-               "a board plugged in here is free with its port");
-    ok &= expect(boards.size() == 3 && boards[1].port.empty() && boards[1].free, "a board on another host has no port");
-    ok &= expect(boards.size() == 3 && !boards[2].free, "a held board is not free");
+    using loupe::Holder;
+    bool ok = expect(boards.size() == BOARDS && list.why.empty(), "every board listed past a stderr note");
+    if (boards.size() != BOARDS) {
+        return false;
+    }
+    ok &= expect(boards[0].id == "90:70:69:FE:A3:08" && boards[0].port == "COM5" && boards[0].holder == Holder::Nobody
+                     && loupe::recordable(boards[0]),
+                 "a free board plugged in here records, with its port");
+    ok &= expect(boards[1].port.empty() && !loupe::recordable(boards[1]), "a board on another host has no port");
+    ok &= expect(boards[2].holder == Holder::Command && !loupe::recordable(boards[2]),
+                 "a board a command holds does not record");
+    ok &= expect(boards[3].holder == Holder::Person && boards[3].note == "checking the panel"
+                     && loupe::recordable(boards[3]),
+                 "a person's reserved board records inside the reservation, its note kept");
     const loupe::BoardList broken = loupe::parse_boards(R"({"boards": [{"port": null}]})");
     ok &= expect(broken.boards.empty() && !broken.why.empty(), "a board without its fields is refused");
+    return ok;
+}
+
+// The reservation's token is the line `lock hand` prints alone; an autana that
+// prints none gives none.
+bool
+token_found() {
+    const std::string renewed = std::string("human reservation renewed; it expires in 1h\r\n") + TOKEN + "\r\n";
+    bool ok = expect(loupe::token_in(renewed) == TOKEN, "the token line, past the renewal message");
+    ok &= expect(loupe::token_in("human reservation recorded; it expires in 1h\n").empty(),
+                 "an autana that prints no token gives none");
+    ok &= expect(loupe::token_in(std::string(TOKEN) + "0\n").empty(), "a longer hex line is not a token");
     return ok;
 }
 
@@ -142,6 +169,7 @@ main(int argc, char** argv) {
         .write(reinterpret_cast<const char*>(payload.data()), static_cast<std::streamsize>(payload.size()));
 
     bool ok = boards_parse();
+    ok &= token_found();
     ok &= ends_on_stop(fake, folder, payload);
     ok &= hung_is_let_go(fake, folder);
     return ok ? 0 : 1;

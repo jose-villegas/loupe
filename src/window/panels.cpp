@@ -51,6 +51,18 @@ scene_list(const char* heading, const std::vector<std::filesystem::path>& scenes
     ImGui::PopID();
 }
 
+// After a board's port, who has it: a person records inside their own
+// reservation; a command's hold keeps Record off.
+std::string
+holder_text(const Board& board) {
+    switch (board.holder) {
+        case Holder::Nobody: return "";
+        case Holder::Person: return board.note.empty() ? "  (reserved)" : std::format("  (reserved: {})", board.note);
+        case Holder::Command: break;
+    }
+    return "  (held)";
+}
+
 } // namespace
 
 bool
@@ -128,19 +140,22 @@ draw_attach(Attach& attach) {
     } else if (attach.listed && attach.list.boards.empty()) {
         ImGui::TextDisabled("none");
     }
+    const bool reserving = attach.reserving.valid();
     for (const Board& board : attach.list.boards) {
         ImGui::PushID(board.id.c_str());
-        // autana record reads the board's USB port, so only a free board plugged in here records.
-        ImGui::BeginDisabled(!board.free || board.port.empty());
+        ImGui::BeginDisabled(!recordable(board) || reserving);
         if (ImGui::Button("Record")) {
             attach.record = board.id;
         }
         ImGui::EndDisabled();
-        const std::string where = std::format("{}  {}{}", board.id, board.port.empty() ? "on another host" : board.port,
-                                              board.free ? "" : "  (held)");
+        const std::string where =
+            std::format("{}  {}{}", board.id, board.port.empty() ? "on another host" : board.port, holder_text(board));
         flow(text_width(where.c_str()));
         ImGui::TextWrapped("%s", where.c_str());
         ImGui::PopID();
+    }
+    if (reserving) {
+        hint("taking the person's reservation to record inside it (autana lock hand)");
     }
 }
 
@@ -264,14 +279,21 @@ draw_view_picker(const std::vector<DebugView>& views, int* view) {
 }
 
 WaitLine
-waiting_for_frames(const Recording::Status& status, const Frames::StreamState& stream, const std::string& board) {
+waiting_for_frames(const Recording::Status& status, const Frames::StreamState& stream, const WaitFor& wait) {
     const double seconds = std::chrono::duration<double>(status.elapsed).count();
     const std::string log = utf8(status.log);
-    if (stream.frames > 0) {
+    const std::string& board = wait.board;
+    if (wait.drew) {
         return {.phase = Waiting::Shown, .text = ""};
     }
     if (stream.refused) {
-        return {.phase = Waiting::Refused, .text = std::format("The stream was refused: {}\nLog: {}", stream.why, log)};
+        return {.phase = Waiting::Refused,
+                .text = std::format("The stream was refused: {}\nThis Loupe replays with autana {}'s packs; the board "
+                                    "must run a build with the same packs.\nLog: {}",
+                                    stream.why, wait.packs_autana, log)};
+    }
+    if (stream.frames > 0) {
+        return {.phase = Waiting::Shown, .text = ""};
     }
     if (!status.running) {
         return {.phase = Waiting::Ended,
