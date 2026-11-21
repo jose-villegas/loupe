@@ -8,6 +8,9 @@ find_package(Python3 ${python_min} REQUIRED COMPONENTS Interpreter)
 # a .apak, so the suite runs in builds without the pack tool too.
 set(packs "${CMAKE_CURRENT_BINARY_DIR}/packs")
 set(sponza "${packs}/sponza.apak")
+# Sponza's flight: the scene's first camera stands still, so tests that fly
+# its path name this one, as autana's app and viewer test do.
+set(sponza_camera camera)
 set(water "${packs}/water.apak")
 add_test(NAME packs COMMAND "${Python3_EXECUTABLE}" "${AUTANA_DIR}/launcher/tools/r3d/build_pack.py" -o "${packs}"
                             "${sponza_toml}" "${demo}/water/water.scene.toml")
@@ -77,16 +80,18 @@ function(path_frame name scene args compare b_args)
              "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/${name}" -P "${CMAKE_CURRENT_SOURCE_DIR}/path_frame.cmake")
     on_packs(${name})
 endfunction()
-path_frame(frame "${sponza}" "--view|meshlets" "" "")
+path_frame(frame "${sponza}" "--camera|${sponza_camera}|--view|meshlets" "" "")
 refused(frame_past_end "${sponza}|--frames|3|--dt|50|--frame|3|-o|f.png" 2 "the path has frames 0 to 2 at --dt 50, not 3")
 if(LOUPE_PACK_TOOL)
     # The scene's own checkout: a folder, and its HEAD checked out as a worktree.
     get_filename_component(autana_dir "${AUTANA_DIR}" ABSOLUTE)
-    path_frame(frame_compare "${sponza_toml}" "" "${autana_dir}" "--view meshlets --object atrium")
+    path_frame(frame_compare "${sponza_toml}" "--camera|${sponza_camera}" "${autana_dir}"
+               "--camera ${sponza_camera} --view meshlets --object atrium")
     # A's --set must not reach B: B's frame is a fresh run's under its own flags.
-    path_frame(frame_compare_set "${sponza_toml}" "--set|render.cull=0" "${autana_dir}" "--view shaded")
+    path_frame(frame_compare_set "${sponza_toml}" "--camera|${sponza_camera}|--set|render.cull=0" "${autana_dir}"
+               "--camera ${sponza_camera} --view shaded")
     # HEAD's worktree clones its submodules, from the network.
-    path_frame(frame_compare_head "${sponza_toml}" "" HEAD "")
+    path_frame(frame_compare_head "${sponza_toml}" "--camera|${sponza_camera}" HEAD "")
     # --frames 3 at --dt 100 (tests/path_video.cmake).
     function(path_video name b_args expect)
         add_test(NAME ${name} COMMAND "${CMAKE_COMMAND}" "-DLOUPE=$<TARGET_FILE:loupe>" "-DPYTHON=${Python3_EXECUTABLE}"
@@ -98,23 +103,23 @@ if(LOUPE_PACK_TOOL)
     endfunction()
     path_video(compare_same "" same)
     path_video(compare_view "--view meshlets" differ)
-    refused(compare_bad_rev "${sponza_toml}|--compare|no-such-rev|--frame|1|-o|f.png" 2
+    refused(compare_bad_rev "${sponza_toml}|--camera|${sponza_camera}|--compare|no-such-rev|--frame|1|-o|f.png" 2
             "not a revision or directory: no-such-rev")
     # A folder that is no checkout of the scene: this test's own.
-    refused(compare_no_scene "${sponza_toml}|--compare|.|--frame|1|-o|f.png" 2 ". has no launcher/demo/sponza/sponza.scene.toml")
+    refused(compare_no_scene "${sponza_toml}|--camera|${sponza_camera}|--compare|.|--frame|1|-o|f.png" 2 ". has no launcher/demo/sponza/sponza.scene.toml")
 else()
     refused(compare_refused "${sponza_toml}|--compare|HEAD|--video|v.mp4" 2 "built without the pack tool --compare needs")
 endif()
 
 add_executable(seek_test seek_test.cpp)
 target_link_libraries(seek_test PRIVATE loupe_core)
-add_test(NAME seek COMMAND seek_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/seek.bmp")
+add_test(NAME seek COMMAND seek_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/seek.bmp" ${sponza_camera})
 on_packs(seek)
 
 # The observer: Frames::observe on the cull view, and its start speed and ImGui steering.
 add_executable(observe_test observe_test.cpp)
 target_link_libraries(observe_test PRIVATE loupe_core)
-add_test(NAME observe COMMAND observe_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/observe.bmp")
+add_test(NAME observe COMMAND observe_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/observe.bmp" ${sponza_camera})
 on_packs(observe)
 add_executable(observer_test observer_test.cpp)
 target_link_libraries(observer_test PRIVATE loupe_core loupe_window)
@@ -122,7 +127,8 @@ add_test(NAME observer_steer COMMAND observer_test)
 
 add_executable(whole_path_test whole_path_test.cpp)
 target_link_libraries(whole_path_test PRIVATE loupe_core)
-add_test(NAME whole_path COMMAND whole_path_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/whole_path.bmp")
+add_test(NAME whole_path COMMAND whole_path_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/whole_path.bmp"
+                                   ${sponza_camera})
 on_packs(whole_path)
 
 add_executable(thinning_test thinning_test.cpp)
@@ -132,7 +138,7 @@ foreach(budget IN ITEMS "3;3" "7;2" "9;1")
     list(GET budget 0 halves)
     list(GET budget 1 thinnings)
     add_test(NAME thinning_${halves} COMMAND thinning_test "${sponza}"
-             "${CMAKE_CURRENT_BINARY_DIR}/thinning_${halves}.bmp" ${halves} ${thinnings})
+             "${CMAKE_CURRENT_BINARY_DIR}/thinning_${halves}.bmp" ${halves} ${thinnings} ${sponza_camera})
     on_packs(thinning_${halves})
 endforeach()
 
@@ -176,7 +182,7 @@ target_link_libraries(editor_test PRIVATE loupe_core loupe_window)
 add_test(NAME editor_docs COMMAND editor_test)
 add_executable(place_test place_test.cpp)
 target_link_libraries(place_test PRIVATE loupe_core)
-add_test(NAME place COMMAND place_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/place.bmp")
+add_test(NAME place COMMAND place_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/place.bmp" ${sponza_camera})
 on_packs(place)
 if(LOUPE_PACK_TOOL)
     set(capybara_copy "${CMAKE_CURRENT_BINARY_DIR}/scene_save/capybara")

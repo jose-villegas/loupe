@@ -33,18 +33,27 @@ open_or_report(const char* test, const Options& options,
     return frames;
 }
 
-// For a test run as `TEST SCENE.apak out.bmp ...` with `expected`
-// arguments: the scene, writing its BMP there, keeping every checkpoint. Null,
-// said on stderr with `usage`, for another count or a scene that does not open.
+// The camera a test looks through: its last argument past the `expected`
+// ones, or the scene's first camera without one.
+inline std::string
+camera_after(std::span<char*> args, size_t expected) {
+    return args.size() > expected ? args.back() : "";
+}
+
+// For a test run as `TEST SCENE.apak out.bmp ... [CAMERA]` with `expected`
+// arguments before CAMERA: the scene, writing its BMP there, keeping every
+// checkpoint. Null, said on stderr with `usage`, for another count or a scene
+// that does not open.
 inline std::unique_ptr<Frames>
 open_test(const char* test, std::span<char*> args, size_t expected, const char* usage) {
-    if (args.size() != expected) {
-        std::fprintf(stderr, "usage: %s %s\n", test, usage);
+    if (args.size() != expected && args.size() != expected + 1) {
+        std::fprintf(stderr, "usage: %s %s [CAMERA]\n", test, usage);
         return nullptr;
     }
     Options options;
     options.scene = args[1];
     options.out_bmp = args[2];
+    options.render.camera = camera_after(args, expected);
     std::unique_ptr<Frames> frames = open_or_report(test, options);
     if (frames != nullptr) {
         frames->keep_checkpoints(std::numeric_limits<size_t>::max());

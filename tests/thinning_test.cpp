@@ -18,6 +18,8 @@ constexpr size_t SIZE_SLACK_PARTS = 8;
 // Past this, EVERY doubled that many times overflows an int.
 constexpr long long MAX_THINNINGS = 24;
 constexpr const char USAGE[] = "SCENE.apak out.bmp HALVES THINNINGS";
+// The arguments before an optional CAMERA, the program's own name first.
+constexpr int ARGS = 5;
 
 // Judges each step: the kept checkpoints within the budget, and each one saved
 // about the size of the first, the one kept when the watch starts.
@@ -56,14 +58,14 @@ main(int argc, char** argv) {
     // Room for HALVES / 2 checkpoints, which by STRAIGHT_TO doubles the interval THINNINGS times.
     long long halves = 0;
     long long thinnings = 0;
-    if (argc != 5 || !loupe::parse_count(argv[3], 1, INT_MAX, &halves)
+    if ((argc != ARGS && argc != ARGS + 1) || !loupe::parse_count(argv[3], 1, INT_MAX, &halves)
         || !loupe::parse_count(argv[4], 0, MAX_THINNINGS, &thinnings)) {
         std::fprintf(stderr, "usage: %s %s\n", TEST, USAGE);
         return 2;
     }
     // The first checkpoint's size sets the budget.
     std::unique_ptr<loupe::Frames> frames =
-        loupe::test::open_test(TEST, std::span(argv, static_cast<size_t>(argc)), 5, USAGE);
+        loupe::test::open_test(TEST, std::span(argv, static_cast<size_t>(argc)), ARGS, USAGE);
     if (frames == nullptr) {
         return 1;
     }
