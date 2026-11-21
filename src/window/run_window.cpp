@@ -363,10 +363,10 @@ class Window {
     // Opens `options`' scene or recording in place of the open one; false,
     // said on the start panel, when it did not open.
     bool open(const Options& options);
-    // Records `board` into a live stream in place of the open scene, inside
-    // the lock `token` names when not empty; false, said on the start panel,
-    // when it did not start.
-    bool attach(const std::string& board, const std::string& token);
+    // Records `reserved.board` into a live stream in place of the open scene,
+    // inside the lock its token names when not empty; false, said on the
+    // start panel, when it did not start.
+    bool attach(const window::Reserved& reserved);
     // One tick's panels, then the scene they asked for.
     void tick();
     // Closes the open scene; false when a run failed along the way.
@@ -521,7 +521,7 @@ Window::record_asked() {
                 return reserved;
             });
         } else {
-            (void)attach(*attach_.record, "");
+            (void)attach({.board = *attach_.record, .token = "", .why = ""});
         }
         attach_.record.reset();
     }
@@ -532,7 +532,7 @@ Window::record_asked() {
             std::fprintf(stderr, "loupe: %s\n", refusal_.c_str());
             return;
         }
-        (void)attach(reserved.board, reserved.token);
+        (void)attach(reserved);
     }
 }
 
@@ -580,7 +580,8 @@ Window::open(const Options& options) {
 }
 
 bool
-Window::attach(const std::string& board, const std::string& token) {
+Window::attach(const window::Reserved& reserved) {
+    const std::string& board = reserved.board;
     close();
     std::string why = "no settings folder to keep the recording in";
     std::unique_ptr<Frames> frames;
@@ -591,8 +592,8 @@ Window::attach(const std::string& board, const std::string& token) {
         live.out_bmp = utf8(scratch_.path() / "frame.bmp");
         frames = open_recording(live, samples_dir(folders_), board, &why);
         std::vector<std::string> args = {"-b", board, "record"};
-        if (!token.empty()) {
-            args.insert(args.begin(), {"--lock-token", token});
+        if (!reserved.token.empty()) {
+            args.insert(args.begin(), {"--lock-token", reserved.token});
         }
         recording = frames != nullptr ? window::Recording::start(autana_command(args), file, &why) : nullptr;
     }
