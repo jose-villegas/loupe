@@ -205,14 +205,16 @@ lay_out(ImGuiID dock, ImVec2 size) {
 // Grows the frame debugger's dock until its rows show with no scrolling,
 // `needed` tall, as rows come (a refusal, an end); call inside its window.
 // Never past DEBUGGER_MAX_SHARE of the dock, and never once the person has
-// sized it: a height other than the one last fitted is theirs.
+// sized it: a height other than the one last fitted is theirs. Read from the
+// size the dock keeps (SizeRef), which a splitter drag sets and a smaller or
+// minimised window only clamps around.
 void
 fit_debugger(std::optional<float>& fitted, float needed) {
     ImGuiDockNode* node = ImGui::DockBuilderGetNode(ImGui::GetWindowDockID());
     if (!fitted || node == nullptr || node->ParentNode == nullptr) {
         return;
     }
-    if (*fitted > 0.0F && std::abs(node->Size.y - *fitted) > FIT_SLACK) {
+    if (*fitted > 0.0F && std::abs(node->SizeRef.y - *fitted) > FIT_SLACK) {
         fitted.reset();
         return;
     }
@@ -224,7 +226,7 @@ fit_debugger(std::optional<float>& fitted, float needed) {
         node->WantLockSizeOnce = true;
         fitted = wanted;
     } else {
-        fitted = node->Size.y;
+        fitted = node->SizeRef.y;
     }
 }
 
@@ -264,7 +266,6 @@ draw_wait(Shown& shown, const std::optional<window::Recording::Status>& status) 
                      static_cast<int>(line.phase), std::chrono::duration<double>(status->elapsed).count());
         shown.waited = line.phase;
     }
-    shown.wait.drew = line.phase == window::Waiting::Shown;
     if (line.phase != window::Waiting::Shown) {
         window::draw_waiting(line);
     }
@@ -352,6 +353,8 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
     }
     if (changed) {
         shown.texture.upload(shown.frames->frame());
+        // From the first frame shown on, a later refusal leaves it in view.
+        shown.wait.drew = true;
     }
     return back;
 }
@@ -527,6 +530,10 @@ Window::record_asked() {
     }
     if (attach_.reserving.valid() && attach_.reserving.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         const window::Reserved reserved = attach_.reserving.get();
+        if (shown_) {
+            // A scene opened while the reservation was taken: it stays.
+            return;
+        }
         if (reserved.token.empty()) {
             refusal_ = std::format("{}: {}", reserved.board, reserved.why);
             std::fprintf(stderr, "loupe: %s\n", refusal_.c_str());

@@ -41,9 +41,11 @@ bool recordable(const Board& board);
 // The token in `autana lock hand`'s output `output`: the line that is a lock
 // token alone. Empty when there is none.
 std::string token_in(const std::string& output);
-// The token of `board`'s person's reservation, from `autana -b BOARD lock hand
-// NOTE`, which renews the reservation with its own note; the output into
-// `log`. Empty, with `why` set, when autana gave none.
+// The token of `board`'s person's reservation, from `autana --wait 0 -b BOARD
+// lock hand NOTE`, which renews the reservation with its own note; the output
+// into `log`. Without the wait, a board a command took since the listing
+// refuses at once. Empty, with `why` set, when autana gave none: it also
+// refuses another person's reservation.
 std::string reservation_token(const Board& board, const std::filesystem::path& log, std::string* why);
 
 } // namespace loupe

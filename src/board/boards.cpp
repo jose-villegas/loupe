@@ -112,7 +112,7 @@ token_in(const std::string& output) {
 std::string
 reservation_token(const Board& board, const std::filesystem::path& log, std::string* why) {
     const std::string note = board.note.empty() ? std::string(RECORDING_NOTE) : board.note;
-    const bool ran = run_logged(autana_command({"-b", board.id, "lock", "hand", note}), log);
+    const bool ran = run_logged(autana_command({"--wait", "0", "-b", board.id, "lock", "hand", note}), log);
     const std::string output = read_text(log);
     const std::string token = ran ? token_in(output) : "";
     if (token.empty()) {
