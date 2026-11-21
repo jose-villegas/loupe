@@ -49,6 +49,10 @@ constexpr const char DEBUGGER[] = "Frame debugger";
 constexpr float OUTLINER_SHARE = 0.18F;
 constexpr float INSPECTOR_SHARE = 0.26F;
 constexpr float DEBUGGER_SHARE = 0.16F;
+// The most of the dock's height the frame debugger grows to, fitting its rows.
+constexpr float DEBUGGER_MAX_SHARE = 0.5F;
+// A height within this of another is the same: rounding, not a resize.
+constexpr float FIT_SLACK = 1.0F;
 // The outliner's line for a recording, which draws no scene file.
 constexpr const char RECORDING_NO_EDITOR[] = "a recording has no scene file to edit";
 
@@ -125,6 +129,9 @@ struct Shown {
     std::optional<window::Editor> editor;
     std::string editor_why;
     bool laid_out = false;
+    // The frame debugger's docked height as last fitted to its rows; none
+    // once the person sized it, so it is theirs from then on.
+    std::optional<float> debugger_fitted = 0.0F;
 
     Shown(window::Gpu& gpu, std::unique_ptr<Frames> opened)
         : frames(std::move(opened)), texture(gpu, frames->frame()),
@@ -193,6 +200,32 @@ lay_out(ImGuiID dock, ImVec2 size) {
     ImGui::DockBuilderDockWindow(DEBUGGER, below);
     ImGui::DockBuilderDockWindow(VIEWPORT, middle);
     ImGui::DockBuilderFinish(dock);
+}
+
+// Grows the frame debugger's dock until its rows show with no scrolling,
+// `needed` tall, as rows come (a refusal, an end); call inside its window.
+// Never past DEBUGGER_MAX_SHARE of the dock, and never once the person has
+// sized it: a height other than the one last fitted is theirs.
+void
+fit_debugger(std::optional<float>& fitted, float needed) {
+    ImGuiDockNode* node = ImGui::DockBuilderGetNode(ImGui::GetWindowDockID());
+    if (!fitted || node == nullptr || node->ParentNode == nullptr) {
+        return;
+    }
+    if (*fitted > 0.0F && std::abs(node->Size.y - *fitted) > FIT_SLACK) {
+        fitted.reset();
+        return;
+    }
+    // The node holds the window and its tab bar above it.
+    const float wanted =
+        std::min(needed + (node->Size.y - ImGui::GetWindowHeight()), node->ParentNode->Size.y * DEBUGGER_MAX_SHARE);
+    if (wanted > node->Size.y + FIT_SLACK) {
+        ImGui::DockBuilderSetNodeSize(node->ID, {node->Size.x, wanted});
+        node->WantLockSizeOnce = true;
+        fitted = wanted;
+    } else {
+        fitted = node->Size.y;
+    }
 }
 
 // What a recording's controls asked, sent to the board, then the bytes it
@@ -278,6 +311,7 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
                                       .stream = shown.frames->stream_state(),
                                       .recording = status},
                                      shown.controls, shown.observer, shown.timeline, &asked.view);
+        fit_debugger(shown.debugger_fitted, window::content_height());
     }
     ImGui::End();
     bool moved = false;

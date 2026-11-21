@@ -221,6 +221,13 @@ draw_timeline(const Frames& frames, Timeline& timeline) {
     }
 }
 
+float
+content_height() {
+    // The cursor stands a row's spacing below the last row; the padding closes the window.
+    const ImGuiStyle& style = ImGui::GetStyle();
+    return ImGui::GetCursorPosY() - style.ItemSpacing.y + style.WindowPadding.y;
+}
+
 bool
 draw_debugger(const Debugger& shown, RecordControls& controls, Observer& observer, Timeline& timeline,
               std::optional<int>* view) {
@@ -288,9 +295,10 @@ waiting_for_frames(const Recording::Status& status, const Frames::StreamState& s
     }
     if (stream.refused) {
         return {.phase = Waiting::Refused,
-                .text = std::format("The stream was refused: {}\nThis Loupe replays with autana {}'s packs; the board "
-                                    "must run a build with the same packs.\nLog: {}",
-                                    stream.why, wait.packs_autana, log)};
+                .text = std::format("The stream was refused: {}\nThis Loupe carries autana {}'s packs: flash the board "
+                                    "from autana {}, or use a Loupe built from the board's autana. The stream names "
+                                    "the board's build only by its image hash, not its autana commit.\nLog: {}",
+                                    stream.why, wait.packs_autana, wait.packs_autana, log)};
     }
     if (stream.frames > 0) {
         return {.phase = Waiting::Shown, .text = ""};

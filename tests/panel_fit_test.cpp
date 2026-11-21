@@ -266,6 +266,34 @@ fits(const char* name, float width, const fs::path& out, const std::function<voi
                                              + std::to_string(reach) + ", edge " + std::to_string(edge));
 }
 
+// `panel` drawn `width` wide, measured with content_height(), then drawn in a
+// window that tall: true when that window needs no scrolling, as the frame
+// debugger's dock is fitted to its rows.
+bool
+tall_enough(const std::string& name, float width, const std::function<void()>& panel) {
+    ImGui::GetIO().DisplaySize = {width, HEIGHT};
+    float needed = HEIGHT;
+    float scroll = 0.0F;
+    // Twice each: a window's scroll range comes from the frame before.
+    for (int pass = 0; pass < 4; pass++) {
+        take_textures();
+        ImGui::NewFrame();
+        ImGui::SetNextWindowPos({0.0F, 0.0F});
+        ImGui::SetNextWindowSize({width, pass < 2 ? HEIGHT : needed});
+        ImGui::Begin(name.c_str(), nullptr, ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+        panel();
+        if (pass < 2) {
+            needed = loupe::window::content_height();
+        }
+        scroll = ImGui::GetScrollMaxY();
+        ImGui::End();
+        ImGui::Render();
+    }
+    take_textures();
+    return expect(scroll <= SLACK, name + " at " + std::to_string(static_cast<int>(width)) + " px: "
+                                       + std::to_string(needed) + " px tall still scrolls " + std::to_string(scroll));
+}
+
 // A recording's state before its first frame, `latest` the last line autana
 // wrote so far, `began` whether FRAMEREC_BEGIN was among them.
 loupe::window::Recording::Status
@@ -401,11 +429,13 @@ main(int argc, char** argv) {
     for (const float width : WIDTHS) {
         const auto debugger = [&](const char* name, const loupe::Frames::StreamState& stream,
                                   const std::optional<loupe::window::Recording::Status>& recording) {
-            (void)fits(name, width, out, [&] {
+            const auto panel = [&] {
                 (void)loupe::window::draw_debugger(
                     {.frames = *frames, .views = views, .stream = stream, .recording = recording}, controls, observer,
                     timeline, &view);
-            });
+            };
+            (void)fits(name, width, out, panel);
+            (void)tall_enough(std::string(name) + "_height", width, panel);
         };
         debugger("debugger_recording", counts, live);
         debugger("debugger_stopping", counts, stopping);

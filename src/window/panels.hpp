@@ -100,6 +100,11 @@ struct Debugger {
     std::optional<Recording::Status> recording;
 };
 
+// The height the current window needs to show what it has drawn so far with
+// no scrolling: its last row's bottom and the window's padding. Call it
+// after the rows, before End().
+float content_height();
+
 // Scenes, the view picker and the observer; a stream's line, with a
 // recording's controls; then the timeline. Each row wraps at the panel's
 // edge. True when Scenes was pressed; a picked view goes into `*view`.
