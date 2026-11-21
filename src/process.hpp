@@ -8,6 +8,9 @@
 
 namespace loupe {
 
+// `args` as the null-ended argv posix_spawn, SDL and autana take: pointers
+// into `args`, which must outlive it.
+std::vector<char*> argv_of(const std::vector<std::string>& args);
 // Runs `args` with no shell between, its output into `log`; true when it
 // exits 0. A request on `stop` ends it, and it counts as failed.
 bool run_logged(const std::vector<std::string>& args, const std::filesystem::path& log,

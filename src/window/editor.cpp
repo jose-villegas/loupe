@@ -2,14 +2,17 @@
 
 #include <algorithm>
 #include <array>
+#include <cfloat>
 #include <chrono>
 #include <cstdio>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "editor/placement.hpp"
 #include "paths.hpp"
+#include "window/flow.hpp"
 
 namespace loupe::window {
 
@@ -28,6 +31,13 @@ constexpr ImU32 CUBE_BACKGROUND = IM_COL32(0, 0, 0, 0);
 // Inspector drag speeds per pixel for editor::PLACEMENT_FIELDS in order: scene units, degrees, scale.
 constexpr std::array<float, 3> FIELD_SPEEDS = {0.01F, 0.5F, 0.005F};
 constexpr ImVec4 BAKED_COLOUR = {0.95F, 0.75F, 0.3F, 1.0F};
+// The handle bar's choices, in order, and its axes toggle.
+constexpr std::array<std::pair<const char*, Handle>, 3> HANDLE_LABELS = {{
+    {"Move (W)", Handle::Move},
+    {"Rotate (E)", Handle::Rotate},
+    {"Scale (R)", Handle::Scale},
+}};
+constexpr const char LOCAL_AXES[] = "Local axes";
 
 using editor::from_gizmo;
 using editor::gizmo;
@@ -133,7 +143,13 @@ placement_rows(Editor& editor, const editor::Object& object) {
     for (size_t i = 0; i < editor::PLACEMENT_FIELDS.size(); i++) {
         const editor::PlacementField& field = editor::PLACEMENT_FIELDS[i];
         editor::Placement placement = shown_placement(editor, object);
-        if (ImGui::DragFloat3(field.name, (placement.*field.values).data(), FIELD_SPEEDS[i], 0.0F, 0.0F, "%.4g")) {
+        // The name above its fields, which take the panel's width: neither is cut at a narrow panel.
+        ImGui::TextUnformatted(field.name);
+        ImGui::PushID(field.name);
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        const bool moved = ImGui::DragFloat3("", (placement.*field.values).data(), FIELD_SPEEDS[i], 0.0F, 0.0F, "%.4g");
+        ImGui::PopID();
+        if (moved) {
             drag_to(editor, object, placement);
         }
         if (ImGui::IsItemDeactivatedAfterEdit()) {
@@ -158,8 +174,9 @@ outliner_node(Editor& editor, size_t index) {
     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
         editor.selected = object.path;
     }
-    ImGui::SameLine();
-    ImGui::TextDisabled("%s%s", object.kind.c_str(), object.baked ? ", baked" : "");
+    const std::string kind = object.kind + (object.baked ? ", baked" : "");
+    flow(text_width(kind.c_str()));
+    hint(kind.c_str());
     if (open) {
         for (const size_t child : children) {
             outliner_node(editor, child);
@@ -177,28 +194,21 @@ collect_check(Editor& editor) {
     }
 }
 
-// `text` in the disabled colour, wrapped to the panel.
-void
-hint(const char* text) {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-    ImGui::TextWrapped("%s", text);
-    ImGui::PopStyleColor();
-}
-
 // What the last save's bake check found, or that it is still asking.
 void
 draw_bake_check(const Editor& editor) {
     if (editor.checking.result.valid()) {
-        ImGui::TextDisabled("Asking the bakes what this re-keys...");
+        hint("Asking the bakes what this re-keys...");
     } else if (editor.checked) {
         if (!editor.checked->ok) {
             ImGui::TextWrapped("Bake check failed: %s", editor.checked->why.c_str());
         } else if (editor.checked->rebake_rows.empty()) {
-            ImGui::TextUnformatted("Re-keys no bakes");
+            ImGui::TextWrapped("Re-keys no bakes");
         } else {
-            ImGui::Text("Re-keys %zu bakes:", editor.checked->rebake_rows.size());
+            ImGui::TextWrapped("Re-keys %zu bakes:", editor.checked->rebake_rows.size());
             for (const std::string& row : editor.checked->rebake_rows) {
-                ImGui::BulletText("%s", row.c_str());
+                ImGui::Bullet();
+                ImGui::TextWrapped("%s", row.c_str());
             }
         }
     }
@@ -344,9 +354,9 @@ draw_inspector(Editor& editor) {
     if (object == nullptr) {
         hint("Select an object in the outliner or the viewport");
     } else {
-        ImGui::TextUnformatted(object->path.c_str());
-        ImGui::SameLine();
-        ImGui::TextDisabled("%s", object->kind.c_str());
+        // The kind on its own line: the path may have wrapped.
+        ImGui::TextWrapped("%s", object->path.c_str());
+        hint(object->kind.c_str());
         if (object->baked) {
             ImGui::TextColored(BAKED_COLOUR, "Baked: locked");
             ImGui::SetItemTooltip("%s", object->locked.c_str());
@@ -368,14 +378,15 @@ draw_inspector(Editor& editor) {
 void
 draw_handle_bar(Editor& editor) {
     int handle = static_cast<int>(editor.handle);
-    ImGui::RadioButton("Move (W)", &handle, static_cast<int>(Handle::Move));
-    ImGui::SameLine();
-    ImGui::RadioButton("Rotate (E)", &handle, static_cast<int>(Handle::Rotate));
-    ImGui::SameLine();
-    ImGui::RadioButton("Scale (R)", &handle, static_cast<int>(Handle::Scale));
+    for (const auto& [label, which] : HANDLE_LABELS) {
+        if (which != Handle::Move) {
+            flow(check_width(label));
+        }
+        ImGui::RadioButton(label, &handle, static_cast<int>(which));
+    }
     editor.handle = static_cast<Handle>(handle);
-    ImGui::SameLine();
-    ImGui::Checkbox("Local axes", &editor.local_axes);
+    flow(check_width(LOCAL_AXES));
+    ImGui::Checkbox(LOCAL_AXES, &editor.local_axes);
 }
 
 void

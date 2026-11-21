@@ -82,8 +82,10 @@ start(const std::vector<std::string>& args, STARTUPINFOA& startup) {
 #else
 // How often a waiting run_logged() looks for a stop request.
 constexpr auto STOP_POLL = std::chrono::milliseconds(50);
+#endif
 
-// `args` as the null-ended argv posix_spawn takes; pointers into `args`.
+} // namespace
+
 std::vector<char*>
 argv_of(const std::vector<std::string>& args) {
     std::vector<char*> argv;
@@ -94,9 +96,6 @@ argv_of(const std::vector<std::string>& args) {
     argv.push_back(nullptr);
     return argv;
 }
-#endif
-
-} // namespace
 
 bool
 run_logged(const std::vector<std::string>& args, const fs::path& log, const std::stop_token& stop) {

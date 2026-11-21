@@ -5,6 +5,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <span>
@@ -51,6 +52,13 @@ class Frames {
 
     // The scene provider on `options`' scene, through resolve_scene.
     static std::unique_ptr<Frames> open(const Options& options, std::string* why);
+    // autana's stream provider on a frame record stream: `options.scene`'s
+    // .framerec, or with no scene a live stream fed through feed(). Its packs
+    // load by name from `packs`, and one whose crc differs refuses the stream.
+    // `id` is what scene_id() says. Seeks need no checkpoints: the provider
+    // decodes any frame from the keyframe before it.
+    static std::unique_ptr<Frames> open_stream(const Options& options, const std::filesystem::path& packs,
+                                               std::string id, std::string* why);
     ~Frames();
     Frames(const Frames&) = delete;
     Frames& operator=(const Frames&) = delete;
@@ -60,6 +68,7 @@ class Frames {
     // The scene's id: its pack's file name without .apak.
     const std::string& scene_id() const;
     // The run's frame count and dt as it opened: the options', else the provider's defaults.
+    // A stream's count is its whole frames so far, and its dt the next frame's.
     int count() const;
     uint32_t dt_ms() const;
     // Saves checkpoints from here on, so seek() can go back; a command-line run never does.
@@ -114,6 +123,8 @@ class Frames {
     // cannot restore. A seek re-draws frames, so do not mix it with -o or --video.
     // Observing, the shown frame is first drawn again without the observer.
     bool seek(int index);
+    // The first frame seek() reaches: FIRST_SEEKABLE for a scene, 0 for a stream.
+    int first_seekable() const;
     // How many frames are drawn; frame() is frame index() - 1.
     int index() const;
     Frame frame() const;
@@ -123,6 +134,25 @@ class Frames {
     int64_t video_frames_fit() const;
     // Writes what -o and --video ask for; false when the run failed.
     bool close();
+
+    // A stream's state: whole frames, frames after a drop on the board, and
+    // why the stream was refused when it was.
+    struct StreamState {
+        int frames = 0, dropped = 0;
+        bool refused = false;
+        std::string why;
+    };
+    // How a drawn frame compares with the CHECK the stream holds for it.
+    enum class Check : uint8_t { None, Same, Differs, OtherSize };
+
+    // True for a stream fed live: its count grows as bytes arrive.
+    bool live() const;
+    // A live stream's bytes as they arrive, in any pieces; false once it is refused.
+    bool feed(std::span<const uint8_t> bytes);
+    // The stream's state; none for a scene.
+    std::optional<StreamState> stream_state() const;
+    // Frame `index`'s CHECK verdict, as of its last draw; None for a scene.
+    Check check(int index) const;
 
   private:
     struct State;
@@ -134,6 +164,9 @@ class Frames {
     bool redraw_shown();
     // step() without leaving the observer: draws frame index().
     bool advance(uint32_t dt_ms);
+    // advance() for a stream: the provider draws the frame stream_next()
+    // names, at its recorded dt.
+    bool advance_stream();
     // Draws the shown frame again in one step from a checkpoint held just
     // before it; the first call takes the hold, replaying from the kept
     // checkpoint before. What observe() and place() redraw with, so a drag
