@@ -53,6 +53,8 @@ void draw_start(const Library& library, const std::string& refusal, Start& start
 void draw_timeline(const Frames& frames, Timeline& timeline);
 // The debug-view picker; true when `view` changed.
 bool draw_view_picker(const std::vector<DebugView>& views, int* view);
+// `text` in the disabled colour, wrapped to the panel.
+void hint(const char* text);
 
 // Where draw_frame put the frame, in screen pixels.
 struct FrameRect {

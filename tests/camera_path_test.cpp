@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "checks.hpp"
 #include "editor/camera_path.hpp"
 #include "editor/doc.hpp"
 #include "editor/scene_tool.hpp"
@@ -18,15 +19,13 @@ namespace {
 using loupe::editor::CameraKey;
 
 constexpr const char TEST[] = "camera_path_test";
+// The fixed paths' key ids: far past any next_key_id a test draws.
+constexpr uint32_t FIXED_ID = 1000;
 constexpr float CLOSE = 1e-5F;
 // A sampled pose against a key's: the curve's float maths at a key time.
 constexpr float CLOSE_POSE = 1e-3F;
 
-bool
-check(bool ok, const std::string& what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, what.c_str(), ok ? "ok" : "FAILED");
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
 bool
 same_numbers(const std::vector<float>& got, const std::vector<float>& want, float tolerance = CLOSE) {
@@ -42,22 +41,24 @@ same_numbers(const std::vector<float>& got, const std::vector<float>& want, floa
 }
 
 CameraKey
-key(float t, loupe::editor::Point eye, loupe::editor::Point look_at, int from) {
-    return {.t = t, .eye = eye, .look_at = look_at, .from = from};
+key(float t, loupe::editor::Point eye, loupe::editor::Point look_at, uint32_t id) {
+    return {.t = t, .eye = eye, .look_at = look_at, .id = id};
 }
 
 // Three keys, open: the eye swings round a point and rises.
 std::vector<CameraKey>
 open_path() {
-    return {key(0.0F, {0, 1, 5}, {0, 1, 0}, 0), key(2.5F, {5, 2, 0}, {0, 1, 0}, 1),
-            key(5.0F, {0, 1, -5}, {1, 3, 0}, 2)};
+    return {key(0.0F, {0, 1, 5}, {0, 1, 0}, FIXED_ID + 1), key(2.5F, {5, 2, 0}, {0, 1, 0}, FIXED_ID + 2),
+            key(5.0F, {0, 1, -5}, {1, 3, 0}, FIXED_ID + 3)};
 }
 
 // The start of Sponza's tour, closed back on its first key.
 std::vector<CameraKey>
 loop_path() {
-    return {key(0.0F, {600, 160, -30}, {600, 300, -330}, 0), key(5.0F, {300, 180, -190}, {280, 260, -340}, 1),
-            key(10.0F, {-200, 230, 20}, {-200, 450, 310}, 2), key(15.0F, {600, 160, -30}, {600, 300, -330}, 3)};
+    return {key(0.0F, {600, 160, -30}, {600, 300, -330}, FIXED_ID + 1),
+            key(5.0F, {300, 180, -190}, {280, 260, -340}, FIXED_ID + 2),
+            key(10.0F, {-200, 230, 20}, {-200, 450, 310}, FIXED_ID + 3),
+            key(15.0F, {600, 160, -30}, {600, 300, -330}, FIXED_ID + 4)};
 }
 
 bool
@@ -105,6 +106,15 @@ faults_are_camera_keys() {
     keys = open_path();
     keys[1].eye[0] = std::nanf("");
     ok &= check(path_fault(keys).has_value(), "a number that is not finite is a fault");
+    keys = open_path();
+    while (keys.size() <= loupe::editor::MAX_KEYS) {
+        CameraKey next = keys.back();
+        next.t += 1.0F;
+        keys.push_back(next);
+    }
+    ok &= check(path_fault(keys).has_value(), "more keys than a clip's track counts is a fault");
+    keys.pop_back();
+    ok &= check(!path_fault(keys), "as many keys as a clip's track counts are a path");
     return ok;
 }
 
@@ -115,7 +125,7 @@ poses_lie_on_the_keys() {
     bool ok = true;
     for (const CameraKey& at : keys) {
         const CameraKey on = loupe::editor::key_on(curve, keys, at.t);
-        bool same = on.from == -1;
+        bool same = on.id == 0;
         for (size_t i = 0; i < 3; i++) {
             same &= std::fabs(on.eye[i] - at.eye[i]) <= CLOSE_POSE
                     && std::fabs(on.look_at[i] - at.look_at[i]) <= CLOSE_POSE;
@@ -135,7 +145,7 @@ key_edits_keep_the_path_whole() {
     std::vector<CameraKey> edited = loupe::editor::with_key(loop, 0, moved);
     bool ok = check(edited[0].eye == moved.eye && edited[3].eye == moved.eye && edited[3].t == 15.0F,
                     "on a loop, the first key's move moves the last too, its time kept");
-    ok &= check(edited[3].from == 3 && edited[0].from == 0, "an edit keeps each key's place in the file");
+    ok &= check(edited[3].id == loop[3].id && edited[0].id == loop[0].id, "an edit keeps each key's id");
     moved = loop[3];
     moved.look_at = {600, 310, -330};
     edited = loupe::editor::with_key(loop, 3, moved);
@@ -153,9 +163,9 @@ key_edits_keep_the_path_whole() {
 
     size_t added = 0;
     const std::optional<std::vector<CameraKey>> inside = loupe::editor::with_key_added(open, 1.0F, &added);
-    ok &= check(inside && inside->size() == 4 && added == 1 && (*inside)[1].t == 1.0F && (*inside)[1].from == -1
-                    && (*inside)[2].from == 1 && !loupe::editor::path_fault(*inside),
-                "a key added between two goes between them, new, and the path still builds");
+    ok &= check(inside && inside->size() == 4 && added == 1 && (*inside)[1].t == 1.0F && (*inside)[1].id < FIXED_ID
+                    && (*inside)[2].id == open[1].id && !loupe::editor::path_fault(*inside),
+                "a key added between two goes between them, with an id of its own, and the path still builds");
     const std::optional<std::vector<CameraKey>> after = loupe::editor::with_key_added(open, 5.0F, &added);
     ok &= check(after && added == 3 && (*after)[3].t == 7.5F && (*after)[3].eye == open[2].eye,
                 "a key added at the end goes one spacing past it, at the last key");
@@ -171,8 +181,10 @@ key_edits_keep_the_path_whole() {
 bool
 set_keys_is_one_undo() {
     loupe::editor::Docs docs;
-    docs.paths["tour"] = {
-        .keys_toml = "tour.keys.toml", .keys = open_path(), .saved = open_path(), .feeds_bakes = false};
+    docs.paths["tour"] = {.keys_toml = "tour.keys.toml",
+                          .keys = open_path(),
+                          .saved = open_path(),
+                          .file_ids = {FIXED_ID + 1, FIXED_ID + 2, FIXED_ID + 3}};
     loupe::editor::EditStack edits;
     std::vector<CameraKey> after = open_path();
     after.erase(after.begin() + 1);
@@ -186,11 +198,13 @@ set_keys_is_one_undo() {
 
 bool
 tool_calls_are_scene_edits() {
-    loupe::editor::CameraPath path{
-        .keys_toml = "walk.keys.toml", .keys = open_path(), .saved = open_path(), .feeds_bakes = false};
+    loupe::editor::CameraPath path{.keys_toml = "walk.keys.toml",
+                                   .keys = open_path(),
+                                   .saved = open_path(),
+                                   .file_ids = {FIXED_ID + 1, FIXED_ID + 2, FIXED_ID + 3}};
     bool ok = check(loupe::editor::path_args(path).empty(), "an unchanged path saves nothing");
     path.keys[1].eye = {5.5F, 2, 0};
-    path.keys.insert(path.keys.begin() + 1, key(1.25F, {3, 1, 3}, {0, 1, 0}, -1));
+    path.keys.insert(path.keys.begin() + 1, key(1.25F, {3, 1, 3}, {0, 1, 0}, 0));
     path.keys.pop_back();
     const std::vector<std::string> want = {"--key", "0:0:0,1,5:0,1,0",    "--key", "new:1.25:3,1,3:0,1,0",
                                            "--key", "1:2.5:5.5,2,0:0,1,0"};
@@ -201,9 +215,10 @@ tool_calls_are_scene_edits() {
         R"({"node": "camera", "animation": "walk", "keys": [{"t": 0, "eye": [0, 1, 5], "look_at": [0, 1, 0]},)"
         R"( {"t": 2.5, "eye": [5, 2, 0], "look_at": [0, 1, 0]}]})",
         "walk.keys.toml", &why);
-    ok &= check(read && read->keys.size() == 2 && read->keys[1].from == 1 && read->keys[1].t == 2.5F
-                    && read->keys == read->saved,
-                "read-keys' JSON is the path, each key at its place in the file");
+    ok &= check(read && read->keys.size() == 2 && read->keys[0].id != 0 && read->keys[1].id != read->keys[0].id
+                    && read->keys[1].t == 2.5F && read->keys == read->saved
+                    && read->file_ids == std::vector<uint32_t>{read->keys[0].id, read->keys[1].id},
+                "read-keys' JSON is the path, each key with an id of its own, the file's tables in order");
     ok &= check(!loupe::editor::parse_path(R"({"keys": [{"t": 0}]})", "walk.keys.toml", &why) && !why.empty(),
                 "a key without its points is refused, saying why");
 

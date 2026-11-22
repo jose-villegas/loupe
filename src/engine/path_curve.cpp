@@ -37,18 +37,4 @@ pose_on(const PathCurve& curve, float seconds) {
     return pose;
 }
 
-vec3f_t
-engine_frame(const vec3f_t& point) {
-    return {point.x, point.y, -point.z};
-}
-
-transformf_t
-engine_frame(const transformf_t& pose) {
-    transformf_t mirrored = transformf_identity();
-    transformf_set_position(&mirrored, engine_frame(pose.position));
-    transformf_set_rotation(&mirrored, quatf_t{-pose.rotation.x, -pose.rotation.y, pose.rotation.z, pose.rotation.w});
-    transformf_set_scale(&mirrored, pose.scale);
-    return mirrored;
-}
-
 } // namespace loupe

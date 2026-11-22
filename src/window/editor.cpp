@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "editor/placement.hpp"
+#include "engine/engine_frame.hpp"
 #include "paths.hpp"
 
 namespace loupe::window {
@@ -161,14 +162,6 @@ collect_check(Editor& editor) {
     }
 }
 
-// `text` in the disabled colour, wrapped to the panel.
-void
-hint(const char* text) {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-    ImGui::TextWrapped("%s", text);
-    ImGui::PopStyleColor();
-}
-
 // What the last save's bake check found, or that it is still asking.
 void
 draw_bake_check(const Editor& editor) {
@@ -194,10 +187,10 @@ bool
 object_handles(Editor& editor, const editor::Object& object, const mat4f_t& parent, const GizmoMatrix& view,
                const GizmoMatrix& projection) {
     const editor::Placement now = shown_placement(editor, object);
-    GizmoMatrix moved = gizmo(editor::mirror_z(mat4f_mul(parent, editor::to_matrix(now))));
+    GizmoMatrix moved = gizmo(engine_frame(mat4f_mul(parent, editor::to_matrix(now))));
     const ImGuizmo::MODE mode = editor.local_axes ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
     if (ImGuizmo::Manipulate(view.data(), projection.data(), operation(editor.handle), mode, moved.data())) {
-        const mat4f_t local = mat4f_mul(mat4f_invert_affine(parent), editor::mirror_z(from_gizmo(moved)));
+        const mat4f_t local = mat4f_mul(mat4f_invert_affine(parent), engine_frame(from_gizmo(moved)));
         // A turn about the world's axes under an unevenly scaled parent can shear; a placement cannot hold that.
         if (const std::optional<editor::Placement> placed = editor::to_placement(local)) {
             drag_to(editor, object, handle_result(editor.handle, {.before = now, .after = *placed}));
@@ -409,7 +402,7 @@ draw_handles(Editor& editor, const Frames& frames, const FrameRect& frame) {
 std::optional<ImVec2>
 screen_origin(const mat4f_t& world, const mat4f_t& clip_from_world, const FrameRect& frame) {
     const ImVec2 min = frame.min, max = frame.max;
-    const mat4f_t clip = mat4f_mul(clip_from_world, editor::mirror_z(world));
+    const mat4f_t clip = mat4f_mul(clip_from_world, engine_frame(world));
     const float w = clip.m[3][3];
     if (w <= 0.0F) {
         return std::nullopt;

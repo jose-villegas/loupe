@@ -11,6 +11,7 @@
 #include "editor/doc.hpp"
 #include "editor/placement.hpp"
 #include "editor/scene_tool.hpp"
+#include "engine/engine_frame.hpp"
 #include "window/editor.hpp"
 
 namespace {
@@ -144,8 +145,8 @@ bool
 matrices() {
     const mat4f_t matrix = loupe::editor::to_matrix(
         {.position = {1.0F, 2.0F, 3.0F}, .rotation_deg = {10.0F, 20.0F, 30.0F}, .scale = {2.0F, 1.0F, 0.5F}});
-    bool ok = check(same_matrix(loupe::editor::mirror_z(loupe::editor::mirror_z(matrix)), matrix),
-                    "mirror_z twice is no mirror");
+    bool ok =
+        check(same_matrix(loupe::engine_frame(loupe::engine_frame(matrix)), matrix), "engine_frame twice is no mirror");
     // ImGuizmo reads a column-major float[16]: the translation is elements 12..14.
     const loupe::editor::GizmoMatrix columns = loupe::editor::gizmo(matrix);
     ok &= check(columns[12] == 1.0F && columns[13] == 2.0F && columns[14] == 3.0F && columns[1] == matrix.m[1][0]
@@ -169,7 +170,7 @@ matrices() {
     const float py = camera.cy - camera.fy * vec3f_dot(offset, camera.up) / vec3f_dot(offset, camera.forward);
     const mat4f_t world = mat4f_from_trs(point, quatf_identity(), vec3f_one());
     const mat4f_t clip = mat4f_mul(loupe::editor::projection_matrix(camera, 1000.0F),
-                                   mat4f_mul(loupe::editor::view_matrix(camera), loupe::editor::mirror_z(world)));
+                                   mat4f_mul(loupe::editor::view_matrix(camera), loupe::engine_frame(world)));
     const float w = clip.m[3][3];
     ok &= check(w > 0 && near(clip.m[0][3] / w, 2.0F * px / 368.0F - 1.0F)
                     && near(clip.m[1][3] / w, 1.0F - 2.0F * py / 448.0F),

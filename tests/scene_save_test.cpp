@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "checks.hpp"
 #include "editor/doc.hpp"
 #include "editor/scene_tool.hpp"
 #include "scratch.hpp"
@@ -19,17 +20,9 @@ namespace {
 
 constexpr const char TEST[] = "scene_save_test";
 
-bool
-check(bool ok, const std::string& what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, what.c_str(), ok ? "ok" : "FAILED");
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
-std::string
-read_file(const char* path) {
-    std::ifstream in(path, std::ios::binary);
-    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
-}
+using loupe::test::read_file;
 
 std::vector<std::string>
 lines(const std::string& text) {

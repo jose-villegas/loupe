@@ -80,16 +80,6 @@ from_gizmo(const GizmoMatrix& values) {
 }
 
 mat4f_t
-mirror_z(const mat4f_t& matrix) {
-    mat4f_t out = matrix;
-    for (int i = 0; i < 4; i++) {
-        out.m[2][i] = -out.m[2][i]; // row 2
-        out.m[i][2] = -out.m[i][2]; // column 2
-    }
-    return out;
-}
-
-mat4f_t
 view_matrix(const ViewCamera& camera) {
     // Eye axes in the mirrored world: x right, y up, z back (OpenGL's).
     const auto mirrored = [](vec3f_t v) { return vec3f_t{v.x, v.y, -v.z}; };

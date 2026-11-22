@@ -67,13 +67,13 @@ const editor::CameraPath* selected_path(const Editor& editor);
 const std::vector<editor::CameraKey>& shown_keys(const Editor& editor, const std::string& camera);
 // Whether `camera`'s path may be edited now: no bake reads it, or its warning was accepted.
 bool may_edit(const Editor& editor, const std::string& camera);
-// Moves the drag on `camera` to `now`, starting it from the camera's keys.
+// Moves the drag on `camera` to `now`, starting it from the camera's keys; nothing while !may_edit.
 void drag_keys(Editor& editor, const std::string& camera, std::vector<editor::CameraKey> now);
 // Ends the key drag as one SetKeys, or as nothing when it came back to where it began.
 void end_key_drag(Editor& editor);
-// Adds a key to the selected path at `seconds` on its curve and picks it; false when one sits there.
+// Adds a key to the selected path at `seconds` on its curve and picks it; false when one sits there or !may_edit.
 bool add_key(Editor& editor, float seconds);
-// Deletes the picked key; false with `why` set when it may not go (delete_refusal).
+// Deletes the picked key; false with `why` set when it may not go (delete_refusal, or !may_edit).
 bool delete_key(Editor& editor, std::string* why);
 // Whether any path holds keys other than its file's.
 bool paths_unsaved(const Editor& editor);

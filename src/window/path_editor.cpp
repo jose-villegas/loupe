@@ -10,6 +10,7 @@
 #include "editor/doc.hpp"
 #include "editor/placement.hpp"
 #include "editor/scene_tool.hpp"
+#include "engine/engine_frame.hpp"
 #include "window/editor.hpp"
 
 namespace loupe::window {
@@ -29,7 +30,6 @@ constexpr ImU32 MARKER_COLOUR = IM_COL32(255, 90, 90, 255);
 constexpr ImVec4 WARNING_COLOUR = {0.95F, 0.75F, 0.3F, 1.0F};
 // Inspector drag speeds per pixel: seconds, scene units.
 constexpr float TIME_SPEED = 0.01F, POINT_SPEED = 0.05F;
-constexpr double MS_PER_S = 1000.0;
 
 // Whether two key lists are the same path: a key's place in the file is not part of it.
 bool
@@ -145,10 +145,9 @@ nearest_point(const PathView& view, const std::vector<CameraKey>& keys, const st
 void
 point_handle(Editor& editor, const KeyPick& pick, const std::vector<CameraKey>& keys, const mat4f_t& parent,
              const editor::GizmoMatrix& view, const editor::GizmoMatrix& projection) {
-    editor::GizmoMatrix moved =
-        editor::gizmo(editor::mirror_z(at_point(parent, point_of(keys[pick.index], pick.point))));
+    editor::GizmoMatrix moved = editor::gizmo(engine_frame(at_point(parent, point_of(keys[pick.index], pick.point))));
     if (ImGuizmo::Manipulate(view.data(), projection.data(), ImGuizmo::TRANSLATE, ImGuizmo::WORLD, moved.data())) {
-        const mat4f_t local = mat4f_mul(mat4f_invert_affine(parent), editor::mirror_z(editor::from_gizmo(moved)));
+        const mat4f_t local = mat4f_mul(mat4f_invert_affine(parent), engine_frame(editor::from_gizmo(moved)));
         // The mirror is its own inverse: the engine's point back in the keys' frame.
         const vec3f_t keys_frame = engine_frame(vec3f_t{local.m[0][3], local.m[1][3], local.m[2][3]});
         CameraKey key = keys[pick.index];
@@ -162,14 +161,6 @@ point_handle(Editor& editor, const KeyPick& pick, const std::vector<CameraKey>& 
         end_key_drag(editor);
     }
     editor.path.handles_held = held;
-}
-
-// `text` in the disabled colour, wrapped to the panel.
-void
-hint(const char* text) {
-    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-    ImGui::TextWrapped("%s", text);
-    ImGui::PopStyleColor();
 }
 
 // The picked key's time and points as fields, and which point the handle moves. A change drags; letting go ends it.
@@ -251,6 +242,8 @@ sync_path(Editor& editor, const std::string& camera, const FlyFn& fly, const Lan
         return true;
     }
     const PathCurve curve = editor::path_curve(keys);
+    // A failed fly may still have taken the camera: no keys stands for that, so the next sync flies or lands it.
+    edit.flown[camera] = {};
     if (!fly(camera,
              [curve, keys](uint32_t t_ms) { return engine_frame(pose_on(curve, editor::clip_seconds(keys, t_ms))); })) {
         return false;
@@ -278,7 +271,6 @@ load_paths(Editor& editor, const std::filesystem::path& folder, std::string* why
             *why = object.path + "'s path: " + *why;
             return false;
         }
-        path->feeds_bakes = object.path_source->feeds_bakes;
         open_path(editor, object.path, std::move(*path));
     }
     return true;
@@ -298,12 +290,16 @@ shown_keys(const Editor& editor, const std::string& camera) {
 
 bool
 may_edit(const Editor& editor, const std::string& camera) {
-    const auto found = editor.docs.paths.find(camera);
-    return found != editor.docs.paths.end() && (!found->second.feeds_bakes || editor.path.warned.contains(camera));
+    const editor::Object* object = editor.docs.scene.find(camera);
+    const bool baked = object != nullptr && object->path_source && object->path_source->feeds_bakes;
+    return editor.docs.paths.contains(camera) && (!baked || editor.path.warned.contains(camera));
 }
 
 void
 drag_keys(Editor& editor, const std::string& camera, std::vector<CameraKey> now) {
+    if (!may_edit(editor, camera)) {
+        return;
+    }
     std::optional<KeyDrag>& drag = editor.path.drag;
     if (drag && drag->camera != camera) {
         end_key_drag(editor);
@@ -327,7 +323,7 @@ end_key_drag(Editor& editor) {
 bool
 add_key(Editor& editor, float seconds) {
     const editor::CameraPath* path = selected_path(editor);
-    if (path == nullptr) {
+    if (path == nullptr || !may_edit(editor, editor.selected)) {
         return false;
     }
     size_t added = 0;
@@ -347,6 +343,10 @@ delete_key(Editor& editor, std::string* why) {
         path != nullptr ? pick_on(editor, editor.selected, path->keys.size()) : std::nullopt;
     if (!pick) {
         *why = "no key is picked";
+        return false;
+    }
+    if (!may_edit(editor, editor.selected)) {
+        *why = "a bake reads this path: accept its warning first";
         return false;
     }
     if (const std::optional<std::string> refusal = editor::delete_refusal(path->keys, pick->index)) {
@@ -389,12 +389,11 @@ sync_paths(Editor& editor, const FlyFn& fly, const LandFn& land) {
 
 int
 frame_at(const std::vector<CameraKey>& keys, float seconds, uint32_t shown_ms, uint32_t dt_ms) {
-    const auto end_ms = static_cast<uint32_t>(std::lround(static_cast<double>(editor::path_end(keys)) * MS_PER_S));
-    if (dt_ms == 0 || end_ms == 0) {
+    if (dt_ms == 0 || editor::path_end(keys) <= 0.0F) {
         return Frames::FIRST_SEEKABLE;
     }
-    const uint32_t lap_ms = shown_ms / end_ms * end_ms;
-    const double target_ms = static_cast<double>(lap_ms) + std::round(static_cast<double>(seconds) * MS_PER_S);
+    const double target_ms = static_cast<double>(editor::lap_start_ms(keys, shown_ms))
+                             + std::round(static_cast<double>(seconds) * editor::MS_PER_S);
     // Frame i is drawn at (i + 1) dts of play (Frames::time_ms).
     const int frame = static_cast<int>(std::lround(target_ms / static_cast<double>(dt_ms))) - 1;
     return std::max(frame, Frames::FIRST_SEEKABLE);

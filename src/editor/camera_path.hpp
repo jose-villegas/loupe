@@ -19,28 +19,35 @@ namespace loupe::editor {
 
 using Point = std::array<float, 3>;
 
-// One key. `from` is its index in the file as last read or saved, -1 for a key
-// added since: a save keeps each kept key's table and comments by it.
+// One key. `id` names it through edits, undo and saves (next_key_id): a save
+// keeps the file's table of the key with the same id, comments and all. 0 is a
+// key never read or saved.
 struct CameraKey {
     float t = 0.0F; // seconds
     Point eye{}, look_at{};
-    int from = -1;
+    uint32_t id = 0;
     bool operator==(const CameraKey&) const = default;
 };
+
+// An id no key has had yet this run, never 0.
+uint32_t next_key_id();
 
 // A key's two points, which the handles move one at a time.
 enum class KeyPoint : uint8_t { Eye, LookAt };
 
 // The path a camera flies, read from `keys_toml`. `saved` is what the file
-// holds, so a save writes only a changed path. `feeds_bakes`: a bake reads the
-// path, so saving a change re-keys those bakes.
+// holds, so a save writes only a changed path, and `file_ids` the ids of the
+// file's tables in order.
 struct CameraPath {
     std::filesystem::path keys_toml;
     std::vector<CameraKey> keys, saved;
-    bool feeds_bakes = false;
+    std::vector<uint32_t> file_ids;
 
     bool unsaved() const;
 };
+
+// The most keys a path holds: anim_track counts its keys in 16 bits.
+constexpr size_t MAX_KEYS = UINT16_MAX;
 
 // The key times step: a time typed or clamped is rounded to whole milliseconds.
 constexpr float TIME_STEP_S = 1e-3F;
@@ -57,11 +64,15 @@ std::optional<std::string> path_fault(const std::vector<CameraKey>& keys);
 PathCurve path_curve(const std::vector<CameraKey>& keys);
 // The last key's time.
 float path_end(const std::vector<CameraKey>& keys);
-// Where on the path the camera's clip is `t_ms` into play, in seconds: the
+// Milliseconds in a second: the keys' times are seconds, play's milliseconds.
+constexpr uint32_t MS_PER_S = 1000;
+// When the lap that play `t_ms` in is on began, in milliseconds of play: the
 // engine plays every clip round, from the first key again at the last's time.
+uint32_t lap_start_ms(const std::vector<CameraKey>& keys, uint32_t t_ms);
+// Where on the path the camera's clip is `t_ms` into play, in seconds.
 float clip_seconds(const std::vector<CameraKey>& keys, uint32_t t_ms);
 // A key on the curve at `seconds`: its eye the curve's, its look_at along the
-// curve's forward at the look distance of the keys either side. `from` -1.
+// curve's forward at the look distance of the keys either side. Its id is 0.
 CameraKey key_on(const PathCurve& curve, const std::vector<CameraKey>& keys, float seconds);
 
 // `keys` with keys[index]'s time and points set to `key`'s; on a loop, the

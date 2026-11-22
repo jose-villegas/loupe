@@ -21,10 +21,4 @@ struct PathCurve {
 // as glTF defines).
 transformf_t pose_on(const PathCurve& curve, float seconds);
 
-// A point or pose in the keys' frame mirrored into the engine's, as the pack
-// boundary mirrors every entry (asset/engine_frame.py): z flips, and with it
-// the turn's x and y. The mirror is its own inverse.
-vec3f_t engine_frame(const vec3f_t& point);
-transformf_t engine_frame(const transformf_t& pose);
-
 } // namespace loupe

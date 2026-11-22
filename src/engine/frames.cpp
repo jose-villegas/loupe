@@ -31,6 +31,7 @@ struct Frames::State {
     int index = 0;
     uint32_t dt_ms = 0;                                   // the run's, as it opened
     std::vector<uint32_t> dts;                            // each drawn frame's dt, for replaying it
+    std::vector<uint32_t> times;                          // each drawn frame's time of play: the dts through it
     std::map<int, render_host_checkpoint_t*> checkpoints; // the state before drawing frame key
     // While observing or placing: the state before drawing the shown frame,
     // apart from the kept checkpoints, which thinning may drop.
@@ -55,13 +56,14 @@ struct Frames::State {
         return checkpoints.erase(it);
     }
 
-    // Frees the checkpoints after frame `frame` and forgets the dts from it on.
+    // Frees the checkpoints after frame `frame` and forgets the dts and times from it on.
     void
     forget_after(int frame) {
         for (auto it = checkpoints.upper_bound(frame); it != checkpoints.end();) {
             it = drop(it);
         }
         dts.resize(static_cast<size_t>(std::max(frame, 0)));
+        times.resize(dts.size());
     }
 
     // Past the budget, keeps every other checkpoint, so the interval doubles and coverage stays even.
@@ -280,6 +282,7 @@ Frames::advance(uint32_t dt_ms) {
     s.drawn++;
     if (s.index == std::ssize(s.dts)) {
         s.dts.push_back(dt_ms);
+        s.times.push_back((s.times.empty() ? 0 : s.times.back()) + dt_ms);
     }
     s.index++;
     return saved;
@@ -455,7 +458,7 @@ bool
 Frames::land(const std::string& camera) {
     State& s = *state_;
     if (s.flown.erase(camera) == 0) {
-        return false;
+        return true;
     }
     // Checkpoints from the frames flown hold the clip paused where flying left it: replay from one before them.
     for (auto it = s.checkpoints.upper_bound(s.flown_from); it != s.checkpoints.end();) {
@@ -479,11 +482,11 @@ Frames::land(const std::string& camera) {
 uint32_t
 Frames::time_ms(int index) const {
     const State& s = *state_;
-    uint32_t total = 0;
-    for (int i = 0; i <= index; i++) {
-        total += i < std::ssize(s.dts) ? s.dts[static_cast<size_t>(i)] : s.dt_ms;
+    if (index < std::ssize(s.times)) {
+        return index < 0 ? 0 : s.times[static_cast<size_t>(index)];
     }
-    return total;
+    const auto past = static_cast<uint32_t>(index + 1 - std::ssize(s.times));
+    return (s.times.empty() ? 0 : s.times.back()) + (past * s.dt_ms);
 }
 
 bool

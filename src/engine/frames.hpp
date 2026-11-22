@@ -103,7 +103,8 @@ class Frames {
     using PoseAt = std::function<transformf_t(uint32_t t_ms)>;
     // Draws every frame, sought or stepped, with `camera`'s clip paused and the camera at pose(time_ms()).
     bool fly(const std::string& camera, PoseAt pose);
-    // Hands a flown `camera` back to its clip, so every frame is the clip's again.
+    // Hands a flown `camera` back to its clip, so every frame is the clip's
+    // again; a camera not flying is left as it is. False when the redraw failed.
     bool land(const std::string& camera);
     // The clip time frame `index` is drawn at: the dts up to it, the run's dt past those drawn.
     uint32_t time_ms(int index) const;

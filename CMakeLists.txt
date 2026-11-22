@@ -61,6 +61,7 @@ add_library(loupe_core OBJECT
     src/editor/doc.cpp
     src/editor/placement.cpp
     src/editor/scene_tool.cpp
+    src/engine/engine_frame.cpp
     src/engine/frames.cpp
     src/engine/path_curve.cpp
     src/library.cpp

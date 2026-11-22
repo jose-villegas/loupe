@@ -13,8 +13,10 @@
 #include <string>
 #include <vector>
 
+#include "checks.hpp"
 #include "editor/camera_path.hpp"
 #include "editor/scene_tool.hpp"
+#include "engine/engine_frame.hpp"
 #include "frames_fixture.hpp"
 #include "scratch.hpp"
 
@@ -31,11 +33,7 @@ constexpr float CLOSE_TURN = 1e-4F;
 // How far the edited key's eye moves, in scene units.
 constexpr float NUDGE = 40.0F;
 
-bool
-check(bool ok, const std::string& what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, what.c_str(), ok ? "ok" : "FAILED");
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
 float
 gap(const vec3f_t& a, const vec3f_t& b) {
@@ -159,6 +157,9 @@ main(int argc, char** argv) {
     ok &= loupe::test::same(TEST, *frames, later, flown_later, "flying, sought back to the later frame");
 
     ok &= check(frames->land(args[4]), "the camera lands back on its clip");
+    const std::vector<uint8_t> landed = loupe::test::pixels(*frames);
+    ok &= check(frames->land(args[4]) && frames->land("no_such_object") && loupe::test::pixels(*frames) == landed,
+                "a camera not flying lands as it is");
     ok &= loupe::test::same(TEST, *frames, later, straight[later], "landed, the later frame is the clip's");
     ok &= loupe::test::same(TEST, *frames, key_frame, straight[key_frame], "landed, the key's frame is the clip's");
     while (frames->index() <= frames_on_path) {

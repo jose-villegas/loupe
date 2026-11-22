@@ -7,7 +7,9 @@
 #include <string>
 #include <vector>
 
+#include "checks.hpp"
 #include "editor/camera_path.hpp"
+#include "engine/engine_frame.hpp"
 #include "window/editor.hpp"
 #include "window/path_editor.hpp"
 
@@ -18,15 +20,13 @@ using loupe::editor::CameraKey;
 constexpr const char TEST[] = "path_editor_test";
 constexpr const char CAMERA[] = "tour";
 constexpr const char STREET[] = "street";
+// The fixed paths' key ids: far past any next_key_id a test draws.
+constexpr uint32_t FIXED_ID = 1000;
 constexpr float CLOSE = 1e-4F;
 // Frames this far apart, as a run at --dt 250.
 constexpr uint32_t DT_MS = 250;
 
-bool
-check(bool ok, const std::string& what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, what.c_str(), ok ? "ok" : "FAILED");
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
 loupe::editor::Object
 camera(const char* name, bool feeds_bakes) {
@@ -47,8 +47,10 @@ walk() {
     std::vector<CameraKey> keys;
     for (int i = 0; i < 3; i++) {
         const auto x = static_cast<float>(i * 10);
-        keys.push_back(
-            {.t = static_cast<float>(i) * 5.0F, .eye = {x, 2.0F, 0.0F}, .look_at = {x, 2.0F, -10.0F}, .from = i});
+        keys.push_back({.t = static_cast<float>(i) * 5.0F,
+                        .eye = {x, 2.0F, 0.0F},
+                        .look_at = {x, 2.0F, -10.0F},
+                        .id = FIXED_ID + static_cast<uint32_t>(i)});
     }
     return keys;
 }
@@ -64,7 +66,7 @@ two_cameras() {
                                  {.keys_toml = std::string(name) + ".keys.toml",
                                   .keys = walk(),
                                   .saved = walk(),
-                                  .feeds_bakes = std::string(name) == STREET});
+                                  .file_ids = {FIXED_ID, FIXED_ID + 1, FIXED_ID + 2}});
     }
     editor.selected = CAMERA;
     return editor;
@@ -104,8 +106,42 @@ a_baked_path_waits_for_its_warning() {
     loupe::window::Editor editor = two_cameras();
     bool ok = check(loupe::window::may_edit(editor, CAMERA) && !loupe::window::may_edit(editor, STREET),
                     "a path no bake reads edits at once; a baked one waits");
+    editor.selected = STREET;
+    std::string why;
+    std::vector<CameraKey> moved = walk();
+    moved[1].eye[1] = 3.0F;
+    loupe::window::drag_keys(editor, STREET, moved);
+    loupe::window::end_key_drag(editor);
+    editor.path.key = loupe::window::KeyPick{.index = 1, .point = loupe::editor::KeyPoint::Eye, .camera = STREET};
+    ok &= check(!loupe::window::add_key(editor, 2.5F) && !loupe::window::delete_key(editor, &why) && !why.empty()
+                    && !editor.edits.can_undo() && keys_of(editor, STREET) == walk(),
+                "before its warning, a baked path takes no drag, add or delete");
+    editor.path.warned.insert(CAMERA);
+    ok &= check(!loupe::window::may_edit(editor, STREET), "another camera's warning does not unlock it");
     editor.path.warned.insert(STREET);
-    ok &= check(loupe::window::may_edit(editor, STREET), "once warned, the baked path edits");
+    loupe::window::drag_keys(editor, STREET, moved);
+    loupe::window::end_key_drag(editor);
+    ok &= check(loupe::window::may_edit(editor, STREET) && keys_of(editor, STREET) == moved
+                    && loupe::window::add_key(editor, 1.0F),
+                "once warned, the baked path drags and adds");
+    return ok;
+}
+
+bool
+a_key_drag_holds_undo_and_save() {
+    loupe::window::Editor editor = two_cameras();
+    std::vector<CameraKey> moved = walk();
+    moved[1].eye[1] = 3.0F;
+    loupe::window::drag_keys(editor, CAMERA, moved);
+    loupe::window::end_key_drag(editor);
+    moved[1].eye[1] = 4.0F;
+    loupe::window::drag_keys(editor, CAMERA, moved);
+    loupe::window::apply(editor, {.undo = true, .redo = false, .save = false});
+    bool ok = check(loupe::window::dragging(editor) && editor.edits.can_undo() && !editor.edits.can_redo(),
+                    "while a key is dragged, undo waits");
+    loupe::window::end_key_drag(editor);
+    loupe::window::apply(editor, {.undo = true, .redo = false, .save = false});
+    ok &= check(!loupe::window::dragging(editor) && editor.edits.can_redo(), "once let go, undo undoes");
     return ok;
 }
 
@@ -114,7 +150,7 @@ keys_are_added_and_deleted() {
     loupe::window::Editor editor = two_cameras();
     bool ok = check(loupe::window::add_key(editor, 2.5F) && keys_of(editor, CAMERA).size() == 4 && editor.path.key
                         && editor.path.key->index == 1 && std::fabs(keys_of(editor, CAMERA)[1].t - 2.5F) <= CLOSE
-                        && keys_of(editor, CAMERA)[1].from == -1,
+                        && keys_of(editor, CAMERA)[1].id < FIXED_ID,
                     "a key is added on the curve and picked");
     ok &= check(!loupe::window::add_key(editor, 2.5F) && keys_of(editor, CAMERA).size() == 4,
                 "a second key at the same time is refused");
@@ -206,6 +242,45 @@ the_engine_flies_only_an_edited_path() {
 }
 
 bool
+cameras_sync_apart() {
+    loupe::window::Editor editor = two_cameras();
+    editor.path.warned.insert(STREET);
+    Engine engine;
+    std::vector<CameraKey> moved = walk();
+    moved[1].eye[1] = 6.0F;
+    std::vector<CameraKey> faulty = walk();
+    faulty[2].t = faulty[1].t;
+    editor.docs.paths.at(CAMERA).keys = faulty;
+    editor.docs.paths.at(STREET).keys = moved;
+    bool ok = check(sync(editor, engine) && engine.flown == std::vector<std::string>{STREET},
+                    "one camera's fault does not hold another's flight");
+    editor.docs.paths.at(STREET).keys = walk();
+    engine.fails = true;
+    ok &= check(!sync(editor, engine) && engine.landed == std::vector<std::string>{STREET}, "a failed land says so");
+    engine.fails = false;
+    ok &= check(sync(editor, engine) && engine.landed == std::vector<std::string>{STREET} && sync(editor, engine)
+                    && engine.landed.empty(),
+                "and is tried again, once");
+
+    // The free view handed back while its camera's path is edited: the camera flies the edit, not its clip.
+    editor.docs.paths.at(CAMERA).keys = walk();
+    editor.path.free.on = true;
+    editor.path.free_camera = CAMERA;
+    editor.path.free_moved = true;
+    (void)sync(editor, engine);
+    editor.docs.paths.at(CAMERA).keys = moved;
+    editor.path.free.on = false;
+    ok &=
+        check(sync(editor, engine) && engine.landed == std::vector<std::string>{CAMERA}
+                  && engine.flown == std::vector<std::string>{CAMERA}
+                  && std::fabs(engine.last(5000).position.y
+                               - loupe::engine_frame(loupe::pose_on(loupe::editor::path_curve(moved), 5.0F)).position.y)
+                         <= CLOSE,
+              "the free view off, its camera flies its edited path");
+    return ok;
+}
+
+bool
 the_scrub_seeks_on_the_shown_lap() {
     const std::vector<CameraKey> keys = walk();
     // Frame i is drawn at (i + 1) * DT_MS of play.
@@ -224,6 +299,8 @@ main() {
     ok &= a_baked_path_waits_for_its_warning();
     ok &= keys_are_added_and_deleted();
     ok &= the_engine_flies_only_an_edited_path();
+    ok &= cameras_sync_apart();
+    ok &= a_key_drag_holds_undo_and_save();
     ok &= the_scrub_seeks_on_the_shown_lap();
     return ok ? 0 : 1;
 }

@@ -1,6 +1,7 @@
 #include "editor/camera_path.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <format>
@@ -16,7 +17,6 @@ using Quat = std::array<double, 4>; // xyzw
 constexpr size_t AXES = 3;
 // The fewest keys a path has, as camera_keys.py requires.
 constexpr size_t MIN_KEYS = 2;
-constexpr float MS_PER_S = 1000.0F;
 
 bool
 finite(const Point& point) {
@@ -55,6 +55,12 @@ distance(const Point& a, const Point& b) {
 
 } // namespace
 
+uint32_t
+next_key_id() {
+    static std::atomic<uint32_t> last{0};
+    return ++last;
+}
+
 bool
 CameraPath::unsaved() const {
     return keys != saved;
@@ -70,6 +76,9 @@ std::optional<std::string>
 path_fault(const std::vector<CameraKey>& keys) {
     if (keys.size() < MIN_KEYS) {
         return "a path needs at least two keys";
+    }
+    if (keys.size() > MAX_KEYS) {
+        return std::format("a path holds at most {} keys", MAX_KEYS);
     }
     for (size_t i = 0; i < keys.size(); i++) {
         const CameraKey& key = keys[i];
@@ -125,11 +134,15 @@ path_end(const std::vector<CameraKey>& keys) {
     return keys.empty() ? 0.0F : keys.back().t;
 }
 
+uint32_t
+lap_start_ms(const std::vector<CameraKey>& keys, uint32_t t_ms) {
+    const auto end_ms = static_cast<uint32_t>(std::lround(path_end(keys) * static_cast<float>(MS_PER_S)));
+    return end_ms == 0 ? 0 : t_ms / end_ms * end_ms;
+}
+
 float
 clip_seconds(const std::vector<CameraKey>& keys, uint32_t t_ms) {
-    const float end = path_end(keys);
-    const float seconds = static_cast<float>(t_ms) / MS_PER_S;
-    return end > 0.0F ? std::fmod(seconds, end) : 0.0F;
+    return static_cast<float>(t_ms - lap_start_ms(keys, t_ms)) / static_cast<float>(MS_PER_S);
 }
 
 CameraKey
@@ -191,7 +204,7 @@ with_key_added(const std::vector<CameraKey>& keys, float seconds, size_t* added)
         const float spacing = keys.back().t - keys[keys.size() - 2].t;
         CameraKey key = keys.back();
         key.t = seconds > keys.back().t + TIME_STEP_S ? seconds : rounded(keys.back().t + spacing, TIME_STEP_S);
-        key.from = -1;
+        key.id = next_key_id();
         out.push_back(key);
         *added = out.size() - 1;
         return out;
@@ -208,6 +221,7 @@ with_key_added(const std::vector<CameraKey>& keys, float seconds, size_t* added)
             value = rounded(value, UNIT_STEP);
         }
     }
+    key.id = next_key_id();
     out.insert(out.begin() + static_cast<std::ptrdiff_t>(index), key);
     *added = index;
     return out;
