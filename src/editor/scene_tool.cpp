@@ -218,10 +218,10 @@ read_path(const fs::path& keys_toml, const fs::path& folder, std::string* why) {
 
 std::vector<std::string>
 path_args(const CameraPath& path) {
-    std::vector<std::string> args;
     if (!path.unsaved()) {
-        return args;
+        return {};
     }
+    std::vector<std::string> args;
     for (const CameraKey& key : path.keys) {
         args.emplace_back("--key");
         args.push_back(key_text(path, key));
