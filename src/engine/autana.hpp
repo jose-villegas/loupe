@@ -4,10 +4,12 @@
 // C11's spelling of the assertion C++ calls static_assert, for autana's headers only.
 #define _Static_assert static_assert // NOLINT(bugprone-reserved-identifier): C11 reserves it for this
 extern "C" {
+#include "anim/anim_track.h"
 #include "asset/asset_store.h"
 #include "core/tune.h"
 #include "hash/name_hash64.h"
 #include "render_host.h"
+#include "scene/animator/animator.h"
 #include "scene/camera/camera.h"
 #include "scene/scene.h"
 #include "scene/transform/transform.h"

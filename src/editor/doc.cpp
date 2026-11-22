@@ -46,6 +46,26 @@ Place::undo(Docs& docs) {
     set(docs, move_.before);
 }
 
+SetKeys::SetKeys(std::string camera, std::vector<CameraKey> before, std::vector<CameraKey> after)
+    : camera_(std::move(camera)), before_(std::move(before)), after_(std::move(after)) {}
+
+void
+SetKeys::set(Docs& docs, const std::vector<CameraKey>& keys) const {
+    if (const auto path = docs.paths.find(camera_); path != docs.paths.end()) {
+        path->second.keys = keys;
+    }
+}
+
+void
+SetKeys::apply(Docs& docs) {
+    set(docs, after_);
+}
+
+void
+SetKeys::undo(Docs& docs) {
+    set(docs, before_);
+}
+
 void
 EditStack::push(std::unique_ptr<Edit> edit, Docs& docs) {
     edits_.resize(done_);

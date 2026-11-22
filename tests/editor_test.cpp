@@ -40,7 +40,8 @@ object(const char* path, const char* parent, const char* locked) {
             .local = {},
             .saved = {},
             .baked = false,
-            .locked = locked};
+            .locked = locked,
+            .path_source = std::nullopt};
 }
 
 loupe::editor::Docs

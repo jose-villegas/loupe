@@ -180,6 +180,11 @@ add_test(NAME run_logged COMMAND process_test "${CMAKE_CURRENT_BINARY_DIR}/run_l
 add_executable(editor_test editor_test.cpp)
 target_link_libraries(editor_test PRIVATE loupe_core loupe_window)
 add_test(NAME editor_docs COMMAND editor_test)
+# Camera paths: the curve against autana's camera_keys.py, the key edits, and
+# scene_edit.py's path arguments and parses.
+add_executable(camera_path_test camera_path_test.cpp)
+target_link_libraries(camera_path_test PRIVATE loupe_core)
+add_test(NAME camera_paths COMMAND camera_path_test)
 add_executable(place_test place_test.cpp)
 target_link_libraries(place_test PRIVATE loupe_core)
 add_test(NAME place COMMAND place_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/place.bmp" ${sponza_camera})
