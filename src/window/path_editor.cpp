@@ -392,21 +392,25 @@ frame_at(const std::vector<CameraKey>& keys, float seconds, uint32_t shown_ms, u
     if (dt_ms == 0 || editor::path_end(keys) <= 0.0F) {
         return Frames::FIRST_SEEKABLE;
     }
-    const double target_ms = static_cast<double>(editor::lap_start_ms(keys, shown_ms))
-                             + std::round(static_cast<double>(seconds) * editor::MS_PER_S);
-    // Frame i is drawn at (i + 1) dts of play (Frames::time_ms).
-    const int frame = static_cast<int>(std::lround(target_ms / static_cast<double>(dt_ms))) - 1;
+    const auto lap_ms = static_cast<double>(editor::lap_start_ms(keys, shown_ms));
+    const double end_ms = std::round(static_cast<double>(editor::path_end(keys)) * editor::MS_PER_S);
+    const double target_ms = lap_ms + std::round(static_cast<double>(seconds) * editor::MS_PER_S);
+    const auto dt = static_cast<double>(dt_ms);
+    // Frame i is drawn at (i + 1) dts of play (Frames::time_ms). The lap's end is the next lap's start, so the
+    // nearest frame stops at the last one drawn before it.
+    const int last = static_cast<int>(std::ceil((lap_ms + end_ms) / dt)) - 2;
+    const int frame = std::min(static_cast<int>(std::lround(target_ms / dt)) - 1, last);
     return std::max(frame, Frames::FIRST_SEEKABLE);
 }
 
-bool
+PathHandles
 draw_path(Editor& editor, const Frames& frames, const FrameRect& frame, const mat4f_t& view,
           const mat4f_t& projection) {
     editor.path.shown_ms = frames.index() > 0 ? frames.time_ms(frames.index() - 1) : 0;
     const editor::CameraPath* path = selected_path(editor);
     const std::optional<mat4f_t> parent = path != nullptr ? frames.parent_world(editor.selected) : std::nullopt;
     if (!parent) {
-        return false;
+        return {};
     }
     const std::vector<CameraKey>& keys = shown_keys(editor, editor.selected);
     const PathView on_frame{.parent = *parent, .clip_from_world = mat4f_mul(projection, view), .frame = frame};
@@ -423,8 +427,10 @@ draw_path(Editor& editor, const Frames& frames, const FrameRect& frame, const ma
             draw.AddCircle(*marker, MARKER_RADIUS_PX, MARKER_COLOUR, 0, LINE_PX);
         }
     }
+    bool over_handle = false;
     if (pick && may_edit(editor, editor.selected)) {
         point_handle(editor, *pick, keys, *parent, editor::gizmo(view), editor::gizmo(projection));
+        over_handle = ImGuizmo::IsOver() || editor.path.handles_held;
     } else if (editor.path.handles_held) {
         end_key_drag(editor);
         editor.path.handles_held = false;
@@ -435,10 +441,10 @@ draw_path(Editor& editor, const Frames& frames, const FrameRect& frame, const ma
     if (inside && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGuizmo::IsOver() && !editor.path.handles_held) {
         if (const std::optional<KeyPick> near = nearest_point(on_frame, keys, editor.selected, mouse)) {
             editor.path.key = near;
-            return true;
+            return {.stands_in = true, .took_click = true};
         }
     }
-    return pick.has_value();
+    return {.stands_in = pick.has_value(), .took_click = over_handle};
 }
 
 void

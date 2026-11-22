@@ -302,12 +302,17 @@ apply(Editor& editor, const EditAsk& ask) {
     editor.checking = {};
     std::string why;
     const std::filesystem::path folder = editor.scratch->path();
-    if (!editor::save_scene(editor.docs.scene, folder, &why) || !save_paths(editor, folder, &why)) {
+    if (!editor::save_scene(editor.docs.scene, folder, &why)) {
         editor.status = "Not saved: " + why;
         std::fprintf(stderr, "loupe: %s\n", editor.status.c_str());
         return;
     }
     editor.status = "Saved " + utf8(editor.docs.scene.toml.filename());
+    if (!save_paths(editor, folder, &why)) {
+        // The scene is written: its bake check runs, and the paths left unsaved say why.
+        editor.status += "; a camera path not saved: " + why;
+        std::fprintf(stderr, "loupe: %s\n", editor.status.c_str());
+    }
     editor.checked.reset();
     editor.checking.start(editor.docs.scene.toml, folder);
 }
@@ -375,11 +380,11 @@ draw_handles(Editor& editor, const Frames& frames, const FrameRect& frame) {
     ImGuizmo::SetOrthographic(false);
     ImGuizmo::SetRect(min.x, min.y, max.x - min.x, max.y - min.y);
     // A picked key's handle stands in for its camera's own.
-    const bool on_path = draw_path(editor, frames, frame, view, projection);
+    const PathHandles on_path = draw_path(editor, frames, frame, view, projection);
     const editor::Object* object = editor.docs.scene.find(editor.selected);
     const std::optional<mat4f_t> parent = object != nullptr ? frames.parent_world(object->path) : std::nullopt;
-    bool over_handles = on_path;
-    if (!on_path && object != nullptr && parent && editor::placeable(*object)) {
+    bool over_handles = on_path.took_click;
+    if (!on_path.stands_in && object != nullptr && parent && editor::placeable(*object)) {
         over_handles = object_handles(editor, *object, *parent, gizmo_view, gizmo_projection);
     } else if (editor.handles_held) {
         // The object went away or stopped placing mid-drag: the drag ends here.

@@ -93,14 +93,20 @@ bool sync_paths(Editor& editor, const FlyFn& fly, const LandFn& land);
 // `shown_ms` of play) is in, frames `dt_ms` apart; never before Frames::FIRST_SEEKABLE.
 int frame_at(const std::vector<editor::CameraKey>& keys, float seconds, uint32_t shown_ms, uint32_t dt_ms);
 
+// What draw_path's handles hold this frame: `stands_in` when a key is picked,
+// so its handle stands in for the camera's own; `took_click` when the mouse is
+// on that handle or a click picked a point, so the object pick yields.
+struct PathHandles {
+    bool stands_in = false;
+    bool took_click = false;
+};
+
 // The selected camera's path over the frame: the curve, each key's eye and
 // look_at joined, the picked key bright, a marker at the shown time, and the
 // handle on the picked point; a click near a point picks it. `view` and
-// `projection` are the handles' (editor::view_matrix, projection_matrix). True
-// when a key is picked, so its handle stands in for the object's, or a click
-// picked a point, so the object pick yields.
-bool draw_path(Editor& editor, const Frames& frames, const FrameRect& frame, const mat4f_t& view,
-               const mat4f_t& projection);
+// `projection` are the handles' (editor::view_matrix, projection_matrix).
+PathHandles draw_path(Editor& editor, const Frames& frames, const FrameRect& frame, const mat4f_t& view,
+                      const mat4f_t& projection);
 // The selected camera's path rows: the keys, the picked key's time and points,
 // Add key and Delete key; a .glb path says it is read-only, and a path a bake
 // reads asks before the first edit.
