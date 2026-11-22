@@ -5,6 +5,7 @@
 // file left as it was. Run as `path_save_test COPY/tour.keys.toml`.
 #include <algorithm>
 #include <cstdio>
+#include <exception>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -150,10 +151,8 @@ saves_after_undo(loupe::editor::CameraPath& path, const char* keys_toml, const s
     return ok;
 }
 
-} // namespace
-
 int
-main(int argc, char** argv) {
+run(int argc, char** argv) {
     if (argc != 2) {
         std::fprintf(stderr, "usage: %s COPY/tour.keys.toml\n", TEST);
         return 2;
@@ -199,4 +198,17 @@ main(int argc, char** argv) {
     ok &=
         saves_after_undo(*path, keys_toml, logs.path(), {.read = read, .undeleted = undeleted, .redone = keys}, added);
     return ok ? 0 : 1;
+}
+
+} // namespace
+
+// An exception out of a check fails the test.
+int
+main(int argc, char** argv) {
+    try {
+        return run(argc, argv);
+    } catch (const std::exception& error) {
+        std::fprintf(stderr, "%s: FAILED by an exception: %s\n", TEST, error.what());
+        return 1;
+    }
 }
