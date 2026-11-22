@@ -34,19 +34,9 @@ constexpr std::ptrdiff_t TABLE_TAIL = 4;
 
 constexpr loupe::test::Checks check{TEST};
 
+using loupe::test::lines;
 using loupe::test::read_file;
-
 using loupe::test::write_file;
-
-std::vector<std::string>
-lines(const std::string& text) {
-    std::vector<std::string> out;
-    std::istringstream in(text);
-    for (std::string line; std::getline(in, line);) {
-        out.push_back(line);
-    }
-    return out;
-}
 
 // `text` with `comment` on the line above its `index`th [[keys]] header.
 std::string

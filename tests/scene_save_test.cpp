@@ -22,17 +22,8 @@ constexpr const char TEST[] = "scene_save_test";
 
 constexpr loupe::test::Checks check{TEST};
 
+using loupe::test::lines;
 using loupe::test::read_file;
-
-std::vector<std::string>
-lines(const std::string& text) {
-    std::vector<std::string> out;
-    std::istringstream in(text);
-    for (std::string line; std::getline(in, line);) {
-        out.push_back(line);
-    }
-    return out;
-}
 
 } // namespace
 

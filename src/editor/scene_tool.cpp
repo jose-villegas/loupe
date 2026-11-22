@@ -92,14 +92,31 @@ scene_edit(const char* command, const fs::path& toml, std::vector<std::string> a
     return autana_tool(SCENE_EDIT, args, folder / "scene_edit.log", why).has_value();
 }
 
-// The JSON scene_edit.py `command` writes for `toml`; none with `why` set.
-std::optional<std::string>
-scene_edit_json(const char* command, const fs::path& toml, const fs::path& folder, std::string* why) {
+// `toml` read by scene_edit.py `command` and its JSON parsed by `parse`; none with `why` set.
+template <typename Doc>
+std::optional<Doc>
+read_with(const char* command, const fs::path& toml, const fs::path& folder, std::string* why,
+          std::optional<Doc> (*parse)(const std::string&, const fs::path&, std::string*)) {
     const fs::path json = folder / (std::string(command) + ".json");
     if (!scene_edit(command, toml, {"-o", utf8(json)}, folder, why)) {
         return std::nullopt;
     }
-    return read_text(json);
+    return parse(read_text(json), toml, why);
+}
+
+// scene_edit.py `command` on `toml` with `args`, then `saved` to mark the
+// document saved; true at once when `args` is empty, as nothing changed.
+bool
+save_with(const char* command, const fs::path& toml, std::vector<std::string> args, const fs::path& folder,
+          std::string* why, const std::function<void()>& saved) {
+    if (args.empty()) {
+        return true;
+    }
+    if (!scene_edit(command, toml, std::move(args), folder, why)) {
+        return false;
+    }
+    saved();
+    return true;
 }
 
 // Calls `each` on every item of the array `list` in scene_edit.py `command`'s
@@ -150,8 +167,7 @@ parse_scene(const std::string& json, const fs::path& toml, std::string* why) {
 
 std::optional<SceneDoc>
 read_scene(const fs::path& toml, const fs::path& folder, std::string* why) {
-    const std::optional<std::string> json = scene_edit_json("read", toml, folder, why);
-    return json ? parse_scene(*json, toml, why) : std::nullopt;
+    return read_with<SceneDoc>("read", toml, folder, why, &parse_scene);
 }
 
 std::vector<std::string>
@@ -171,17 +187,11 @@ save_args(const SceneDoc& doc) {
 
 bool
 save_scene(SceneDoc& doc, const fs::path& folder, std::string* why) {
-    std::vector<std::string> args = save_args(doc);
-    if (args.empty()) {
-        return true;
-    }
-    if (!scene_edit("set", doc.toml, std::move(args), folder, why)) {
-        return false;
-    }
-    for (Object& object : doc.objects) {
-        object.saved = object.local;
-    }
-    return true;
+    return save_with("set", doc.toml, save_args(doc), folder, why, [&doc] {
+        for (Object& object : doc.objects) {
+            object.saved = object.local;
+        }
+    });
 }
 
 std::optional<CameraPath>
@@ -203,8 +213,7 @@ parse_path(const std::string& json, const fs::path& keys_toml, std::string* why)
 
 std::optional<CameraPath>
 read_path(const fs::path& keys_toml, const fs::path& folder, std::string* why) {
-    const std::optional<std::string> json = scene_edit_json("read-keys", keys_toml, folder, why);
-    return json ? parse_path(*json, keys_toml, why) : std::nullopt;
+    return read_with<CameraPath>("read-keys", keys_toml, folder, why, &parse_path);
 }
 
 std::vector<std::string>
@@ -222,20 +231,14 @@ path_args(const CameraPath& path) {
 
 bool
 save_path(CameraPath& path, const fs::path& folder, std::string* why) {
-    std::vector<std::string> args = path_args(path);
-    if (args.empty()) {
-        return true;
-    }
-    if (!scene_edit("set-keys", path.keys_toml, std::move(args), folder, why)) {
-        return false;
-    }
-    // The file now holds the keys' tables in this order; a key never in a file takes an id for its own.
-    for (CameraKey& key : path.keys) {
-        key.id = key.id == 0 ? next_key_id() : key.id;
-    }
-    path.saved = path.keys;
-    path.file_ids = ids(path.keys);
-    return true;
+    return save_with("set-keys", path.keys_toml, path_args(path), folder, why, [&path] {
+        // The file now holds the keys' tables in this order; a key never in a file takes an id for its own.
+        for (CameraKey& key : path.keys) {
+            key.id = key.id == 0 ? next_key_id() : key.id;
+        }
+        path.saved = path.keys;
+        path.file_ids = ids(path.keys);
+    });
 }
 
 std::vector<std::string>
