@@ -11,7 +11,9 @@
 namespace {
 
 constexpr const char TEST[] = "whole_path_test";
-constexpr const char USAGE[] = "SCENE.apak out.bmp";
+constexpr const char USAGE[] = "SCENE.apak out.bmp [CAMERA]";
+// The arguments before CAMERA, the program's own name first.
+constexpr size_t ARGS = 3;
 // Any count shorter than the path and past the window's first seekable frame.
 constexpr int GIVEN_FRAMES = loupe::Frames::FIRST_SEEKABLE + 3;
 
@@ -25,13 +27,14 @@ open_whole(const loupe::Options& options) {
 int
 main(int argc, char** argv) {
     const std::span<char*> args(argv, static_cast<size_t>(argc));
-    if (args.size() != 3) {
+    if (args.size() != ARGS && args.size() != ARGS + 1) {
         std::fprintf(stderr, "usage: %s %s\n", TEST, USAGE);
         return 2;
     }
     loupe::Options options;
     options.scene = args[1];
     options.out_bmp = args[2];
+    options.render.camera = loupe::test::camera_after(args, ARGS);
 
     int own = 0;
     if (std::unique_ptr<loupe::Frames> plain = loupe::test::open_or_report(TEST, options)) {
