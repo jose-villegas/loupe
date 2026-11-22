@@ -245,3 +245,13 @@ string(FIND "${build_yml}" "publish_main.sh ${LOUPE_MAIN_TAG} " published)
 if(published EQUAL -1)
     message(FATAL_ERROR "build.yml does not publish the main build as ${LOUPE_MAIN_TAG} (LOUPE_MAIN_TAG)")
 endif()
+
+if(LOUPE_PACK_TOOL)
+    add_executable(path_test path_test.cpp)
+    target_link_libraries(path_test PRIVATE loupe_core)
+    foreach(camera IN ITEMS tour lion)
+        add_test(NAME path_${camera} COMMAND path_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/path_${camera}.bmp"
+                                             "${demo}/sponza/${camera}.keys.toml" ${camera})
+        on_packs(path_${camera})
+    endforeach()
+endif()

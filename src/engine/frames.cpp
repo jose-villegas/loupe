@@ -9,6 +9,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "engine/autana.hpp"
@@ -37,6 +38,9 @@ struct Frames::State {
     int64_t drawn = 0; // engine frames, replays included
     // Objects the editor placed, by name: set on the scene before every frame is drawn.
     std::map<std::string, transformf_t> placed;
+    // Cameras flown instead of their clips, by name, and the first frame drawn flying.
+    std::map<std::string, Frames::PoseAt> flown;
+    int flown_from = INT_MAX;
 
     // Checkpoints sit before frames FIRST_SEEKABLE, FIRST_SEEKABLE + every...
     bool
@@ -270,6 +274,7 @@ Frames::advance(uint32_t dt_ms) {
             transform_set_local(entity, local);
         }
     }
+    fly_cameras(dt_ms);
     const input_t input = {};
     render_host_step(dt_ms, &input);
     s.drawn++;
@@ -278,6 +283,20 @@ Frames::advance(uint32_t dt_ms) {
     }
     s.index++;
     return saved;
+}
+
+void
+Frames::fly_cameras(uint32_t dt_ms) {
+    State& s = *state_;
+    for (const auto& [name, pose] : s.flown) {
+        const entity_t entity = entity_named(name);
+        if (handle_is_none(entity)) {
+            continue;
+        }
+        s.flown_from = std::min(s.flown_from, s.index);
+        animator_set_paused(entity, ANIMATOR_CURRENT, true);
+        transform_set_local(entity, pose(time_ms(s.index - 1) + dt_ms));
+    }
 }
 
 bool
@@ -421,6 +440,56 @@ Frames::place(const std::string& object, const transformf_t& local) {
     transform_set_local(entity, local);
     // The redraw sets every placement again before its frame.
     return redraw_held();
+}
+
+bool
+Frames::fly(const std::string& camera, PoseAt pose) {
+    if (handle_is_none(entity_named(camera))) {
+        return false;
+    }
+    state_->flown[camera] = std::move(pose);
+    return redraw_held();
+}
+
+bool
+Frames::land(const std::string& camera) {
+    State& s = *state_;
+    if (s.flown.erase(camera) == 0) {
+        return false;
+    }
+    // Checkpoints from the frames flown hold the clip paused where flying left it: replay from one before them.
+    for (auto it = s.checkpoints.upper_bound(s.flown_from); it != s.checkpoints.end();) {
+        it = s.drop(it);
+    }
+    if (s.flown.empty()) {
+        s.flown_from = INT_MAX;
+    }
+    release_hold();
+    const int shown = s.index - 1;
+    if (shown < 0) {
+        return true;
+    }
+    if (!restore_before(shown)) {
+        return false;
+    }
+    step_to(shown);
+    return true;
+}
+
+uint32_t
+Frames::time_ms(int index) const {
+    const State& s = *state_;
+    uint32_t total = 0;
+    for (int i = 0; i <= index; i++) {
+        total += i < std::ssize(s.dts) ? s.dts[static_cast<size_t>(i)] : s.dt_ms;
+    }
+    return total;
+}
+
+bool
+Frames::is_active(const std::string& object) const {
+    const entity_t entity = entity_named(object);
+    return !handle_is_none(entity) && handle_equal(entity, camera_active());
 }
 
 std::optional<mat4f_t>

@@ -14,6 +14,7 @@ using Quat = std::array<double, 4>; // xyzw
 constexpr size_t AXES = 3;
 // The fewest keys a path has, as camera_keys.py requires.
 constexpr size_t MIN_KEYS = 2;
+constexpr float MS_PER_S = 1000.0F;
 
 bool
 finite(const Point& point) {
@@ -125,6 +126,13 @@ path_curve(const std::vector<CameraKey>& keys) {
 float
 path_end(const std::vector<CameraKey>& keys) {
     return keys.empty() ? 0.0F : keys.back().t;
+}
+
+float
+clip_seconds(const std::vector<CameraKey>& keys, uint32_t t_ms) {
+    const float end = path_end(keys);
+    const float seconds = static_cast<float>(t_ms) / MS_PER_S;
+    return end > 0.0F ? std::fmod(seconds, end) : 0.0F;
 }
 
 CameraKey

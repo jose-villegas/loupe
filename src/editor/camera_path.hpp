@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -56,6 +57,9 @@ std::optional<std::string> path_fault(const std::vector<CameraKey>& keys);
 PathCurve path_curve(const std::vector<CameraKey>& keys);
 // The last key's time.
 float path_end(const std::vector<CameraKey>& keys);
+// Where on the path the camera's clip is `t_ms` into play, in seconds: the
+// engine plays every clip round, from the first key again at the last's time.
+float clip_seconds(const std::vector<CameraKey>& keys, uint32_t t_ms);
 // A key on the curve at `seconds`: its eye the curve's, its look_at along the
 // curve's forward at the look distance of the keys either side. `from` -1.
 CameraKey key_on(const PathCurve& curve, const std::vector<CameraKey>& keys, float seconds);

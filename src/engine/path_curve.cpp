@@ -32,9 +32,23 @@ pose_on(const PathCurve& curve, float seconds) {
     anim_track_sample(&translation, seconds, eye.data());
     anim_track_sample(&rotation, seconds, turn.data());
     transformf_t pose = transformf_identity();
-    pose.position = {eye[0], eye[1], eye[2]};
-    pose.rotation = {turn[0], turn[1], turn[2], turn[3]};
+    transformf_set_position(&pose, vec3f_t{eye[0], eye[1], eye[2]});
+    transformf_set_rotation(&pose, quatf_t{turn[0], turn[1], turn[2], turn[3]});
     return pose;
+}
+
+vec3f_t
+engine_frame(const vec3f_t& point) {
+    return {point.x, point.y, -point.z};
+}
+
+transformf_t
+engine_frame(const transformf_t& pose) {
+    transformf_t mirrored = transformf_identity();
+    transformf_set_position(&mirrored, engine_frame(pose.position));
+    transformf_set_rotation(&mirrored, quatf_t{-pose.rotation.x, -pose.rotation.y, pose.rotation.z, pose.rotation.w});
+    transformf_set_scale(&mirrored, pose.scale);
+    return mirrored;
 }
 
 } // namespace loupe
