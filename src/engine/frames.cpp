@@ -338,7 +338,7 @@ Frames::restore_before(int index) {
 
 void
 Frames::step_to(int index) {
-    State& s = *state_;
+    const State& s = *state_;
     while (s.index <= index) {
         advance(s.drawn_at(s.index) ? s.dt_at(s.index) : dt_ms());
     }

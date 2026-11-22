@@ -293,11 +293,14 @@ bool
 the_scrub_seeks_on_the_shown_lap() {
     const std::vector<CameraKey> keys = walk();
     // Frame i is drawn at (i + 1) * DT_MS of play.
-    bool ok = check(loupe::window::frame_at(keys, 2.0F, DT_MS, DT_MS) == 7, "2 s on the first lap is frame 7");
-    ok &= check(loupe::window::frame_at(keys, 2.0F, 10500, DT_MS) == 47, "2 s on the second lap is frame 47");
-    ok &= check(loupe::window::frame_at(keys, 0.0F, DT_MS, DT_MS) == loupe::Frames::FIRST_SEEKABLE,
-                "the path's start seeks to the first frame a seek reaches");
-    ok &= check(loupe::window::frame_at(keys, 10.0F, DT_MS, DT_MS) == 38,
+    bool ok = check(loupe::window::frame_at(keys, 2.0F, {.shown_ms = DT_MS, .dt_ms = DT_MS}) == 7,
+                    "2 s on the first lap is frame 7");
+    ok &= check(loupe::window::frame_at(keys, 2.0F, {.shown_ms = 10500, .dt_ms = DT_MS}) == 47,
+                "2 s on the second lap is frame 47");
+    ok &=
+        check(loupe::window::frame_at(keys, 0.0F, {.shown_ms = DT_MS, .dt_ms = DT_MS}) == loupe::Frames::FIRST_SEEKABLE,
+              "the path's start seeks to the first frame a seek reaches");
+    ok &= check(loupe::window::frame_at(keys, 10.0F, {.shown_ms = DT_MS, .dt_ms = DT_MS}) == 38,
                 "the path's end seeks to the lap's last frame, not the next lap's first");
     return ok;
 }

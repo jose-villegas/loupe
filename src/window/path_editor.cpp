@@ -76,7 +76,7 @@ at_point(const mat4f_t& parent, const editor::Point& point) {
 
 // Where path points land over the frame.
 struct PathView {
-    mat4f_t parent, clip_from_world;
+    mat4f_t parent{}, clip_from_world{};
     FrameRect frame;
 
     std::optional<ImVec2>
@@ -191,7 +191,9 @@ key_fields(Editor& editor, const KeyPick& pick, const std::vector<CameraKey>& ke
     ImGui::RadioButton("eye##handle", &handle_on, static_cast<int>(KeyPoint::Eye));
     ImGui::SameLine();
     ImGui::RadioButton("look_at##handle", &handle_on, static_cast<int>(KeyPoint::LookAt));
-    editor.path.key->point = static_cast<KeyPoint>(handle_on);
+    if (editor.path.key) {
+        editor.path.key->point = static_cast<KeyPoint>(handle_on);
+    }
 }
 
 // Lands the free view's camera once the view is off; true when nothing is left to do.
@@ -388,20 +390,50 @@ sync_paths(Editor& editor, const FlyFn& fly, const LandFn& land) {
 }
 
 int
-frame_at(const std::vector<CameraKey>& keys, float seconds, uint32_t shown_ms, uint32_t dt_ms) {
-    if (dt_ms == 0 || editor::path_end(keys) <= 0.0F) {
+frame_at(const std::vector<CameraKey>& keys, float seconds, Play play) {
+    if (play.dt_ms == 0 || editor::path_end(keys) <= 0.0F) {
         return Frames::FIRST_SEEKABLE;
     }
-    const auto lap_ms = static_cast<double>(editor::lap_start_ms(keys, shown_ms));
+    const auto lap_ms = static_cast<double>(editor::lap_start_ms(keys, play.shown_ms));
     const double end_ms = std::round(static_cast<double>(editor::path_end(keys)) * editor::MS_PER_S);
     const double target_ms = lap_ms + std::round(static_cast<double>(seconds) * editor::MS_PER_S);
-    const auto dt = static_cast<double>(dt_ms);
+    const auto dt = static_cast<double>(play.dt_ms);
     // Frame i is drawn at (i + 1) dts of play (Frames::time_ms). The lap's end is the next lap's start, so the
     // nearest frame stops at the last one drawn before it.
     const int last = static_cast<int>(std::ceil((lap_ms + end_ms) / dt)) - 2;
     const int frame = std::min(static_cast<int>(std::lround(target_ms / dt)) - 1, last);
     return std::max(frame, Frames::FIRST_SEEKABLE);
 }
+
+namespace {
+
+// The marker at where the camera stands on `keys`' curve at `shown_ms` of play.
+void
+draw_marker(ImDrawList& draw, const PathView& on_frame, const std::vector<CameraKey>& keys, uint32_t shown_ms) {
+    const transformf_t at = pose_on(editor::path_curve(keys), editor::clip_seconds(keys, shown_ms));
+    if (const std::optional<ImVec2> marker = on_frame.screen(point(at.position))) {
+        draw.AddCircle(*marker, MARKER_RADIUS_PX, MARKER_COLOUR, 0, LINE_PX);
+    }
+}
+
+// A click on the frame, off the handle, near one of `keys`' points picks it; true when one did.
+bool
+click_picks(Editor& editor, const PathView& on_frame, const std::vector<CameraKey>& keys) {
+    const ImVec2 mouse = ImGui::GetIO().MousePos;
+    const FrameRect& frame = on_frame.frame;
+    const bool inside =
+        mouse.x >= frame.min.x && mouse.x < frame.max.x && mouse.y >= frame.min.y && mouse.y < frame.max.y;
+    if (!inside || !ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGuizmo::IsOver()) {
+        return false;
+    }
+    const std::optional<KeyPick> near = nearest_point(on_frame, keys, editor.selected, mouse);
+    if (near) {
+        editor.path.key = near;
+    }
+    return near.has_value();
+}
+
+} // namespace
 
 PathHandles
 draw_path(Editor& editor, const Frames& frames, const FrameRect& frame, const mat4f_t& view,
@@ -422,10 +454,7 @@ draw_path(Editor& editor, const Frames& frames, const FrameRect& frame, const ma
     const std::optional<KeyPick> pick = pick_on(editor, editor.selected, keys.size());
     draw_keys(draw, on_frame, keys, pick ? std::optional(pick->index) : std::nullopt);
     if (builds) {
-        const transformf_t at = pose_on(editor::path_curve(keys), editor::clip_seconds(keys, editor.path.shown_ms));
-        if (const std::optional<ImVec2> marker = on_frame.screen(point(at.position))) {
-            draw.AddCircle(*marker, MARKER_RADIUS_PX, MARKER_COLOUR, 0, LINE_PX);
-        }
+        draw_marker(draw, on_frame, keys, editor.path.shown_ms);
     }
     bool over_handle = false;
     if (pick && may_edit(editor, editor.selected)) {
@@ -435,17 +464,39 @@ draw_path(Editor& editor, const Frames& frames, const FrameRect& frame, const ma
         end_key_drag(editor);
         editor.path.handles_held = false;
     }
-    const ImVec2 mouse = ImGui::GetIO().MousePos;
-    const bool inside =
-        mouse.x >= frame.min.x && mouse.x < frame.max.x && mouse.y >= frame.min.y && mouse.y < frame.max.y;
-    if (inside && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGuizmo::IsOver() && !editor.path.handles_held) {
-        if (const std::optional<KeyPick> near = nearest_point(on_frame, keys, editor.selected, mouse)) {
-            editor.path.key = near;
-            return {.stands_in = true, .took_click = true};
-        }
+    if (!editor.path.handles_held && click_picks(editor, on_frame, keys)) {
+        return {.stands_in = true, .took_click = true};
     }
     return {.stands_in = pick.has_value(), .took_click = over_handle};
 }
+
+namespace {
+
+// The warning a path a bake reads shows, and its Edit anyway button.
+void
+bake_warning(Editor& editor) {
+    ImGui::PushStyleColor(ImGuiCol_Text, WARNING_COLOUR);
+    ImGui::TextWrapped("A bake reads this path: saving an edit re-keys those bakes, and the board shows it only "
+                       "once they are rebuilt.");
+    ImGui::PopStyleColor();
+    if (ImGui::Button("Edit anyway")) {
+        editor.path.warned.insert(editor.selected);
+    }
+}
+
+// A row per key, its time; a click picks it, the handle on the same point as before.
+void
+key_rows(Editor& editor, const std::vector<CameraKey>& keys, const std::optional<KeyPick>& pick) {
+    for (size_t i = 0; i < keys.size(); i++) {
+        const std::string label = std::format("key {}: t = {:.3f} s##key{}", i, keys[i].t, i);
+        if (ImGui::Selectable(label.c_str(), pick && pick->index == i)) {
+            editor.path.key =
+                KeyPick{.index = i, .point = pick ? pick->point : KeyPoint::Eye, .camera = editor.selected};
+        }
+    }
+}
+
+} // namespace
 
 void
 draw_path_rows(Editor& editor) {
@@ -464,24 +515,12 @@ draw_path_rows(Editor& editor) {
     }
     const bool editable = may_edit(editor, editor.selected);
     if (!editable) {
-        ImGui::PushStyleColor(ImGuiCol_Text, WARNING_COLOUR);
-        ImGui::TextWrapped("A bake reads this path: saving an edit re-keys those bakes, and the board shows it only "
-                           "once they are rebuilt.");
-        ImGui::PopStyleColor();
-        if (ImGui::Button("Edit anyway")) {
-            editor.path.warned.insert(editor.selected);
-        }
+        bake_warning(editor);
     }
     ImGui::BeginDisabled(!editable);
     const std::vector<CameraKey>& keys = shown_keys(editor, editor.selected);
     const std::optional<KeyPick> pick = pick_on(editor, editor.selected, keys.size());
-    for (size_t i = 0; i < keys.size(); i++) {
-        const std::string label = std::format("key {}: t = {:.3f} s##key{}", i, keys[i].t, i);
-        if (ImGui::Selectable(label.c_str(), pick && pick->index == i)) {
-            editor.path.key =
-                KeyPick{.index = i, .point = pick ? pick->point : KeyPoint::Eye, .camera = editor.selected};
-        }
-    }
+    key_rows(editor, keys, pick);
     if (pick) {
         key_fields(editor, *pick, keys);
     }
@@ -513,7 +552,7 @@ draw_path_scrub(Editor& editor, const Frames& frames, std::optional<int>* seek_t
     float seconds = editor::clip_seconds(keys, editor.path.shown_ms);
     ImGui::SetNextItemWidth(-1.0F);
     if (ImGui::SliderFloat("##path", &seconds, 0.0F, editor::path_end(keys), "path %.2f s")) {
-        *seek_to = frame_at(keys, seconds, editor.path.shown_ms, frames.dt_ms());
+        *seek_to = frame_at(keys, seconds, {.shown_ms = editor.path.shown_ms, .dt_ms = frames.dt_ms()});
     }
 }
 

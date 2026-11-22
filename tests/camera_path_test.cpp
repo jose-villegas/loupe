@@ -79,7 +79,9 @@ curve_is_camera_keys() {
                 "a loop's eye tangents close through the join, as camera_keys.py's");
     ok &= check(same_numbers(loop.rotations,
                              {0.216583535F, 0, 0, 0.97626406F, 0.240236387F, 0.0642790794F, -0.0159452036F,
-                              0.968452573F, 0, 0.947810948F, -0.318832815F, 0, 0.216583535F, 0, 0, 0.97626406F}),
+                              0.968452573F, 0, 0.947810948F,
+                              -0.318832815F, // NOLINT(modernize-use-std-numbers): camera_keys.py's number, not 1/pi
+                              0, 0.216583535F, 0, 0, 0.97626406F}),
                 "a loop's rotations stay on one side, as camera_keys.py's");
     ok &= check(loupe::editor::loops(loop_path()) && !loupe::editor::loops(open_path()),
                 "a path whose last key repeats its first loops");
@@ -249,12 +251,16 @@ tool_calls_are_scene_edits() {
         R"( {"name": "still", "parent": null, "kind": "camera", "baked": false, "locked": "a camera",)"
         R"( "position": [0, 0, 0], "rotation": [0, 0, 0], "scale": [1, 1, 1], "path": null}]})",
         "a/s.scene.toml", &why);
-    ok &= check(scene && scene->objects[0].path_source && scene->objects[0].path_source->keys == "a/tour.keys.toml"
-                    && scene->objects[0].path_source->feeds_bakes,
+    if (!scene || scene->objects.size() != 3) {
+        return check(false, "the scene's JSON is read: " + why);
+    }
+    const std::vector<loupe::editor::Object>& objects = scene->objects;
+    const std::optional<loupe::editor::PathSource>& tour = objects[0].path_source;
+    const std::optional<loupe::editor::PathSource>& fly = objects[1].path_source;
+    ok &= check(tour && tour->keys == "a/tour.keys.toml" && tour->feeds_bakes,
                 "a camera's keys path and whether bakes read it are read");
-    ok &= check(scene && scene->objects[1].path_source && scene->objects[1].path_source->keys.empty(),
-                "a camera on a .glb clip has a path with no keys file");
-    ok &= check(scene && !scene->objects[2].path_source, "a camera on no path has none");
+    ok &= check(fly && fly->keys.empty(), "a camera on a .glb clip has a path with no keys file");
+    ok &= check(!objects[2].path_source, "a camera on no path has none");
     return ok;
 }
 

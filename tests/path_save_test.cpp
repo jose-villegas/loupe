@@ -5,6 +5,7 @@
 // file left as it was. Run as `path_save_test COPY/tour.keys.toml`.
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
 #include <format>
 #include <fstream>
 #include <iterator>
@@ -58,8 +59,10 @@ above(const std::vector<std::string>& lines, const char* comment, float t) {
 }
 
 // Whether `part` appears in `whole` in order, other lines between.
+// NOLINTBEGIN(bugprone-easily-swappable-parameters): the lines sought, then the file's
 bool
 in_order(const std::vector<std::string>& part, const std::vector<std::string>& whole) {
+    // NOLINTEND(bugprone-easily-swappable-parameters)
     auto at = whole.begin();
     for (const std::string& line : part) {
         at = std::find(at, whole.end(), line);
@@ -76,6 +79,75 @@ bool
 same_keys(const std::vector<loupe::editor::CameraKey>& a, const std::vector<loupe::editor::CameraKey>& b) {
     return std::ranges::equal(
         a, b, [](const auto& x, const auto& y) { return x.t == y.t && x.eye == y.eye && x.look_at == y.look_at; });
+}
+
+// After the first save: every line stays but the moved eye's and the deleted
+// key's table, the added key is written at its millisecond, and the comments
+// stay above their keys.
+bool
+lines_kept(const std::string& before, const std::string& after, const std::vector<loupe::editor::CameraKey>& read,
+           const std::string& moved_old) {
+    bool ok = true;
+    const std::vector<std::string> old_lines = lines(before), new_lines = lines(after);
+    const std::string deleted_t = std::format("t = {}", read[DELETED].t);
+    // The deleted key's table: its header, its three lines and the blank after them.
+    const auto deleted_at = std::ranges::find(old_lines, deleted_t) - old_lines.begin();
+    std::vector<std::string> kept;
+    for (std::ptrdiff_t i = 0; i < std::ssize(old_lines); i++) {
+        if (old_lines[static_cast<size_t>(i)] != moved_old && (i < deleted_at - 1 || i >= deleted_at + TABLE_TAIL)) {
+            kept.push_back(old_lines[static_cast<size_t>(i)]);
+        }
+    }
+    ok &= check(in_order(kept, new_lines), "every line but the moved and deleted ones stays, in order");
+    ok &= check(std::ranges::count(new_lines, std::format("t = {}", ADDED_AT_S)) == 1,
+                "the added key is written at its millisecond, not a float step past it");
+    ok &= check(above(new_lines, COMMENT, read[COMMENTED].t) && above(new_lines, NEXT_COMMENT, read[NEXT_COMMENTED].t),
+                "each comment stays above its own key");
+    ok &= check(std::ranges::count(new_lines, deleted_t) == 0 && std::ranges::count(new_lines, moved_old) == 0,
+                "the deleted key and the moved eye's old line are gone");
+    ok &= check(new_lines.size() == old_lines.size(), "a table added and a table deleted: as many lines");
+
+    return ok;
+}
+
+// The documents an undo and a redo give back: the keys as read, before the delete, and after it.
+struct Versions {
+    std::vector<loupe::editor::CameraKey> read, undeleted, redone;
+};
+
+// After the first save: the delete undone saves again with each comment above
+// its key, the redo saves, and the key added, commented and moved, saves into its own table.
+bool
+saves_after_undo(loupe::editor::CameraPath& path, const char* keys_toml, const std::filesystem::path& logs,
+                 const Versions& versions, size_t added) {
+    std::string why;
+    bool ok = true;
+    const std::vector<loupe::editor::CameraKey>& read = versions.read;
+    // The delete undone after the save, as the undo stack gives its keys back, and saved again.
+    path.keys = versions.undeleted;
+    ok &= check(path.unsaved() && loupe::editor::save_path(path, logs, &why) && !path.unsaved(),
+                "the delete undone after a save saves again: " + why);
+    const std::optional<loupe::editor::CameraPath> undone = loupe::editor::read_path(keys_toml, logs, &why);
+    const std::vector<std::string> undone_lines = lines(read_file(keys_toml));
+    ok &= check(undone && same_keys(undone->keys, versions.undeleted), "the file reads back as the undone document");
+    ok &= check(above(undone_lines, COMMENT, read[COMMENTED].t)
+                    && above(undone_lines, NEXT_COMMENT, read[NEXT_COMMENTED].t),
+                "each comment is still above its own key");
+    path.keys = versions.redone;
+    ok &= check(path.unsaved(), "a redo after that save is unsaved again");
+
+    // The redo saved, a comment written above the key added, then that key moved and saved again.
+    ok &= check(loupe::editor::save_path(path, logs, &why), "the redo saves: " + why);
+    write_file(keys_toml, with_comment(read_file(keys_toml), added, ADDED_COMMENT));
+    std::vector<loupe::editor::CameraKey> again = path.keys;
+    again[added].eye[1] += MOVE;
+    path.keys = again;
+    ok &= check(loupe::editor::save_path(path, logs, &why), "the added key moved saves: " + why);
+    const std::vector<std::string> again_lines = lines(read_file(keys_toml));
+    ok &= check(above(again_lines, ADDED_COMMENT, ADDED_AT_S)
+                    && std::ranges::count(again_lines, std::format("t = {}", ADDED_AT_S)) == 1,
+                "a key added in an earlier save keeps its table, the comment above it");
+    return ok;
 }
 
 } // namespace
@@ -123,48 +195,8 @@ main(int argc, char** argv) {
     const std::optional<loupe::editor::CameraPath> back = loupe::editor::read_path(keys_toml, logs.path(), &why);
     ok &= check(back && same_keys(back->keys, path->keys), "the file reads back as the document");
 
-    const std::vector<std::string> old_lines = lines(before), new_lines = lines(read_file(keys_toml));
-    const std::string deleted_t = std::format("t = {}", read[DELETED].t);
-    // The deleted key's table: its header, its three lines and the blank after them.
-    const auto deleted_at = std::ranges::find(old_lines, deleted_t) - old_lines.begin();
-    std::vector<std::string> kept;
-    for (std::ptrdiff_t i = 0; i < std::ssize(old_lines); i++) {
-        if (old_lines[static_cast<size_t>(i)] != moved_old && (i < deleted_at - 1 || i >= deleted_at + TABLE_TAIL)) {
-            kept.push_back(old_lines[static_cast<size_t>(i)]);
-        }
-    }
-    ok &= check(in_order(kept, new_lines), "every line but the moved and deleted ones stays, in order");
-    ok &= check(std::ranges::count(new_lines, std::format("t = {}", ADDED_AT_S)) == 1,
-                "the added key is written at its millisecond, not a float step past it");
-    ok &= check(above(new_lines, COMMENT, read[COMMENTED].t) && above(new_lines, NEXT_COMMENT, read[NEXT_COMMENTED].t),
-                "each comment stays above its own key");
-    ok &= check(std::ranges::count(new_lines, deleted_t) == 0 && std::ranges::count(new_lines, moved_old) == 0,
-                "the deleted key and the moved eye's old line are gone");
-    ok &= check(new_lines.size() == old_lines.size(), "a table added and a table deleted: as many lines");
-
-    // The delete undone after the save, as the undo stack gives its keys back, and saved again.
-    path->keys = undeleted;
-    ok &= check(path->unsaved() && loupe::editor::save_path(*path, logs.path(), &why) && !path->unsaved(),
-                "the delete undone after a save saves again: " + why);
-    const std::optional<loupe::editor::CameraPath> undone = loupe::editor::read_path(keys_toml, logs.path(), &why);
-    const std::vector<std::string> undone_lines = lines(read_file(keys_toml));
-    ok &= check(undone && same_keys(undone->keys, undeleted), "the file reads back as the undone document");
-    ok &= check(above(undone_lines, COMMENT, read[COMMENTED].t)
-                    && above(undone_lines, NEXT_COMMENT, read[NEXT_COMMENTED].t),
-                "each comment is still above its own key");
-    path->keys = keys;
-    ok &= check(path->unsaved(), "a redo after that save is unsaved again");
-
-    // The redo saved, a comment written above the key added, then that key moved and saved again.
-    ok &= check(loupe::editor::save_path(*path, logs.path(), &why), "the redo saves: " + why);
-    write_file(keys_toml, with_comment(read_file(keys_toml), added, ADDED_COMMENT));
-    std::vector<loupe::editor::CameraKey> again = path->keys;
-    again[added].eye[1] += MOVE;
-    path->keys = again;
-    ok &= check(loupe::editor::save_path(*path, logs.path(), &why), "the added key moved saves: " + why);
-    const std::vector<std::string> again_lines = lines(read_file(keys_toml));
-    ok &= check(above(again_lines, ADDED_COMMENT, ADDED_AT_S)
-                    && std::ranges::count(again_lines, std::format("t = {}", ADDED_AT_S)) == 1,
-                "a key added in an earlier save keeps its table, the comment above it");
+    ok &= lines_kept(before, read_file(keys_toml), read, moved_old);
+    ok &=
+        saves_after_undo(*path, keys_toml, logs.path(), {.read = read, .undeleted = undeleted, .redone = keys}, added);
     return ok ? 0 : 1;
 }

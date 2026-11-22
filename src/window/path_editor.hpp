@@ -89,9 +89,15 @@ using LandFn = std::function<bool(const std::string& camera)>;
 // pose instead while it is on, and lands when it goes off. False when a fly
 // or land failed; it is tried again on the next sync.
 bool sync_paths(Editor& editor, const FlyFn& fly, const LandFn& land);
-// The frame `seconds` along `keys`' path on the lap the shown frame (at
-// `shown_ms` of play) is in, frames `dt_ms` apart; never before Frames::FIRST_SEEKABLE.
-int frame_at(const std::vector<editor::CameraKey>& keys, float seconds, uint32_t shown_ms, uint32_t dt_ms);
+
+// Where play stands: the shown frame's time of play, and the dt between frames.
+struct Play {
+    uint32_t shown_ms = 0;
+    uint32_t dt_ms = 0;
+};
+
+// The frame `seconds` along `keys`' path on the lap the shown frame is in; never before Frames::FIRST_SEEKABLE.
+int frame_at(const std::vector<editor::CameraKey>& keys, float seconds, Play play);
 
 // What draw_path's handles hold this frame: `stands_in` when a key is picked,
 // so its handle stands in for the camera's own; `took_click` when the mouse is
