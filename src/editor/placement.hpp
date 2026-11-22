@@ -37,7 +37,7 @@ mat4f_t projection_matrix(const ViewCamera& camera, float far_z);
 // not 0.50000006. Distances and scales in scene units, angles in degrees.
 constexpr float UNIT_STEP = 1e-4F;
 constexpr float DEGREE_STEP = 1e-3F;
-// `value` to the nearest multiple of `step`.
+// `value` to the nearest multiple of `step` (1/n for a whole n), as the float nearest that decimal.
 float rounded(float value, float step);
 
 } // namespace loupe::editor

@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <format>
 
+#include "editor/placement.hpp"
+
 namespace loupe::editor {
 
 namespace {
@@ -49,11 +51,6 @@ look_rotation(const Point& eye, const Point& look_at) {
 float
 distance(const Point& a, const Point& b) {
     return std::hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-}
-
-float
-round_time(float t) {
-    return std::round(t / TIME_STEP_S) * TIME_STEP_S;
 }
 
 } // namespace
@@ -179,7 +176,7 @@ clamp_time(const std::vector<CameraKey>& keys, size_t index, float t) {
     const float earliest = keys[index - 1].t + TIME_STEP_S;
     float latest = index + 1 < keys.size() ? keys[index + 1].t - TIME_STEP_S : std::max(t, earliest);
     latest = std::max(latest, earliest);
-    return std::clamp(round_time(t), earliest, latest);
+    return rounded(std::clamp(t, earliest, latest), TIME_STEP_S);
 }
 
 std::optional<std::vector<CameraKey>>
@@ -187,13 +184,13 @@ with_key_added(const std::vector<CameraKey>& keys, float seconds, size_t* added)
     if (keys.size() < MIN_KEYS) {
         return std::nullopt;
     }
-    seconds = round_time(std::max(seconds, 0.0F));
+    seconds = rounded(std::max(seconds, 0.0F), TIME_STEP_S);
     std::vector<CameraKey> out = keys;
     if (seconds >= keys.back().t) {
         // At the end, past it by its last spacing when the time asked is not past it.
         const float spacing = keys.back().t - keys[keys.size() - 2].t;
         CameraKey key = keys.back();
-        key.t = seconds > keys.back().t + TIME_STEP_S ? seconds : keys.back().t + spacing;
+        key.t = seconds > keys.back().t + TIME_STEP_S ? seconds : rounded(keys.back().t + spacing, TIME_STEP_S);
         key.from = -1;
         out.push_back(key);
         *added = out.size() - 1;
@@ -204,7 +201,14 @@ with_key_added(const std::vector<CameraKey>& keys, float seconds, size_t* added)
     if (seconds - keys[index - 1].t < TIME_STEP_S / 2 || keys[index].t - seconds < TIME_STEP_S / 2) {
         return std::nullopt;
     }
-    out.insert(out.begin() + static_cast<std::ptrdiff_t>(index), key_on(path_curve(keys), keys, seconds));
+    // On the curve, its points rounded as the handles round theirs.
+    CameraKey key = key_on(path_curve(keys), keys, seconds);
+    for (Point* point : {&key.eye, &key.look_at}) {
+        for (float& value : *point) {
+            value = rounded(value, UNIT_STEP);
+        }
+    }
+    out.insert(out.begin() + static_cast<std::ptrdiff_t>(index), key);
     *added = index;
     return out;
 }

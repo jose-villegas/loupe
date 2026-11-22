@@ -492,6 +492,15 @@ Frames::is_active(const std::string& object) const {
     return !handle_is_none(entity) && handle_equal(entity, camera_active());
 }
 
+std::optional<transformf_t>
+Frames::local_pose(const std::string& object) const {
+    const entity_t entity = entity_named(object);
+    if (handle_is_none(entity)) {
+        return std::nullopt;
+    }
+    return transform_local(entity);
+}
+
 std::optional<mat4f_t>
 Frames::parent_world(const std::string& object) const {
     const entity_t entity = entity_named(object);

@@ -109,6 +109,8 @@ class Frames {
     uint32_t time_ms(int index) const;
     // Whether `object` is the camera the frames are drawn through.
     bool is_active(const std::string& object) const;
+    // Where the scene object `object` stands now, relative to its parent; none without such an object.
+    std::optional<transformf_t> local_pose(const std::string& object) const;
     // The world matrix of `object`'s parent (the scene root for a top-level
     // object); none when the scene holds no such object.
     std::optional<mat4f_t> parent_world(const std::string& object) const;

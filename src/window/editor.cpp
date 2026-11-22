@@ -18,8 +18,6 @@ namespace {
 constexpr char SCENE_SUFFIX[] = ".scene.toml";
 // Where the handles' depth range ends, in near planes: past any scene's far wall.
 constexpr float FAR_IN_NEARS = 1e6F;
-// A click picks the object whose origin lands nearest it, within this many screen pixels.
-constexpr float PICK_RADIUS_PX = 24.0F;
 // The view cube's side and its inset from the frame's top right, in screen pixels.
 constexpr float CUBE_PX = 96.0F;
 constexpr float CUBE_INSET_PX = 8.0F;
@@ -91,20 +89,6 @@ operation(Handle handle) {
         case Handle::Move: break;
     }
     return ImGuizmo::TRANSLATE;
-}
-
-// Where `world` (unmirrored) puts its origin on screen through `clip_from_world` (projection * view, mirrored world)
-// over `frame`; none behind the eye.
-std::optional<ImVec2>
-screen_origin(const mat4f_t& world, const mat4f_t& clip_from_world, const FrameRect& frame) {
-    const ImVec2 min = frame.min, max = frame.max;
-    const mat4f_t clip = mat4f_mul(clip_from_world, editor::mirror_z(world));
-    const float w = clip.m[3][3];
-    if (w <= 0.0F) {
-        return std::nullopt;
-    }
-    const float x = clip.m[0][3] / w, y = clip.m[1][3] / w;
-    return ImVec2(min.x + (x + 1.0F) * 0.5F * (max.x - min.x), min.y + (1.0F - y) * 0.5F * (max.y - min.y));
 }
 
 // Selects the object whose origin lands nearest the click at `mouse`, within PICK_RADIUS_PX.
@@ -279,6 +263,11 @@ open_editor(const std::filesystem::path& scene, std::string* why) {
         return std::nullopt;
     }
     Editor editor = editor_over(std::move(*doc));
+    std::string unread;
+    if (!load_paths(editor, scratch->path(), &unread)) {
+        editor.status = "Paths not read: " + unread;
+        std::fprintf(stderr, "loupe: %s\n", editor.status.c_str());
+    }
     editor.scratch = std::move(scratch);
     return editor;
 }
@@ -304,7 +293,7 @@ edit_keys(Editor& editor, bool letters) {
 
 void
 apply(Editor& editor, const EditAsk& ask) {
-    if (editor.drag) {
+    if (dragging(editor)) {
         return; // a drag in progress ends first
     }
     if (ask.undo) {
@@ -320,7 +309,7 @@ apply(Editor& editor, const EditAsk& ask) {
     editor.checking = {};
     std::string why;
     const std::filesystem::path folder = editor.scratch->path();
-    if (!editor::save_scene(editor.docs.scene, folder, &why)) {
+    if (!editor::save_scene(editor.docs.scene, folder, &why) || !save_paths(editor, folder, &why)) {
         editor.status = "Not saved: " + why;
         std::fprintf(stderr, "loupe: %s\n", editor.status.c_str());
         return;
@@ -356,9 +345,10 @@ draw_inspector(Editor& editor) {
         ImGui::BeginDisabled(!editor::placeable(*object));
         placement_rows(editor, *object);
         ImGui::EndDisabled();
+        draw_path_rows(editor);
     }
     ImGui::Separator();
-    hint(editor.docs.scene.unsaved() ? "Unsaved changes (Ctrl+S saves)" : "No unsaved changes");
+    hint(unsaved(editor) ? "Unsaved changes (Ctrl+S saves)" : "No unsaved changes");
     if (!editor.status.empty()) {
         ImGui::TextWrapped("%s", editor.status.c_str());
     }
@@ -391,10 +381,12 @@ draw_handles(Editor& editor, const Frames& frames, const FrameRect& frame) {
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
     ImGuizmo::SetOrthographic(false);
     ImGuizmo::SetRect(min.x, min.y, max.x - min.x, max.y - min.y);
+    // A picked key's handle stands in for its camera's own.
+    const bool on_path = draw_path(editor, frames, frame, view, projection);
     const editor::Object* object = editor.docs.scene.find(editor.selected);
     const std::optional<mat4f_t> parent = object != nullptr ? frames.parent_world(object->path) : std::nullopt;
-    bool over_handles = false;
-    if (object != nullptr && parent && editor::placeable(*object)) {
+    bool over_handles = on_path;
+    if (!on_path && object != nullptr && parent && editor::placeable(*object)) {
         over_handles = object_handles(editor, *object, *parent, gizmo_view, gizmo_projection);
     } else if (editor.handles_held) {
         // The object went away or stopped placing mid-drag: the drag ends here.
@@ -412,6 +404,28 @@ draw_handles(Editor& editor, const Frames& frames, const FrameRect& frame) {
         && !ImGuizmo::IsViewManipulateHovered()) {
         pick(editor, frames, mat4f_mul(projection, view), frame, mouse);
     }
+}
+
+std::optional<ImVec2>
+screen_origin(const mat4f_t& world, const mat4f_t& clip_from_world, const FrameRect& frame) {
+    const ImVec2 min = frame.min, max = frame.max;
+    const mat4f_t clip = mat4f_mul(clip_from_world, editor::mirror_z(world));
+    const float w = clip.m[3][3];
+    if (w <= 0.0F) {
+        return std::nullopt;
+    }
+    const float x = clip.m[0][3] / w, y = clip.m[1][3] / w;
+    return ImVec2(min.x + (x + 1.0F) * 0.5F * (max.x - min.x), min.y + (1.0F - y) * 0.5F * (max.y - min.y));
+}
+
+bool
+unsaved(const Editor& editor) {
+    return editor.docs.scene.unsaved() || paths_unsaved(editor);
+}
+
+bool
+dragging(const Editor& editor) {
+    return editor.drag.has_value() || editor.path.drag.has_value();
 }
 
 bool

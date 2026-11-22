@@ -24,8 +24,10 @@ values(vec3f_t v) {
 
 float
 rounded(float value, float step) {
-    const float steps = std::round(value / step);
-    return steps == 0.0F ? 0.0F : steps * step; // never -0
+    // Divided by whole steps per unit, not multiplied by the inexact float step: 7500 / 1000 is 7.5 exactly.
+    const double per_unit = std::round(1.0 / static_cast<double>(step));
+    const double steps = std::round(static_cast<double>(value) * per_unit);
+    return steps == 0.0 ? 0.0F : static_cast<float>(steps / per_unit); // never -0
 }
 
 transformf_t

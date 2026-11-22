@@ -57,7 +57,7 @@ main(int argc, char** argv) {
     if (!check(doc.has_value(), "the scene reads: " + why) || !doc) {
         return 1;
     }
-    loupe::editor::Docs docs{.scene = std::move(*doc)};
+    loupe::editor::Docs docs{.scene = std::move(*doc), .paths = {}};
     const loupe::editor::Object* capybara = docs.scene.find("capybara");
     const loupe::editor::Object* meadow = docs.scene.find("meadow");
     bool ok = check(capybara != nullptr && loupe::editor::placeable(*capybara) && meadow != nullptr && meadow->baked,

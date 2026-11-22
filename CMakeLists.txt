@@ -127,6 +127,7 @@ add_library(loupe_window OBJECT
     src/window/gpu.cpp
     src/window/observer.cpp
     src/window/panels.cpp
+    src/window/path_editor.cpp
     src/window/run_window.cpp)
 target_link_libraries(loupe_window PUBLIC loupe_core imgui imguizmo)
 # The window's icon, the app logo, built into the binary as the bytes of its PNG.

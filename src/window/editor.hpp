@@ -22,10 +22,14 @@
 #include "imgui.h"
 #include "scratch.hpp"
 #include "window/panels.hpp"
+#include "window/path_editor.hpp"
 // After imgui.h, whose types its header uses without including it.
 #include "ImGuizmo.h"
 
 namespace loupe::window {
+
+// A click picks the object or path point whose origin lands nearest it, within this many screen pixels.
+constexpr float PICK_RADIUS_PX = 24.0F;
 
 // The handles' operation: which part of the placement a drag moves.
 enum class Handle : uint8_t { Move, Rotate, Scale };
@@ -75,6 +79,7 @@ struct Editor {
     std::unique_ptr<Scratch> scratch;
     BakeCheck checking;
     std::optional<editor::Rebuild> checked;
+    PathEdit path; // the camera paths' editing
 };
 
 // The editor over `scene`; none, with `why` set, for a pack (.apak), which
@@ -112,5 +117,12 @@ using PlaceFn = std::function<bool(const std::string& object, const transformf_t
 // told, the drag's in-progress placement first. False when a place failed; a
 // failed place is tried again on the next sync.
 bool sync(Editor& editor, const PlaceFn& place);
+// Where `world` (unmirrored) puts its origin on screen through `clip_from_world`
+// (projection * view, mirrored world) over `frame`; none behind the eye.
+std::optional<ImVec2> screen_origin(const mat4f_t& world, const mat4f_t& clip_from_world, const FrameRect& frame);
+// Whether anything is edited past the files: a placement or a path.
+bool unsaved(const Editor& editor);
+// Whether a drag, of a handle or a field, is in progress.
+bool dragging(const Editor& editor);
 
 } // namespace loupe::window
