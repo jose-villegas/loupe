@@ -24,6 +24,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "checks.hpp"
 #include "paths.hpp"
 #include "process.hpp"
 #include "update/sha256.hpp"
@@ -42,11 +43,7 @@ constexpr const char NEW_EXE[] = "the new build";
 // The variable naming where this test, run as a setup with /S, writes its own path.
 constexpr const char SETUP_OUT[] = "UPDATE_TEST_SETUP_OUT";
 
-bool
-check(bool ok, const std::string& what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, ok ? "ok" : "FAILED", what.c_str());
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
 void
 write(const fs::path& file, const std::string& text) {

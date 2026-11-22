@@ -1,7 +1,6 @@
 #include "editor/camera_path.hpp"
 
 #include <algorithm>
-#include <atomic>
 #include <cmath>
 #include <cstddef>
 #include <format>
@@ -57,7 +56,7 @@ distance(const Point& a, const Point& b) {
 
 uint32_t
 next_key_id() {
-    static std::atomic<uint32_t> last{0};
+    static uint32_t last = 0;
     return ++last;
 }
 
@@ -77,8 +76,8 @@ path_fault(const std::vector<CameraKey>& keys) {
     if (keys.size() < MIN_KEYS) {
         return "a path needs at least two keys";
     }
-    if (keys.size() > MAX_KEYS) {
-        return std::format("a path holds at most {} keys", MAX_KEYS);
+    if (keys.size() > MAX_CURVE_KEYS) {
+        return std::format("a path holds at most {} keys", MAX_CURVE_KEYS);
     }
     for (size_t i = 0; i < keys.size(); i++) {
         const CameraKey& key = keys[i];
@@ -142,6 +141,9 @@ lap_start_ms(const std::vector<CameraKey>& keys, uint32_t t_ms) {
 
 float
 clip_seconds(const std::vector<CameraKey>& keys, uint32_t t_ms) {
+    if (path_end(keys) <= 0.0F) {
+        return 0.0F;
+    }
     return static_cast<float>(t_ms - lap_start_ms(keys, t_ms)) / static_cast<float>(MS_PER_S);
 }
 

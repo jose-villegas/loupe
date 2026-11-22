@@ -43,5 +43,17 @@ main(int argc, char** argv) {
         ok = false;
     }
     ok &= loupe::test::same_each(TEST, *frames, RETIMED, retimed, "retimed");
+
+    // Each frame's time of play: the dts through it, the retimed ones replacing those first drawn.
+    const uint32_t dt = frames->dt_ms();
+    const uint32_t retimed_ms = (RETIMED_FROM * dt) + ((RETIMED_TO - RETIMED_FROM + 1) * retimed_dt);
+    const bool timed =
+        frames->time_ms(-1) == 0 && frames->time_ms(0) == dt && frames->time_ms(RETIMED_FROM - 1) == RETIMED_FROM * dt
+        && frames->time_ms(RETIMED_FROM) == (RETIMED_FROM * dt) + retimed_dt
+        && frames->time_ms(RETIMED_TO) == retimed_ms && frames->time_ms(RETIMED_TO + 3) == retimed_ms + (3 * dt);
+    if (!timed) {
+        std::fprintf(stderr, "seek_test: a frame's time of play is not the dts drawn through it\n");
+        ok = false;
+    }
     return frames->close() && ok ? 0 : 1;
 }

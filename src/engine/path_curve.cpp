@@ -2,10 +2,13 @@
 
 #include <array>
 #include <cstdint>
+#include <limits>
 
 #include "engine/autana.hpp"
 
 namespace loupe {
+
+const size_t MAX_CURVE_KEYS = std::numeric_limits<decltype(anim_track_t::count)>::max();
 
 namespace {
 

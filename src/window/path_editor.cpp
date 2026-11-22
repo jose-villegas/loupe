@@ -31,7 +31,7 @@ constexpr ImVec4 WARNING_COLOUR = {0.95F, 0.75F, 0.3F, 1.0F};
 // Inspector drag speeds per pixel: seconds, scene units.
 constexpr float TIME_SPEED = 0.01F, POINT_SPEED = 0.05F;
 
-// Whether two key lists are the same path: a key's place in the file is not part of it.
+// Whether two key lists are the same path: a key's id is not part of it.
 bool
 same_path(const std::vector<CameraKey>& a, const std::vector<CameraKey>& b) {
     return std::ranges::equal(a, b, [](const CameraKey& x, const CameraKey& y) {

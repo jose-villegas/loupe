@@ -111,6 +111,8 @@ a_baked_path_waits_for_its_warning() {
     std::vector<CameraKey> moved = walk();
     moved[1].eye[1] = 3.0F;
     loupe::window::drag_keys(editor, STREET, moved);
+    ok &= check(!editor.path.drag && loupe::window::shown_keys(editor, STREET) == walk(),
+                "before its warning, a drag on a baked path starts nothing and shows its keys");
     loupe::window::end_key_drag(editor);
     editor.path.key = loupe::window::KeyPick{.index = 1, .point = loupe::editor::KeyPoint::Eye, .camera = STREET};
     ok &= check(!loupe::window::add_key(editor, 2.5F) && !loupe::window::delete_key(editor, &why) && !why.empty()
@@ -261,6 +263,13 @@ cameras_sync_apart() {
     ok &= check(sync(editor, engine) && engine.landed == std::vector<std::string>{STREET} && sync(editor, engine)
                     && engine.landed.empty(),
                 "and is tried again, once");
+    editor.docs.paths.at(STREET).keys = moved;
+    engine.fails = true;
+    ok &= check(!sync(editor, engine), "a failed fly says so");
+    engine.fails = false;
+    editor.docs.paths.at(STREET).keys = walk();
+    ok &= check(sync(editor, engine) && engine.landed == std::vector<std::string>{STREET},
+                "a fly that failed may have taken the camera: back on the pack's path, it lands");
 
     // The free view handed back while its camera's path is edited: the camera flies the edit, not its clip.
     editor.docs.paths.at(CAMERA).keys = walk();

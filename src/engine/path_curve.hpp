@@ -4,11 +4,15 @@
 // the curve drawn is the curve the camera flies.
 #pragma once
 
+#include <cstddef>
 #include <vector>
 
 #include "engine/pose.hpp"
 
 namespace loupe {
+
+// The most keys a curve holds: anim_track's key count.
+extern const size_t MAX_CURVE_KEYS;
 
 struct PathCurve {
     std::vector<float> times;        // seconds, strictly increasing

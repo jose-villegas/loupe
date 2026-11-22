@@ -23,7 +23,7 @@ values(vec3f_t v) {
 } // namespace
 
 float
-rounded(float value, float step) {
+rounded(float value, float step) { // NOLINT(bugprone-easily-swappable-parameters): a value, then the step it lands on
     // Divided by whole steps per unit, not multiplied by the inexact float step: 7500 / 1000 is 7.5 exactly.
     const double per_unit = std::round(1.0 / static_cast<double>(step));
     const double steps = std::round(static_cast<double>(value) * per_unit);

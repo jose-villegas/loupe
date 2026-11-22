@@ -23,6 +23,7 @@ namespace {
 constexpr const char TEST[] = "path_save_test";
 constexpr const char COMMENT[] = "# Up to the gallery.";
 constexpr const char NEXT_COMMENT[] = "# Past the arches.";
+constexpr const char ADDED_COMMENT[] = "# Added in the editor.";
 // The keys the comments sit above, the key moved, and the key deleted: tour's keys at 25 s, 10 s, 5 s and 15 s.
 // The next comment's key lands where the added one was after the first save, so an undo then a save must
 // not hand its table to the added key's place.
@@ -114,7 +115,7 @@ main(int argc, char** argv) {
     loupe::editor::CameraPath faulty = *path;
     faulty.keys[2].t = faulty.keys[1].t;
     ok &= check(!loupe::editor::save_path(faulty, logs.path(), &why) && read_file(keys_toml) == before
-                    && faulty.unsaved(),
+                    && faulty.unsaved() && faulty.file_ids == path->file_ids,
                 "a path that would not build is refused, the file as it was");
 
     why.clear();
@@ -153,5 +154,17 @@ main(int argc, char** argv) {
                 "each comment is still above its own key");
     path->keys = keys;
     ok &= check(path->unsaved(), "a redo after that save is unsaved again");
+
+    // The redo saved, a comment written above the key added, then that key moved and saved again.
+    ok &= check(loupe::editor::save_path(*path, logs.path(), &why), "the redo saves: " + why);
+    write_file(keys_toml, with_comment(read_file(keys_toml), added, ADDED_COMMENT));
+    std::vector<loupe::editor::CameraKey> again = path->keys;
+    again[added].eye[1] += MOVE;
+    path->keys = again;
+    ok &= check(loupe::editor::save_path(*path, logs.path(), &why), "the added key moved saves: " + why);
+    const std::vector<std::string> again_lines = lines(read_file(keys_toml));
+    ok &= check(above(again_lines, ADDED_COMMENT, ADDED_AT_S)
+                    && std::ranges::count(again_lines, std::format("t = {}", ADDED_AT_S)) == 1,
+                "a key added in an earlier save keeps its table, the comment above it");
     return ok ? 0 : 1;
 }

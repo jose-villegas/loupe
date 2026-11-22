@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "checks.hpp"
 #include "editor/doc.hpp"
 #include "editor/placement.hpp"
 #include "editor/scene_tool.hpp"
@@ -22,11 +23,7 @@ constexpr const char TEST[] = "editor_test";
 constexpr float CLOSE = 1e-4F;
 constexpr float CLOSE_DEGREES = 1e-2F;
 
-bool
-check(bool ok, const std::string& what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, what.c_str(), ok ? "ok" : "FAILED");
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
 bool
 near(float a, float b, float tolerance = CLOSE) {

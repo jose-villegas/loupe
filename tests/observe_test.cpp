@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iterator>
 
+#include "checks.hpp"
 #include "frames_fixture.hpp"
 
 namespace {
@@ -25,11 +26,7 @@ constexpr int MOVES = 100;
 // The observer's step back from where it starts, per move, in metres.
 constexpr float BACK = 0.05F;
 
-bool
-check(bool ok, const char* what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, what, ok ? "ok" : "FAILED");
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
 int
 view_named(const char* name) {

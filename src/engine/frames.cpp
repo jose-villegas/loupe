@@ -29,9 +29,8 @@ struct Frames::State {
     size_t kept_bytes = 0;
     bool said_over = false;
     int index = 0;
-    uint32_t dt_ms = 0;                                   // the run's, as it opened
-    std::vector<uint32_t> dts;                            // each drawn frame's dt, for replaying it
-    std::vector<uint32_t> times;                          // each drawn frame's time of play: the dts through it
+    uint32_t dt_ms = 0;          // the run's, as it opened
+    std::vector<uint32_t> times; // each drawn frame's time of play: the dts through it, so replays take each dt again
     std::map<int, render_host_checkpoint_t*> checkpoints; // the state before drawing frame key
     // While observing or placing: the state before drawing the shown frame,
     // apart from the kept checkpoints, which thinning may drop.
@@ -56,14 +55,26 @@ struct Frames::State {
         return checkpoints.erase(it);
     }
 
-    // Frees the checkpoints after frame `frame` and forgets the dts and times from it on.
+    // Whether frame `frame` was drawn, so its dt is known.
+    bool
+    drawn_at(int frame) const {
+        return frame >= 0 && frame < std::ssize(times);
+    }
+
+    // The dt frame `frame`, drawn, took.
+    uint32_t
+    dt_at(int frame) const {
+        const auto at = static_cast<size_t>(frame);
+        return times[at] - (at == 0 ? 0 : times[at - 1]);
+    }
+
+    // Frees the checkpoints after frame `frame` and forgets the times from it on.
     void
     forget_after(int frame) {
         for (auto it = checkpoints.upper_bound(frame); it != checkpoints.end();) {
             it = drop(it);
         }
-        dts.resize(static_cast<size_t>(std::max(frame, 0)));
-        times.resize(dts.size());
+        times.resize(static_cast<size_t>(std::max(frame, 0)));
     }
 
     // Past the budget, keeps every other checkpoint, so the interval doubles and coverage stays even.
@@ -254,7 +265,7 @@ Frames::step(uint32_t dt_ms) {
 bool
 Frames::advance(uint32_t dt_ms) {
     State& s = *state_;
-    if (s.index < std::ssize(s.dts) && s.dts[s.index] != dt_ms) {
+    if (s.drawn_at(s.index) && s.dt_at(s.index) != dt_ms) {
         s.forget_after(s.index);
     }
     bool saved = true;
@@ -280,8 +291,7 @@ Frames::advance(uint32_t dt_ms) {
     const input_t input = {};
     render_host_step(dt_ms, &input);
     s.drawn++;
-    if (s.index == std::ssize(s.dts)) {
-        s.dts.push_back(dt_ms);
+    if (s.index == std::ssize(s.times)) {
         s.times.push_back((s.times.empty() ? 0 : s.times.back()) + dt_ms);
     }
     s.index++;
@@ -330,7 +340,7 @@ void
 Frames::step_to(int index) {
     State& s = *state_;
     while (s.index <= index) {
-        advance(s.index < std::ssize(s.dts) ? s.dts[s.index] : dt_ms());
+        advance(s.drawn_at(s.index) ? s.dt_at(s.index) : dt_ms());
     }
 }
 
@@ -391,7 +401,7 @@ Frames::redraw_held() {
     } else {
         return false;
     }
-    return advance(s.dts[shown]);
+    return advance(s.dt_at(shown));
 }
 
 bool
@@ -406,7 +416,7 @@ Frames::redraw_unheld() {
     if (restored) {
         s.index = shown;
     }
-    const bool drew = restored && advance(s.dts[shown]);
+    const bool drew = restored && advance(s.dt_at(shown));
     release_hold();
     return drew;
 }

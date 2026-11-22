@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "checks.hpp"
 #include "editor/doc.hpp"
 #include "editor/placement.hpp"
 #include "frames_fixture.hpp"
@@ -29,11 +30,7 @@ constexpr float LIFT = 0.1F;
 constexpr float NUDGE = 0.01F;
 constexpr float CLOSE = 1e-4F;
 
-bool
-check(bool ok, const char* what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, what, ok ? "ok" : "FAILED");
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
 // Sponza's camera has no roll: its right stays level and its up points up, in the picture as in the world.
 bool

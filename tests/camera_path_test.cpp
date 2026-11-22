@@ -107,7 +107,7 @@ faults_are_camera_keys() {
     keys[1].eye[0] = std::nanf("");
     ok &= check(path_fault(keys).has_value(), "a number that is not finite is a fault");
     keys = open_path();
-    while (keys.size() <= loupe::editor::MAX_KEYS) {
+    while (keys.size() <= loupe::MAX_CURVE_KEYS) {
         CameraKey next = keys.back();
         next.t += 1.0F;
         keys.push_back(next);
@@ -133,6 +133,23 @@ poses_lie_on_the_keys() {
         ok &= check(same, "a key made on the curve at key time " + std::to_string(at.t) + " is that key");
     }
     ok &= check(loupe::editor::path_end(keys) == 5.0F, "the path ends at its last key");
+    return ok;
+}
+
+bool
+clip_time_laps_at_the_last_key() {
+    using loupe::editor::clip_seconds;
+    using loupe::editor::lap_start_ms;
+    std::vector<CameraKey> keys = open_path(); // ends at 5 s
+    bool ok =
+        check(lap_start_ms(keys, 4999) == 0 && lap_start_ms(keys, 5000) == 5000 && lap_start_ms(keys, 12500) == 10000,
+              "a lap begins at each whole path's length of play");
+    ok &= check(clip_seconds(keys, 5000) == 0.0F && clip_seconds(keys, 12500) == 2.5F,
+                "on a lap's boundary the clip is at its first key, and the third lap runs as the first");
+    keys.back().t = 4.9996F;
+    ok &= check(lap_start_ms(keys, 5000) == 5000, "a path's length rounds to the nearest millisecond");
+    ok &=
+        check(lap_start_ms({}, 1234) == 0 && clip_seconds({}, 1234) == 0.0F, "a path of no length stays at its start");
     return ok;
 }
 
@@ -248,6 +265,7 @@ main() {
     bool ok = curve_is_camera_keys();
     ok &= faults_are_camera_keys();
     ok &= poses_lie_on_the_keys();
+    ok &= clip_time_laps_at_the_last_key();
     ok &= key_edits_keep_the_path_whole();
     ok &= set_keys_is_one_undo();
     ok &= tool_calls_are_scene_edits();

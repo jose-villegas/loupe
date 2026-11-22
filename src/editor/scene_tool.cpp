@@ -69,7 +69,7 @@ std::string
 key_text(const CameraPath& path, const CameraKey& key) {
     const auto at = std::ranges::find(path.file_ids, key.id);
     const std::string from =
-        key.id == 0 || at == path.file_ids.end() ? std::string(NEW_KEY) : std::to_string(at - path.file_ids.begin());
+        at == path.file_ids.end() ? std::string(NEW_KEY) : std::to_string(at - path.file_ids.begin());
     return std::format("{}:{}:{}:{}", from, number_text(key.t), vector_text(key.eye), vector_text(key.look_at));
 }
 
@@ -232,10 +232,7 @@ path_args(const CameraPath& path) {
 bool
 save_path(CameraPath& path, const fs::path& folder, std::string* why) {
     return save_with("set-keys", path.keys_toml, path_args(path), folder, why, [&path] {
-        // The file now holds the keys' tables in this order; a key never in a file takes an id for its own.
-        for (CameraKey& key : path.keys) {
-            key.id = key.id == 0 ? next_key_id() : key.id;
-        }
+        // The file now holds the keys' tables in this order.
         path.saved = path.keys;
         path.file_ids = ids(path.keys);
     });

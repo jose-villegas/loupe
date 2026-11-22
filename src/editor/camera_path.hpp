@@ -20,8 +20,7 @@ namespace loupe::editor {
 using Point = std::array<float, 3>;
 
 // One key. `id` names it through edits, undo and saves (next_key_id): a save
-// keeps the file's table of the key with the same id, comments and all. 0 is a
-// key never read or saved.
+// keeps the file's table of the key with the same id, comments and all.
 struct CameraKey {
     float t = 0.0F; // seconds
     Point eye{}, look_at{};
@@ -29,7 +28,7 @@ struct CameraKey {
     bool operator==(const CameraKey&) const = default;
 };
 
-// An id no key has had yet this run, never 0.
+// An id no key has had yet this run.
 uint32_t next_key_id();
 
 // A key's two points, which the handles move one at a time.
@@ -45,9 +44,6 @@ struct CameraPath {
 
     bool unsaved() const;
 };
-
-// The most keys a path holds: anim_track counts its keys in 16 bits.
-constexpr size_t MAX_KEYS = UINT16_MAX;
 
 // The key times step: a time typed or clamped is rounded to whole milliseconds.
 constexpr float TIME_STEP_S = 1e-3F;
@@ -72,7 +68,7 @@ uint32_t lap_start_ms(const std::vector<CameraKey>& keys, uint32_t t_ms);
 // Where on the path the camera's clip is `t_ms` into play, in seconds.
 float clip_seconds(const std::vector<CameraKey>& keys, uint32_t t_ms);
 // A key on the curve at `seconds`: its eye the curve's, its look_at along the
-// curve's forward at the look distance of the keys either side. Its id is 0.
+// curve's forward at the look distance of the keys either side, with an id of its own.
 CameraKey key_on(const PathCurve& curve, const std::vector<CameraKey>& keys, float seconds);
 
 // `keys` with keys[index]'s time and points set to `key`'s; on a loop, the
