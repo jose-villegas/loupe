@@ -36,7 +36,7 @@ function(parity name scene args)
 endfunction()
 parity(defaults "${sponza}" "")
 parity(every_flag "${sponza}"
-       "--object|atrium|--camera|tour|--view|meshlets|--set|render.batched=0|--frames|4|--dt|50|--video")
+       "--object|atrium_fitted_full|--camera|tour|--view|meshlets|--set|render.batched=0|--frames|4|--dt|50|--video")
 
 # loupe on ARGS (|-separated, run in the test's own folder) exits EXIT, saying REASON (a regex) on stderr.
 function(refused name args exit reason)
@@ -86,7 +86,7 @@ if(LOUPE_PACK_TOOL)
     # The scene's own checkout: a folder, and its HEAD checked out as a worktree.
     get_filename_component(autana_dir "${AUTANA_DIR}" ABSOLUTE)
     path_frame(frame_compare "${sponza_toml}" "--camera|${sponza_camera}" "${autana_dir}"
-               "--camera ${sponza_camera} --view meshlets --object atrium")
+               "--camera ${sponza_camera} --view meshlets --object atrium_fitted_full")
     # A's --set must not reach B: B's frame is a fresh run's under its own flags.
     path_frame(frame_compare_set "${sponza_toml}" "--camera|${sponza_camera}|--set|render.cull=0" "${autana_dir}"
                "--camera ${sponza_camera} --view shaded")

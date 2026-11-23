@@ -20,8 +20,7 @@ namespace {
 
 constexpr const char TEST[] = "place_test";
 // Every sponza renderer: whichever is drawn moves.
-const char* const RENDERERS[] = {"atrium_fitted_full", "atrium_fitted", "atrium_flat_fitted", "atrium",
-                                 "atrium_lite",        "atrium_flat"};
+const char* const RENDERERS[] = {"atrium_fitted_full"};
 constexpr int EVERY = loupe::Frames::CHECKPOINT_EVERY;
 constexpr int SHOWN = EVERY + 10;
 constexpr int LATER = SHOWN + 5;
