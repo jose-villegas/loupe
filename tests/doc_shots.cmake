@@ -46,13 +46,17 @@ if(NOT CHECK)
     return()
 endif()
 
+# lavapipe compiles its shaders for the CPU it runs on: two CI runners have
+# drawn a panel tab's antialiased edges one level apart, so a channel may be off by this much.
+set(LAVAPIPE_LEVELS 1)
 set(stale "")
 foreach(name IN LISTS drawn)
     if(NOT name IN_LIST kept)
         list(APPEND stale "${name} (missing)")
         continue()
     endif()
-    execute_process(COMMAND "${SAME_IMAGE}" "${DOCS}/${name}" "${OUT}/shots/${name}" RESULT_VARIABLE same)
+    execute_process(COMMAND "${SAME_IMAGE}" --within ${LAVAPIPE_LEVELS} "${DOCS}/${name}" "${OUT}/shots/${name}"
+                    RESULT_VARIABLE same)
     if(NOT same EQUAL 0)
         list(APPEND stale "${name}")
     endif()
