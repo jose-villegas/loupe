@@ -81,14 +81,16 @@ title: "editor"
 graph TB
   LoupeLoupeC_window@{ shape: rectangle, label: "window" }
   subgraph LoupeLoupeC_editor["\`editor\`"]
-    LoupeLoupeC_editor.M_placement@{ shape: rectangle, label: "placement" }
     LoupeLoupeC_editor.M_scene_tool@{ shape: rectangle, label: "scene_tool" }
     LoupeLoupeC_editor.M_doc@{ shape: rectangle, label: "doc" }
+    LoupeLoupeC_editor.M_camera_path@{ shape: rectangle, label: "camera_path" }
+    LoupeLoupeC_editor.M_placement@{ shape: rectangle, label: "placement" }
   end
-  LoupeLoupeC_engine@{ shape: rectangle, label: "engine" }
   LoupeLoupeC_src@{ shape: rectangle, label: "src" }
-  LoupeLoupeC_window -.-> LoupeLoupeC_editor.M_placement
+  LoupeLoupeC_engine@{ shape: rectangle, label: "engine" }
   LoupeLoupeC_window -.-> LoupeLoupeC_editor.M_scene_tool
+  LoupeLoupeC_editor.M_camera_path -.-> LoupeLoupeC_editor.M_placement
+  LoupeLoupeC_editor.M_doc -.-> LoupeLoupeC_editor.M_camera_path
   LoupeLoupeC_editor.M_placement -.-> LoupeLoupeC_editor.M_doc
   LoupeLoupeC_editor.M_scene_tool -.-> LoupeLoupeC_editor.M_doc
   LoupeLoupeC_editor.M_placement -.-> LoupeLoupeC_engine
@@ -103,15 +105,22 @@ graph TB
   LoupeLoupeC_window@{ shape: rectangle, label: "window" }
   subgraph LoupeLoupeC_engine["\`engine\`"]
     LoupeLoupeC_engine.M_frames@{ shape: rectangle, label: "frames" }
+    LoupeLoupeC_engine.M_path_curve@{ shape: rectangle, label: "path_curve" }
+    LoupeLoupeC_engine.M_engine_frame@{ shape: rectangle, label: "engine_frame" }
     LoupeLoupeC_engine.M_autana@{ shape: rectangle, label: "autana" }
     LoupeLoupeC_engine.M_pose@{ shape: rectangle, label: "pose" }
   end
   LoupeLoupeC_editor -.-> LoupeLoupeC_engine.M_frames
+  LoupeLoupeC_editor -.-> LoupeLoupeC_engine.M_path_curve
   LoupeLoupeC_path -.-> LoupeLoupeC_engine.M_frames
   LoupeLoupeC_src -.-> LoupeLoupeC_engine.M_autana
   LoupeLoupeC_src -.-> LoupeLoupeC_engine.M_frames
+  LoupeLoupeC_window -.-> LoupeLoupeC_engine.M_engine_frame
   LoupeLoupeC_window -.-> LoupeLoupeC_engine.M_frames
+  LoupeLoupeC_engine.M_path_curve -.-> LoupeLoupeC_engine.M_autana
+  LoupeLoupeC_engine.M_engine_frame -.-> LoupeLoupeC_engine.M_pose
   LoupeLoupeC_engine.M_frames -.-> LoupeLoupeC_engine.M_pose
+  LoupeLoupeC_engine.M_path_curve -.-> LoupeLoupeC_engine.M_pose
   LoupeLoupeC_engine.M_frames -.-> LoupeLoupeC_src
 `;case`c_path`:return`---
 title: "path"
@@ -191,23 +200,25 @@ graph TB
     LoupeLoupeC_window.M_files@{ shape: rectangle, label: "files" }
     LoupeLoupeC_window.M_frame_texture@{ shape: rectangle, label: "frame_texture" }
     LoupeLoupeC_window.M_observer@{ shape: rectangle, label: "observer" }
-    LoupeLoupeC_window.M_panels@{ shape: rectangle, label: "panels" }
+    LoupeLoupeC_window.M_path_editor@{ shape: rectangle, label: "path_editor" }
     LoupeLoupeC_window.M_gpu@{ shape: rectangle, label: "gpu" }
+    LoupeLoupeC_window.M_panels@{ shape: rectangle, label: "panels" }
   end
   LoupeLoupeC_update@{ shape: rectangle, label: "update" }
-  LoupeLoupeC_editor@{ shape: rectangle, label: "editor" }
   LoupeLoupeC_engine@{ shape: rectangle, label: "engine" }
+  LoupeLoupeC_editor@{ shape: rectangle, label: "editor" }
   LoupeLoupeC_src -.-> LoupeLoupeC_window.M_run_window
-  LoupeLoupeC_window.M_editor -.-> LoupeLoupeC_window.M_panels
+  LoupeLoupeC_window.M_editor -.-> LoupeLoupeC_window.M_path_editor
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_editor
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_files
   LoupeLoupeC_window.M_frame_texture -.-> LoupeLoupeC_window.M_gpu
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_frame_texture
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_observer
-  LoupeLoupeC_window.M_editor -.-> LoupeLoupeC_editor
+  LoupeLoupeC_window.M_path_editor -.-> LoupeLoupeC_window.M_panels
   LoupeLoupeC_window.M_files -.-> LoupeLoupeC_src
   LoupeLoupeC_window.M_frame_texture -.-> LoupeLoupeC_engine
   LoupeLoupeC_window.M_observer -.-> LoupeLoupeC_engine
   LoupeLoupeC_window.M_panels -.-> LoupeLoupeC_src
+  LoupeLoupeC_window.M_path_editor -.-> LoupeLoupeC_editor
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_update
 `;default:throw Error(`Unknown viewId: `+e)}};export{e as mmdSource};

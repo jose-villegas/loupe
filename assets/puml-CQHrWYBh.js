@@ -142,10 +142,10 @@ rectangle "Loupe" <<LoupeLoupe>> as LoupeLoupe {
   skinparam RectangleFontColor<<LoupeLoupe>> #3b82f6
   skinparam RectangleBorderStyle<<LoupeLoupe>> dashed
 
-  rectangle "==window\\n<size:10>[14 files · 1962 lines]</size>\\n\\nThe window: a scene's frame, a timeline and a debug-view picker, or the start panel while no scene is open." <<LoupeLoupeC_window>> as LoupeLoupeC_window
+  rectangle "==window\\n<size:10>[16 files · 2729 lines]</size>\\n\\nThe window: a scene's frame, a timeline and a debug-view picker, or the start panel while no scene is open." <<LoupeLoupeC_window>> as LoupeLoupeC_window
   rectangle "==path\\n<size:10>[2 files · 404 lines]</size>\\n\\nA scene's camera path from the command line: one frame of it, or the whole path drawn by two sides, A and B, laid out as an A | B | difference video." <<LoupeLoupeC_path>> as LoupeLoupeC_path
-  rectangle "==editor\\n<size:10>[6 files · 547 lines]</size>" <<LoupeLoupeC_editor>> as LoupeLoupeC_editor
-  rectangle "==engine\\n<size:10>[4 files · 766 lines]</size>" <<LoupeLoupeC_engine>> as LoupeLoupeC_engine
+  rectangle "==editor\\n<size:10>[8 files · 1052 lines]</size>" <<LoupeLoupeC_editor>> as LoupeLoupeC_editor
+  rectangle "==engine\\n<size:10>[8 files · 994 lines]</size>" <<LoupeLoupeC_engine>> as LoupeLoupeC_engine
   rectangle "==update\\n<size:10>[4 files · 853 lines]</size>\\n\\nLoupe keeps itself current from its GitHub releases." <<LoupeLoupeC_update>> as LoupeLoupeC_update
   rectangle "==src\\n<size:10>[17 files · 1249 lines]</size>" <<LoupeLoupeC_src>> as LoupeLoupeC_src
 }
@@ -217,10 +217,10 @@ rectangle "Loupe" <<LoupeLoupe>> as LoupeLoupe {
 
   rectangle "==tests\\n<size:10>[0 files · 0 lines]</size>" <<LoupeLoupeC_tests>> as LoupeLoupeC_tests
   rectangle "==path\\n<size:10>[2 files · 404 lines]</size>\\n\\nA scene's camera path from the command line: one frame of it, or the whole path drawn by two sides, A and B, laid out as an A | B | difference video." <<LoupeLoupeC_path>> as LoupeLoupeC_path
-  rectangle "==window\\n<size:10>[14 files · 1962 lines]</size>\\n\\nThe window: a scene's frame, a timeline and a debug-view picker, or the start panel while no scene is open." <<LoupeLoupeC_window>> as LoupeLoupeC_window
-  rectangle "==editor\\n<size:10>[6 files · 547 lines]</size>" <<LoupeLoupeC_editor>> as LoupeLoupeC_editor
+  rectangle "==window\\n<size:10>[16 files · 2729 lines]</size>\\n\\nThe window: a scene's frame, a timeline and a debug-view picker, or the start panel while no scene is open." <<LoupeLoupeC_window>> as LoupeLoupeC_window
+  rectangle "==editor\\n<size:10>[8 files · 1052 lines]</size>" <<LoupeLoupeC_editor>> as LoupeLoupeC_editor
   rectangle "==update\\n<size:10>[4 files · 853 lines]</size>\\n\\nLoupe keeps itself current from its GitHub releases." <<LoupeLoupeC_update>> as LoupeLoupeC_update
-  rectangle "==engine\\n<size:10>[4 files · 766 lines]</size>" <<LoupeLoupeC_engine>> as LoupeLoupeC_engine
+  rectangle "==engine\\n<size:10>[8 files · 994 lines]</size>" <<LoupeLoupeC_engine>> as LoupeLoupeC_engine
   rectangle "==src\\n<size:10>[17 files · 1249 lines]</size>" <<LoupeLoupeC_src>> as LoupeLoupeC_src
 }
 
@@ -264,20 +264,10 @@ skinparam rectangle<<LoupeLoupeC_window>>{
   FontColor #eff6ff
   BorderColor #2563eb
 }
-skinparam rectangle<<LoupeLoupeC_editorM_placement>>{
-  BackgroundColor #64748b
-  FontColor #f8fafc
-  BorderColor #475569
-}
 skinparam rectangle<<LoupeLoupeC_editorM_scene_tool>>{
   BackgroundColor #64748b
   FontColor #f8fafc
   BorderColor #475569
-}
-skinparam rectangle<<LoupeLoupeC_engine>>{
-  BackgroundColor #3b82f6
-  FontColor #eff6ff
-  BorderColor #2563eb
 }
 skinparam rectangle<<LoupeLoupeC_editorM_doc>>{
   BackgroundColor #64748b
@@ -289,21 +279,38 @@ skinparam rectangle<<LoupeLoupeC_src>>{
   FontColor #eff6ff
   BorderColor #2563eb
 }
-rectangle "==window\\n<size:10>[14 files · 1962 lines]</size>\\n\\nThe window: a scene's frame, a timeline and a debug-view picker, or the start panel while no scene is open." <<LoupeLoupeC_window>> as LoupeLoupeC_window
+skinparam rectangle<<LoupeLoupeC_editorM_camera_path>>{
+  BackgroundColor #64748b
+  FontColor #f8fafc
+  BorderColor #475569
+}
+skinparam rectangle<<LoupeLoupeC_editorM_placement>>{
+  BackgroundColor #64748b
+  FontColor #f8fafc
+  BorderColor #475569
+}
+skinparam rectangle<<LoupeLoupeC_engine>>{
+  BackgroundColor #3b82f6
+  FontColor #eff6ff
+  BorderColor #2563eb
+}
+rectangle "==window\\n<size:10>[16 files · 2729 lines]</size>\\n\\nThe window: a scene's frame, a timeline and a debug-view picker, or the start panel while no scene is open." <<LoupeLoupeC_window>> as LoupeLoupeC_window
 rectangle "editor" <<LoupeLoupeC_editor>> as LoupeLoupeC_editor {
   skinparam RectangleBorderColor<<LoupeLoupeC_editor>> #3b82f6
   skinparam RectangleFontColor<<LoupeLoupeC_editor>> #3b82f6
   skinparam RectangleBorderStyle<<LoupeLoupeC_editor>> dashed
 
-  rectangle "==placement\\n<size:10>[placement.cpp, placement.hpp]</size>\\n\\nA Placement both ways: to the engine's transform and the matrix the handles move, and back." <<LoupeLoupeC_editorM_placement>> as LoupeLoupeC_editorM_placement
   rectangle "==scene_tool\\n<size:10>[scene_tool.cpp, scene_tool.hpp]</size>\\n\\nThe editor's calls into autana's tools (tools.hpp's autana_tool): scene_edit.py reads a scene's objects and saves changed placements (comments and..." <<LoupeLoupeC_editorM_scene_tool>> as LoupeLoupeC_editorM_scene_tool
-  rectangle "==doc\\n<size:10>[doc.cpp, doc.hpp]</size>\\n\\nWhat the editor holds and saves: the scene file's objects, each placed as the file authors it." <<LoupeLoupeC_editorM_doc>> as LoupeLoupeC_editorM_doc
+  rectangle "==doc\\n<size:10>[doc.cpp, doc.hpp]</size>\\n\\nWhat the editor holds and saves: the scene file's objects, each placed as the file authors it, and its cameras' paths." <<LoupeLoupeC_editorM_doc>> as LoupeLoupeC_editorM_doc
+  rectangle "==camera_path\\n<size:10>[camera_path.cpp, camera_path.hpp]</size>\\n\\nA camera path as its .keys.toml writes it (autana's tools/anim/camera_keys.py reads it): keys with a time, the eye and the point it looks at." <<LoupeLoupeC_editorM_camera_path>> as LoupeLoupeC_editorM_camera_path
+  rectangle "==placement\\n<size:10>[placement.cpp, placement.hpp]</size>\\n\\nA Placement both ways: to the engine's transform and the matrix the handles move, and back." <<LoupeLoupeC_editorM_placement>> as LoupeLoupeC_editorM_placement
 }
-rectangle "==engine\\n<size:10>[4 files · 766 lines]</size>" <<LoupeLoupeC_engine>> as LoupeLoupeC_engine
 rectangle "==src\\n<size:10>[17 files · 1249 lines]</size>" <<LoupeLoupeC_src>> as LoupeLoupeC_src
+rectangle "==engine\\n<size:10>[8 files · 994 lines]</size>" <<LoupeLoupeC_engine>> as LoupeLoupeC_engine
 
-LoupeLoupeC_window .[#64748b,thickness=2].> LoupeLoupeC_editorM_placement
 LoupeLoupeC_window .[#64748b,thickness=2].> LoupeLoupeC_editorM_scene_tool
+LoupeLoupeC_editorM_camera_path .[#64748b,thickness=2].> LoupeLoupeC_editorM_placement
+LoupeLoupeC_editorM_doc .[#64748b,thickness=2].> LoupeLoupeC_editorM_camera_path
 LoupeLoupeC_editorM_placement .[#64748b,thickness=2].> LoupeLoupeC_editorM_doc
 LoupeLoupeC_editorM_scene_tool .[#64748b,thickness=2].> LoupeLoupeC_editorM_doc
 LoupeLoupeC_editorM_placement .[#64748b,thickness=2].> LoupeLoupeC_engine
@@ -349,6 +356,16 @@ skinparam rectangle<<LoupeLoupeC_engineM_frames>>{
   FontColor #f8fafc
   BorderColor #475569
 }
+skinparam rectangle<<LoupeLoupeC_engineM_path_curve>>{
+  BackgroundColor #64748b
+  FontColor #f8fafc
+  BorderColor #475569
+}
+skinparam rectangle<<LoupeLoupeC_engineM_engine_frame>>{
+  BackgroundColor #64748b
+  FontColor #f8fafc
+  BorderColor #475569
+}
 skinparam rectangle<<LoupeLoupeC_engineM_autana>>{
   BackgroundColor #64748b
   FontColor #f8fafc
@@ -359,26 +376,33 @@ skinparam rectangle<<LoupeLoupeC_engineM_pose>>{
   FontColor #f8fafc
   BorderColor #475569
 }
-rectangle "==editor\\n<size:10>[6 files · 547 lines]</size>" <<LoupeLoupeC_editor>> as LoupeLoupeC_editor
+rectangle "==editor\\n<size:10>[8 files · 1052 lines]</size>" <<LoupeLoupeC_editor>> as LoupeLoupeC_editor
 rectangle "==path\\n<size:10>[2 files · 404 lines]</size>\\n\\nA scene's camera path from the command line: one frame of it, or the whole path drawn by two sides, A and B, laid out as an A | B | difference video." <<LoupeLoupeC_path>> as LoupeLoupeC_path
 rectangle "==src\\n<size:10>[17 files · 1249 lines]</size>" <<LoupeLoupeC_src>> as LoupeLoupeC_src
-rectangle "==window\\n<size:10>[14 files · 1962 lines]</size>\\n\\nThe window: a scene's frame, a timeline and a debug-view picker, or the start panel while no scene is open." <<LoupeLoupeC_window>> as LoupeLoupeC_window
+rectangle "==window\\n<size:10>[16 files · 2729 lines]</size>\\n\\nThe window: a scene's frame, a timeline and a debug-view picker, or the start panel while no scene is open." <<LoupeLoupeC_window>> as LoupeLoupeC_window
 rectangle "engine" <<LoupeLoupeC_engine>> as LoupeLoupeC_engine {
   skinparam RectangleBorderColor<<LoupeLoupeC_engine>> #3b82f6
   skinparam RectangleFontColor<<LoupeLoupeC_engine>> #3b82f6
   skinparam RectangleBorderStyle<<LoupeLoupeC_engine>> dashed
 
   rectangle "==frames\\n<size:10>[frames.cpp, frames.hpp]</size>\\n\\nGfx's frame from a provider, drawn by autana's host frame loop; step and exact seek." <<LoupeLoupeC_engineM_frames>> as LoupeLoupeC_engineM_frames
+  rectangle "==path_curve\\n<size:10>[path_curve.cpp, path_curve.hpp]</size>\\n\\nA camera path as the clip autana bakes from it: the eye on a cubic curve (glTF CUBICSPLINE, an in-tangent, value and out-tangent per key) and the..." <<LoupeLoupeC_engineM_path_curve>> as LoupeLoupeC_engineM_path_curve
+  rectangle "==engine_frame\\n<size:10>[engine_frame.cpp, engine_frame.hpp]</size>\\n\\nThe z mirror between autana's frame and glTF's." <<LoupeLoupeC_engineM_engine_frame>> as LoupeLoupeC_engineM_engine_frame
   rectangle "==autana\\n<size:10>[autana.hpp]</size>\\n\\nThe one place Loupe includes autana's headers (tests/include_gate.cmake)." <<LoupeLoupeC_engineM_autana>> as LoupeLoupeC_engineM_autana
   rectangle "==pose\\n<size:10>[pose.hpp]</size>\\n\\nAutana's packages (launcher/packages) that the poses Frames and the window hand each other need: math for the poses and the scene's box,..." <<LoupeLoupeC_engineM_pose>> as LoupeLoupeC_engineM_pose
 }
 
 LoupeLoupeC_editor .[#64748b,thickness=2].> LoupeLoupeC_engineM_frames
+LoupeLoupeC_editor .[#64748b,thickness=2].> LoupeLoupeC_engineM_path_curve
 LoupeLoupeC_path .[#64748b,thickness=2].> LoupeLoupeC_engineM_frames
 LoupeLoupeC_src .[#64748b,thickness=2].> LoupeLoupeC_engineM_autana
 LoupeLoupeC_src .[#64748b,thickness=2].> LoupeLoupeC_engineM_frames
+LoupeLoupeC_window .[#64748b,thickness=2].> LoupeLoupeC_engineM_engine_frame
 LoupeLoupeC_window .[#64748b,thickness=2].> LoupeLoupeC_engineM_frames
+LoupeLoupeC_engineM_path_curve .[#64748b,thickness=2].> LoupeLoupeC_engineM_autana
+LoupeLoupeC_engineM_engine_frame .[#64748b,thickness=2].> LoupeLoupeC_engineM_pose
 LoupeLoupeC_engineM_frames .[#64748b,thickness=2].> LoupeLoupeC_engineM_pose
+LoupeLoupeC_engineM_path_curve .[#64748b,thickness=2].> LoupeLoupeC_engineM_pose
 LoupeLoupeC_engineM_frames .[#64748b,thickness=2].> LoupeLoupeC_src
 @enduml
 `;case`c_path`:return`@startuml
@@ -419,7 +443,7 @@ rectangle "path" <<LoupeLoupeC_path>> as LoupeLoupeC_path {
 
   rectangle "==path\\n<size:10>[path.cpp, path.hpp]</size>\\n\\nA scene's camera path from the command line: one frame of it, or the whole path drawn by two sides, A and B, laid out as an A | B | difference video." <<LoupeLoupeC_pathM_path>> as LoupeLoupeC_pathM_path
 }
-rectangle "==engine\\n<size:10>[4 files · 766 lines]</size>" <<LoupeLoupeC_engine>> as LoupeLoupeC_engine
+rectangle "==engine\\n<size:10>[8 files · 994 lines]</size>" <<LoupeLoupeC_engine>> as LoupeLoupeC_engine
 
 LoupeLoupeC_src .[#64748b,thickness=2].> LoupeLoupeC_pathM_path
 LoupeLoupeC_pathM_path .[#64748b,thickness=2].> LoupeLoupeC_engine
@@ -510,8 +534,8 @@ skinparam rectangle<<LoupeLoupeC_srcM_paths>>{
   FontColor #f8fafc
   BorderColor #475569
 }
-rectangle "==editor\\n<size:10>[6 files · 547 lines]</size>" <<LoupeLoupeC_editor>> as LoupeLoupeC_editor
-rectangle "==engine\\n<size:10>[4 files · 766 lines]</size>" <<LoupeLoupeC_engine>> as LoupeLoupeC_engine
+rectangle "==editor\\n<size:10>[8 files · 1052 lines]</size>" <<LoupeLoupeC_editor>> as LoupeLoupeC_editor
+rectangle "==engine\\n<size:10>[8 files · 994 lines]</size>" <<LoupeLoupeC_engine>> as LoupeLoupeC_engine
 rectangle "==update\\n<size:10>[4 files · 853 lines]</size>\\n\\nLoupe keeps itself current from its GitHub releases." <<LoupeLoupeC_update>> as LoupeLoupeC_update
 rectangle "src" <<LoupeLoupeC_src>> as LoupeLoupeC_src {
   skinparam RectangleBorderColor<<LoupeLoupeC_src>> #3b82f6
@@ -529,7 +553,7 @@ rectangle "src" <<LoupeLoupeC_src>> as LoupeLoupeC_src {
   rectangle "==paths\\n<size:10>[paths.cpp, paths.hpp]</size>\\n\\nA path as UTF-8 text and back: the spelling of recent.txt, ImGui and SDL; and a file read whole, read by line or written by line." <<LoupeLoupeC_srcM_paths>> as LoupeLoupeC_srcM_paths
 }
 rectangle "==path\\n<size:10>[2 files · 404 lines]</size>\\n\\nA scene's camera path from the command line: one frame of it, or the whole path drawn by two sides, A and B, laid out as an A | B | difference video." <<LoupeLoupeC_path>> as LoupeLoupeC_path
-rectangle "==window\\n<size:10>[14 files · 1962 lines]</size>\\n\\nThe window: a scene's frame, a timeline and a debug-view picker, or the start panel while no scene is open." <<LoupeLoupeC_window>> as LoupeLoupeC_window
+rectangle "==window\\n<size:10>[16 files · 2729 lines]</size>\\n\\nThe window: a scene's frame, a timeline and a debug-view picker, or the start panel while no scene is open." <<LoupeLoupeC_window>> as LoupeLoupeC_window
 
 LoupeLoupeC_editor .[#64748b,thickness=2].> LoupeLoupeC_srcM_tools
 LoupeLoupeC_engine .[#64748b,thickness=2].> LoupeLoupeC_srcM_options
@@ -601,7 +625,7 @@ skinparam rectangle<<LoupeLoupeC_src>>{
   FontColor #eff6ff
   BorderColor #2563eb
 }
-rectangle "==window\\n<size:10>[14 files · 1962 lines]</size>\\n\\nThe window: a scene's frame, a timeline and a debug-view picker, or the start panel while no scene is open." <<LoupeLoupeC_window>> as LoupeLoupeC_window
+rectangle "==window\\n<size:10>[16 files · 2729 lines]</size>\\n\\nThe window: a scene's frame, a timeline and a debug-view picker, or the start panel while no scene is open." <<LoupeLoupeC_window>> as LoupeLoupeC_window
 rectangle "update" <<LoupeLoupeC_update>> as LoupeLoupeC_update {
   skinparam RectangleBorderColor<<LoupeLoupeC_update>> #3b82f6
   skinparam RectangleFontColor<<LoupeLoupeC_update>> #3b82f6
@@ -666,15 +690,10 @@ skinparam rectangle<<LoupeLoupeC_update>>{
   FontColor #eff6ff
   BorderColor #2563eb
 }
-skinparam rectangle<<LoupeLoupeC_windowM_panels>>{
+skinparam rectangle<<LoupeLoupeC_windowM_path_editor>>{
   BackgroundColor #64748b
   FontColor #f8fafc
   BorderColor #475569
-}
-skinparam rectangle<<LoupeLoupeC_editor>>{
-  BackgroundColor #3b82f6
-  FontColor #eff6ff
-  BorderColor #2563eb
 }
 skinparam rectangle<<LoupeLoupeC_windowM_gpu>>{
   BackgroundColor #64748b
@@ -682,6 +701,16 @@ skinparam rectangle<<LoupeLoupeC_windowM_gpu>>{
   BorderColor #475569
 }
 skinparam rectangle<<LoupeLoupeC_engine>>{
+  BackgroundColor #3b82f6
+  FontColor #eff6ff
+  BorderColor #2563eb
+}
+skinparam rectangle<<LoupeLoupeC_windowM_panels>>{
+  BackgroundColor #64748b
+  FontColor #f8fafc
+  BorderColor #475569
+}
+skinparam rectangle<<LoupeLoupeC_editor>>{
   BackgroundColor #3b82f6
   FontColor #eff6ff
   BorderColor #2563eb
@@ -697,25 +726,27 @@ rectangle "window" <<LoupeLoupeC_window>> as LoupeLoupeC_window {
   rectangle "==files\\n<size:10>[files.cpp, files.hpp]</size>\\n\\nThe window's files through SDL: the system's open-file dialog for a scene, and the folders the start panel reads." <<LoupeLoupeC_windowM_files>> as LoupeLoupeC_windowM_files
   rectangle "==frame_texture\\n<size:10>[frame_texture.cpp, frame_texture.hpp]</size>\\n\\nThe engine's frame as one texture ImGui draws: a user texture the Vulkan backend creates, uploads and frees like its own font atlas." <<LoupeLoupeC_windowM_frame_texture>> as LoupeLoupeC_windowM_frame_texture
   rectangle "==observer\\n<size:10>[observer.cpp, observer.hpp]</size>\\n\\nThe observer: the person's own camera on a frozen frame, which the view's second draw is seen from (Frames::observe)." <<LoupeLoupeC_windowM_observer>> as LoupeLoupeC_windowM_observer
-  rectangle "==panels\\n<size:10>[panels.cpp, panels.hpp]</size>\\n\\nThe window's panels." <<LoupeLoupeC_windowM_panels>> as LoupeLoupeC_windowM_panels
+  rectangle "==path_editor\\n<size:10>[path_editor.cpp, path_editor.hpp]</size>\\n\\nThe editor's camera paths: the selected camera's path drawn over the frame with a handle on each key's eye and look_at, the key rows in the..." <<LoupeLoupeC_windowM_path_editor>> as LoupeLoupeC_windowM_path_editor
   rectangle "==gpu\\n<size:10>[gpu.cpp, gpu.hpp]</size>\\n\\nAfter imgui's examples/example_sdl3_vulkan: one instance, device and queue, the swapchain kept by imgui's ImGui_ImplVulkanH_* helpers." <<LoupeLoupeC_windowM_gpu>> as LoupeLoupeC_windowM_gpu
+  rectangle "==panels\\n<size:10>[panels.cpp, panels.hpp]</size>\\n\\nThe window's panels." <<LoupeLoupeC_windowM_panels>> as LoupeLoupeC_windowM_panels
 }
 rectangle "==update\\n<size:10>[4 files · 853 lines]</size>\\n\\nLoupe keeps itself current from its GitHub releases." <<LoupeLoupeC_update>> as LoupeLoupeC_update
-rectangle "==editor\\n<size:10>[6 files · 547 lines]</size>" <<LoupeLoupeC_editor>> as LoupeLoupeC_editor
-rectangle "==engine\\n<size:10>[4 files · 766 lines]</size>" <<LoupeLoupeC_engine>> as LoupeLoupeC_engine
+rectangle "==engine\\n<size:10>[8 files · 994 lines]</size>" <<LoupeLoupeC_engine>> as LoupeLoupeC_engine
+rectangle "==editor\\n<size:10>[8 files · 1052 lines]</size>" <<LoupeLoupeC_editor>> as LoupeLoupeC_editor
 
 LoupeLoupeC_src .[#64748b,thickness=2].> LoupeLoupeC_windowM_run_window
-LoupeLoupeC_windowM_editor .[#64748b,thickness=2].> LoupeLoupeC_windowM_panels
+LoupeLoupeC_windowM_editor .[#64748b,thickness=2].> LoupeLoupeC_windowM_path_editor
 LoupeLoupeC_windowM_run_window .[#64748b,thickness=2].> LoupeLoupeC_windowM_editor
 LoupeLoupeC_windowM_run_window .[#64748b,thickness=2].> LoupeLoupeC_windowM_files
 LoupeLoupeC_windowM_frame_texture .[#64748b,thickness=2].> LoupeLoupeC_windowM_gpu
 LoupeLoupeC_windowM_run_window .[#64748b,thickness=2].> LoupeLoupeC_windowM_frame_texture
 LoupeLoupeC_windowM_run_window .[#64748b,thickness=2].> LoupeLoupeC_windowM_observer
-LoupeLoupeC_windowM_editor .[#64748b,thickness=2].> LoupeLoupeC_editor
+LoupeLoupeC_windowM_path_editor .[#64748b,thickness=2].> LoupeLoupeC_windowM_panels
 LoupeLoupeC_windowM_files .[#64748b,thickness=2].> LoupeLoupeC_src
 LoupeLoupeC_windowM_frame_texture .[#64748b,thickness=2].> LoupeLoupeC_engine
 LoupeLoupeC_windowM_observer .[#64748b,thickness=2].> LoupeLoupeC_engine
 LoupeLoupeC_windowM_panels .[#64748b,thickness=2].> LoupeLoupeC_src
+LoupeLoupeC_windowM_path_editor .[#64748b,thickness=2].> LoupeLoupeC_editor
 LoupeLoupeC_windowM_run_window .[#64748b,thickness=2].> LoupeLoupeC_update
 @enduml
 `;default:throw Error(`Unknown viewId: `+e)}};export{e as pumlSource};
