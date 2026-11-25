@@ -232,6 +232,7 @@ if(LOUPE_PACK_TOOL)
     add_test(NAME doc_shots_current
              COMMAND "${CMAKE_COMMAND}" "-DLOUPE=$<TARGET_FILE:loupe>" "-DSAME_IMAGE=$<TARGET_FILE:same_image>"
                      "-DDOCS=${PROJECT_SOURCE_DIR}/docs/shots" "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/doc_shots" -DCHECK=ON
+                     "-DSOURCE=${PROJECT_SOURCE_DIR}" "-DAUTANA=${AUTANA_DIR}"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/doc_shots.cmake")
     on_packs(doc_shots_current)
     set_tests_properties(doc_shots_current PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")

@@ -55,7 +55,7 @@ check_refusals() {
     const std::string toml = "s.scene.toml";
     const bool tool = loupe::builds_packs();
     const std::string no_tool = "built without the pack tool";
-    const std::string shot = "--shot takes -o and nothing else";
+    const std::string shot = tool ? "--shot takes -o and nothing else" : no_tool;
     const std::vector<Case> cases = {
         {.args = {"s.apak", "--frame", "2", "-o", "f.png"}, .refusal = ""},
         {.args = {"s.apak", "--frame", "2"}, .refusal = "--frame N writes -o"},
@@ -74,9 +74,11 @@ check_refusals() {
          .refusal = "--b-args takes --object, --camera, --view and --set, not --frames"},
         {.args = {toml, "--compare", "HEAD", "--b-args", "--view", "--video", "v.mp4"},
          .refusal = "--b-args: --view needs a value"},
-        {.args = {"--shot", "editor", "-o", "editor.png"}, .refusal = ""},
-        {.args = {"--shot", loupe::ALL_SHOTS, "-o", "shots"}, .refusal = ""},
+        {.args = {"--shot", "editor", "-o", "editor.png"}, .refusal = tool ? "" : no_tool},
+        {.args = {"--shot", loupe::ALL_SHOTS, "-o", "shots"}, .refusal = tool ? "" : no_tool},
+        {.args = {"--shot", "", "-o", "editor.png"}, .refusal = "--shot needs a shot's name"},
         {.args = {"--shot", "editor", "-o", "editor.bmp"}, .refusal = shot},
+        {.args = {"--shot", loupe::ALL_SHOTS, "-o", "shots.png"}, .refusal = shot},
         {.args = {"--shot", "editor"}, .refusal = shot},
         {.args = {toml, "--shot", "editor", "-o", "editor.png"}, .refusal = shot},
         {.args = {"--shot", "editor", "--camera", "tour", "-o", "editor.png"}, .refusal = shot},

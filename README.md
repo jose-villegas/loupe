@@ -229,7 +229,7 @@ build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml --
 | `-o out.bmp`, `--video out.avi` | the last frame, every frame |
 | `--checkpoint-mb MB` | the window's checkpoint memory (1024); past it, every other checkpoint goes |
 | `--ticks N` | closes the window after N ticks, for scripted runs |
-| `--shot NAME -o out.png` | draws one of this README's pictures of the window and exits; `--shot all -o FOLDER` draws each as `FOLDER/NAME.png` (Tests) |
+| `--shot NAME -o out.png` | draws one of this README's pictures of the window and exits; `--shot all -o FOLDER` draws each as `FOLDER/NAME.png`; needs the pack tool (Tests) |
 | `--version` | prints the build's version, commit, channel and autana commit (Download), and exits |
 
 The flags but the last four are autana's `third_party/autana/launcher/tools/render/scene_viewer.sh` flags, and the output is the same bytes.
@@ -293,7 +293,7 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `observer_steer` | the observer starts at the speed that crosses the scene's box in 20 seconds; W, A, S, D, Q and E are its axes unless a text field has the keys, a right drag looks only when it began over the frame, and the wheel counts only over it |
 | `view_switch` | a debug view picked mid-run, and kept through a seek back, draws what it drew when picked from the start |
 | `window_smoke`, `window_start` | the window opens, on a scene and on the start panel, and draws 10 ticks offscreen on Mesa's lavapipe under the Khronos validation layer, with no validation error; skipped where either is missing |
-| `doc_shots_current` | every picture of the window in `docs/shots` holds the pixels its shot draws offscreen on lavapipe, and none is left that no shot draws; skipped without lavapipe |
+| `doc_shots_current` | every picture of the window in `docs/shots` holds the pixels its shot draws offscreen on lavapipe, and none is left that no shot draws; skipped without lavapipe, and with autana at any commit but the pinned one (the nightly's `main`), whose scenes can draw other pixels |
 | `version` | `--version` names the project version, Loupe's commit, the configured channel and the autana commit |
 | `update` | SHA-256 on the standard's examples; GitHub's saved release answers give each system's download; which offers are newer; the setting; a check stages only a verified newer download and a local build never asks; a running copy, beside its samples and in `bin/`, is swapped for a staged one and says so at its next start |
 | `build_id` | `--version`'s line for each channel, and a copy counts as installed only with the setup's uninstaller beside it |

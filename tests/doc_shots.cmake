@@ -7,6 +7,16 @@
 cmake_minimum_required(VERSION 3.25)
 include("${CMAKE_CURRENT_LIST_DIR}/offscreen.cmake")
 set(regenerate "cmake --build <build> --target doc_shots, on Linux with lavapipe (README, Tests)")
+# The pictures are of autana's scenes as the pinned commit draws them; another
+# autana (the nightly's main, or -DAUTANA_DIR) can draw other pixels.
+execute_process(COMMAND git -C "${SOURCE}" rev-parse HEAD:third_party/autana OUTPUT_VARIABLE pinned
+                OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+execute_process(COMMAND git -C "${AUTANA}" rev-parse HEAD OUTPUT_VARIABLE checked_out OUTPUT_STRIP_TRAILING_WHITESPACE
+                ERROR_QUIET)
+if(CHECK AND NOT pinned STREQUAL checked_out)
+    message("SKIP: autana is at ${checked_out}, not the pinned ${pinned}")
+    return()
+endif()
 find_lavapipe(icd)
 if(NOT CHECK AND NOT icd)
     message(FATAL_ERROR "the doc shots draw with Mesa's lavapipe, which is Linux's: run ${regenerate}")
@@ -24,10 +34,13 @@ file(GLOB drawn RELATIVE "${OUT}/shots" "${OUT}/shots/*.png")
 file(GLOB kept RELATIVE "${DOCS}" "${DOCS}/*.png")
 
 if(NOT CHECK)
+    # Copied over first, then only the pictures no shot draws removed: a failed copy loses none.
+    file(COPY "${OUT}/shots/" DESTINATION "${DOCS}")
     foreach(name IN LISTS kept)
-        file(REMOVE "${DOCS}/${name}")
+        if(NOT name IN_LIST drawn)
+            file(REMOVE "${DOCS}/${name}")
+        endif()
     endforeach()
-    file(COPY ${OUT}/shots/ DESTINATION "${DOCS}")
     list(JOIN drawn ", " drawn)
     message("drew ${drawn} into ${DOCS}")
     return()

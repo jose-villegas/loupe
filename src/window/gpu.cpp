@@ -380,7 +380,9 @@ Gpu::State::record_read_back(VkCommandBuffer commands, VkImage image) {
     image_barrier(commands, image,
                   {.layout = {VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
                    .access = {VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT},
-                   .stage = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT}});
+                   // All commands: the render pass's own move to PRESENT_SRC is ordered only by its
+                   // implicit dependency to BOTTOM_OF_PIPE, which COLOR_ATTACHMENT_OUTPUT alone misses.
+                   .stage = {VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT}});
     VkBufferImageCopy copy = {};
     copy.imageSubresource = {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1};
@@ -538,12 +540,17 @@ Gpu::end_frame() {
 std::optional<Picture>
 Gpu::end_frame_read_back(std::string* why) {
     State& s = *state_;
-    s.read_asked = true;
+    // Four 8-bit channels in one of the two orders open_swapchain asks for; a
+    // surface that offered neither gave another format, read as nothing.
+    const VkFormat format = s.swapchain.SurfaceFormat.format;
+    const bool readable = (s.image_usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0
+                          && (format == VK_FORMAT_B8G8R8A8_UNORM || format == VK_FORMAT_R8G8B8A8_UNORM);
+    s.read_asked = readable;
     s.read_recorded = false;
     end_frame();
     s.read_asked = false;
-    if ((s.image_usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) == 0) {
-        *why = "the window's swapchain cannot be read back";
+    if (!readable) {
+        *why = std::format("the window's swapchain (format {}) cannot be read back", static_cast<int>(format));
         return std::nullopt;
     }
     if (!s.read_recorded) {
@@ -558,7 +565,7 @@ Gpu::end_frame_read_back(std::string* why) {
     picture.rgba.assign(bytes, bytes + s.read_size);
     vkUnmapMemory(s.device, s.read_memory);
     // The swapchain is BGRA or RGBA (open_swapchain); the window has no alpha to keep.
-    const bool bgra = s.swapchain.SurfaceFormat.format == VK_FORMAT_B8G8R8A8_UNORM;
+    const bool bgra = format == VK_FORMAT_B8G8R8A8_UNORM;
     for (size_t at = 0; at < picture.rgba.size(); at += Picture::CHANNELS) {
         if (bgra) {
             std::swap(picture.rgba[at], picture.rgba[at + 2]);

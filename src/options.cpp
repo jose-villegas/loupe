@@ -94,14 +94,20 @@ window_flags_fit(const Options& options, std::string* why) {
     return true;
 }
 
-// False with `why` set when --shot comes with anything but -o: OUT.png for
-// one shot, a folder for all. A shot names its own scene and flags.
+// False with `why` set when --shot comes with anything but -o (OUT.png for one
+// shot, a folder for all), or without the pack tool: a shot names its own
+// .scene.toml and flags.
 bool
 shot_flags_fit(const Options& options, std::string* why) {
     const bool alone = options.scene.empty() && options.render.args().empty() && !options.frames && !options.dt_ms
                        && options.out_video.empty() && !options.frame && options.compare.empty() && !options.b_render
                        && !options.checkpoint_mb && !options.ticks && !options.version;
-    const bool out_fits = options.shot == ALL_SHOTS ? !options.out_bmp.empty() : options.out_bmp.ends_with(".png");
+    const bool png = options.out_bmp.ends_with(".png");
+    const bool out_fits = options.shot == ALL_SHOTS ? !options.out_bmp.empty() && !png : png;
+    if (!builds_packs()) {
+        *why = "this loupe was built without the pack tool --shot needs to build the shots' scenes";
+        return false;
+    }
     if (!alone || !out_fits) {
         *why =
             std::format("--shot takes -o and nothing else: --shot NAME -o OUT.png, or --shot {} -o FOLDER", ALL_SHOTS);
@@ -182,6 +188,10 @@ apply_flag(const std::string& flag, const std::string& value, Options* options, 
     } else if (flag == "--video") {
         options->out_video = value;
     } else if (flag == "--shot") {
+        if (value.empty()) {
+            *why = std::format("--shot needs a shot's name, or {}", ALL_SHOTS);
+            return false;
+        }
         options->shot = value;
     } else if (flag == "--compare") {
         options->compare = value;

@@ -438,6 +438,8 @@ shoot(const window::Shot& shot, const std::filesystem::path& out) {
         std::fprintf(stderr, "loupe: %s\n", why.c_str());
         return false;
     }
+    // A shot draws only what its drive sets: the desk's mouse and keys reach none of it.
+    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse | ImGuiConfigFlags_NoKeyboard;
     Options run;
     run.scene = autana_dir() / shot.scene;
     run.render.camera = shot.camera;
@@ -446,8 +448,13 @@ shoot(const window::Shot& shot, const std::filesystem::path& out) {
     Window window(*gpu, run);
     bool ok = window.open(run) && window.drive(shot);
     std::optional<window::Picture> picture;
-    for (int tick = 0; ok && tick < window::SHOT_SETTLE_TICKS && gpu->begin_frame(); tick++) {
+    int tick = 0;
+    for (; ok && tick < window::SHOT_SETTLE_TICKS && gpu->begin_frame(); tick++) {
         window.tick(tick + 1 == window::SHOT_SETTLE_TICKS ? &picture : nullptr);
+    }
+    if (ok && tick < window::SHOT_SETTLE_TICKS) {
+        std::fprintf(stderr, "loupe: shot %.*s: the window closed after %d of %d ticks\n",
+                     static_cast<int>(shot.name.size()), shot.name.data(), tick, window::SHOT_SETTLE_TICKS);
     }
     if (picture && !window::write_shot(*picture, shot, out, &why)) {
         std::fprintf(stderr, "loupe: shot %.*s: %s\n", static_cast<int>(shot.name.size()), shot.name.data(),

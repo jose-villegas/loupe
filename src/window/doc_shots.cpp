@@ -157,10 +157,15 @@ write_shot(const Picture& picture, const Shot& shot, const std::filesystem::path
             return false;
         }
         const ImVec2 scale = ImGui::GetIO().DisplayFramebufferScale;
+        // Both corners clamped to the picture: a panel partly off it keeps its visible part.
         x = std::clamp(static_cast<int>(panel->Pos.x * scale.x), 0, picture.width);
         y = std::clamp(static_cast<int>(panel->Pos.y * scale.y), 0, picture.height);
-        width = std::clamp(static_cast<int>(panel->Size.x * scale.x), 0, picture.width - x);
-        height = std::clamp(static_cast<int>(panel->Size.y * scale.y), 0, picture.height - y);
+        width = std::clamp(static_cast<int>((panel->Pos.x + panel->Size.x) * scale.x), 0, picture.width) - x;
+        height = std::clamp(static_cast<int>((panel->Pos.y + panel->Size.y) * scale.y), 0, picture.height) - y;
+    }
+    if (width <= 0 || height <= 0) {
+        *why = std::format("panel {} is not on the picture", shot.crop);
+        return false;
     }
     const int pitch = picture.width * Picture::CHANNELS;
     // The surface only points into the picture: a const view SDL does not write through.
