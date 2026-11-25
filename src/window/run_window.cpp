@@ -446,7 +446,7 @@ shoot(const window::Shot& shot, const std::filesystem::path& out) {
     run.dt_ms = window::SHOT_DT_MS;
     run.ticks = window::SHOT_SETTLE_TICKS;
     Window window(*gpu, run);
-    bool ok = window.open(run) && window.drive(shot);
+    const bool ok = window.open(run) && window.drive(shot);
     std::optional<window::Picture> picture;
     int tick = 0;
     for (; ok && tick < window::SHOT_SETTLE_TICKS && gpu->begin_frame(); tick++) {
