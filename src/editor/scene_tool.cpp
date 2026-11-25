@@ -1,9 +1,12 @@
 #include "editor/scene_tool.hpp"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <cstddef>
 #include <format>
+#include <functional>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <system_error>
@@ -23,14 +26,23 @@ namespace {
 constexpr const char* SCENE_EDIT = "scene/scene_edit.py";
 constexpr const char* BAKE = "bake/bake.py";
 
-// `values` as X,Y,Z, each the shortest text that reads back as the same float.
+// set-keys' FROM for a key added since the file was read.
+constexpr const char* NEW_KEY = "new";
+
+// `value` as the shortest text that reads back as the same float.
+std::string
+number_text(float value) {
+    std::array<char, 32> digits{};
+    const auto [end, error] = std::to_chars(digits.data(), digits.data() + digits.size(), value);
+    return {digits.data(), error == std::errc{} ? end : digits.data()};
+}
+
+// `values` as X,Y,Z, each number_text.
 std::string
 vector_text(const std::array<float, 3>& values) {
     std::string text;
     for (size_t i = 0; i < values.size(); i++) {
-        std::array<char, 32> digits{};
-        const auto [end, error] = std::to_chars(digits.begin(), digits.end(), values[i]);
-        text += (i > 0 ? "," : "") + std::string(digits.data(), error == std::errc{} ? end : digits.data());
+        text += (i > 0 ? "," : "") + number_text(values[i]);
     }
     return text;
 }
@@ -40,47 +52,122 @@ read_vector(const nlohmann::json& value) {
     return {value.at(0).get<float>(), value.at(1).get<float>(), value.at(2).get<float>()};
 }
 
+// A camera's `path` in scene_edit.py read's JSON; none for another object or a camera on no path.
+std::optional<PathSource>
+read_source(const nlohmann::json& item) {
+    if (!item.contains("path") || item.at("path").is_null()) {
+        return std::nullopt;
+    }
+    const nlohmann::json& path = item.at("path");
+    return PathSource{.keys = path.at("keys").is_null() ? fs::path() : from_utf8(path.at("keys").get<std::string>()),
+                      .feeds_bakes = path.at("feeds_bakes").get<bool>()};
+}
+
+// A path key's set-keys argument: FROM:T:EX,EY,EZ:LX,LY,LZ, FROM the place in
+// the file of the table with the key's id.
+std::string
+key_text(const CameraPath& path, const CameraKey& key) {
+    const auto at = std::ranges::find(path.file_ids, key.id);
+    const std::string from =
+        at == path.file_ids.end() ? std::string(NEW_KEY) : std::to_string(at - path.file_ids.begin());
+    return std::format("{}:{}:{}:{}", from, number_text(key.t), vector_text(key.eye), vector_text(key.look_at));
+}
+
+// The ids of `keys`, in order.
+std::vector<uint32_t>
+ids(const std::vector<CameraKey>& keys) {
+    std::vector<uint32_t> out;
+    out.reserve(keys.size());
+    for (const CameraKey& key : keys) {
+        out.push_back(key.id);
+    }
+    return out;
+}
+
+// scene_edit.py `command` on `toml`, `args` after it, logged in `folder`.
+bool
+scene_edit(const char* command, const fs::path& toml, std::vector<std::string> args, const fs::path& folder,
+           std::string* why) {
+    args.insert(args.begin(), {command, utf8(toml)});
+    return autana_tool(SCENE_EDIT, args, folder / "scene_edit.log", why).has_value();
+}
+
+// `toml` read by scene_edit.py `command` and its JSON parsed by `parse`; none with `why` set.
+template <typename Doc>
+std::optional<Doc>
+read_with(const char* command, const fs::path& toml, const fs::path& folder, std::string* why,
+          std::optional<Doc> (*parse)(const std::string&, const fs::path&, std::string*)) {
+    const fs::path json = folder / (std::string(command) + ".json");
+    if (!scene_edit(command, toml, {"-o", utf8(json)}, folder, why)) {
+        return std::nullopt;
+    }
+    return parse(read_text(json), toml, why);
+}
+
+// scene_edit.py `command` on `toml` with `args`, then `saved` to mark the
+// document saved; true at once when `args` is empty, as nothing changed.
+bool
+save_with(const char* command, const fs::path& toml, std::vector<std::string> args, const fs::path& folder,
+          std::string* why, const std::function<void()>& saved) {
+    if (args.empty()) {
+        return true;
+    }
+    if (!scene_edit(command, toml, std::move(args), folder, why)) {
+        return false;
+    }
+    saved();
+    return true;
+}
+
+// Calls `each` on every item of the array `list` in scene_edit.py `command`'s
+// JSON; false with `why` set when it has no such array or an item lacks a field.
+bool
+each_item(const std::string& json, const char* list, const char* command,
+          const std::function<void(const nlohmann::json&)>& each, std::string* why) {
+    const nlohmann::json parsed = nlohmann::json::parse(json, nullptr, false);
+    if (parsed.is_discarded() || !parsed.contains(list) || !parsed[list].is_array()) {
+        *why = std::format("scene_edit.py {} gave no {}: {}", command, list, json);
+        return false;
+    }
+    try {
+        for (const nlohmann::json& item : parsed[list]) {
+            each(item);
+        }
+    } catch (const nlohmann::json::exception& error) {
+        *why = std::format("scene_edit.py {} gave {} without their fields: {}", command, list, error.what());
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 std::optional<SceneDoc>
 parse_scene(const std::string& json, const fs::path& toml, std::string* why) {
-    const nlohmann::json parsed = nlohmann::json::parse(json, nullptr, false);
-    if (parsed.is_discarded() || !parsed.contains("objects") || !parsed["objects"].is_array()) {
-        *why = "scene_edit.py read gave no objects: " + json;
-        return std::nullopt;
-    }
     SceneDoc doc{.toml = toml, .objects = {}};
-    try {
-        for (const nlohmann::json& item : parsed["objects"]) {
-            const auto text_or_empty = [&item](const char* key) {
-                return item.at(key).is_null() ? std::string() : item.at(key).get<std::string>();
-            };
-            Object object{.path = item.at("name").get<std::string>(),
-                          .parent = text_or_empty("parent"),
-                          .kind = item.at("kind").get<std::string>(),
-                          .local = {.position = read_vector(item.at("position")),
-                                    .rotation_deg = read_vector(item.at("rotation")),
-                                    .scale = read_vector(item.at("scale"))},
-                          .saved = {},
-                          .baked = item.at("baked").get<bool>(),
-                          .locked = text_or_empty("locked")};
-            object.saved = object.local;
-            doc.objects.push_back(std::move(object));
-        }
-    } catch (const nlohmann::json::exception& error) {
-        *why = std::string("scene_edit.py read gave an object without its fields: ") + error.what();
-        return std::nullopt;
-    }
-    return doc;
+    const auto add = [&doc](const nlohmann::json& item) {
+        const auto text_or_empty = [&item](const char* key) {
+            return item.at(key).is_null() ? std::string() : item.at(key).get<std::string>();
+        };
+        Object object{.path = item.at("name").get<std::string>(),
+                      .parent = text_or_empty("parent"),
+                      .kind = item.at("kind").get<std::string>(),
+                      .local = {.position = read_vector(item.at("position")),
+                                .rotation_deg = read_vector(item.at("rotation")),
+                                .scale = read_vector(item.at("scale"))},
+                      .saved = {},
+                      .baked = item.at("baked").get<bool>(),
+                      .locked = text_or_empty("locked"),
+                      .path_source = read_source(item)};
+        object.saved = object.local;
+        doc.objects.push_back(std::move(object));
+    };
+    return each_item(json, "objects", "read", add, why) ? std::optional(std::move(doc)) : std::nullopt;
 }
 
 std::optional<SceneDoc>
 read_scene(const fs::path& toml, const fs::path& folder, std::string* why) {
-    const fs::path json = folder / "scene.json";
-    if (!autana_tool(SCENE_EDIT, {"read", utf8(toml), "-o", utf8(json)}, folder / "scene_edit.log", why)) {
-        return std::nullopt;
-    }
-    return parse_scene(read_text(json), toml, why);
+    return read_with<SceneDoc>("read", toml, folder, why, &parse_scene);
 }
 
 std::vector<std::string>
@@ -100,18 +187,55 @@ save_args(const SceneDoc& doc) {
 
 bool
 save_scene(SceneDoc& doc, const fs::path& folder, std::string* why) {
-    std::vector<std::string> args = save_args(doc);
-    if (args.empty()) {
-        return true;
+    return save_with("set", doc.toml, save_args(doc), folder, why, [&doc] {
+        for (Object& object : doc.objects) {
+            object.saved = object.local;
+        }
+    });
+}
+
+std::optional<CameraPath>
+parse_path(const std::string& json, const fs::path& keys_toml, std::string* why) {
+    CameraPath path{.keys_toml = keys_toml, .keys = {}, .saved = {}, .file_ids = {}};
+    const auto add = [&path](const nlohmann::json& item) {
+        path.keys.push_back({.t = item.at("t").get<float>(),
+                             .eye = read_vector(item.at("eye")),
+                             .look_at = read_vector(item.at("look_at")),
+                             .id = next_key_id()});
+    };
+    if (!each_item(json, "keys", "read-keys", add, why)) {
+        return std::nullopt;
     }
-    args.insert(args.begin(), {"set", utf8(doc.toml)});
-    if (!autana_tool(SCENE_EDIT, args, folder / "scene_edit.log", why)) {
-        return false;
+    path.saved = path.keys;
+    path.file_ids = ids(path.keys);
+    return path;
+}
+
+std::optional<CameraPath>
+read_path(const fs::path& keys_toml, const fs::path& folder, std::string* why) {
+    return read_with<CameraPath>("read-keys", keys_toml, folder, why, &parse_path);
+}
+
+std::vector<std::string>
+path_args(const CameraPath& path) {
+    if (!path.unsaved()) {
+        return {};
     }
-    for (Object& object : doc.objects) {
-        object.saved = object.local;
+    std::vector<std::string> args;
+    for (const CameraKey& key : path.keys) {
+        args.emplace_back("--key");
+        args.push_back(key_text(path, key));
     }
-    return true;
+    return args;
+}
+
+bool
+save_path(CameraPath& path, const fs::path& folder, std::string* why) {
+    return save_with("set-keys", path.keys_toml, path_args(path), folder, why, [&path] {
+        // The file now holds the keys' tables in this order.
+        path.saved = path.keys;
+        path.file_ids = ids(path.keys);
+    });
 }
 
 std::vector<std::string>

@@ -282,10 +282,15 @@ draw_viewport(Shown& shown, const std::optional<window::Recording::Status>& stat
     const bool editing = shown.editor && !shown.observer.on;
     if (editing) {
         window::draw_handle_bar(*shown.editor);
+        ImGui::SameLine();
+        (void)window::draw_free_view_toggle(*shown.editor, *shown.frames);
+        window::draw_path_scrub(*shown.editor, *shown.frames, &shown.timeline.seek_to);
     }
     const window::FrameRect rect = window::draw_frame(shown.texture);
-    const bool moved = shown.observer.on && window::drive_observer(shown.observer, ImGui::GetIO().DeltaTime);
+    const float dt = ImGui::GetIO().DeltaTime;
+    const bool moved = shown.observer.on && window::drive_observer(shown.observer, dt);
     if (editing) {
+        (void)window::drive_free_view(*shown.editor, dt);
         window::draw_handles(*shown.editor, *shown.frames, rect);
     }
     return moved;
@@ -338,7 +343,8 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
     // Uploaded after the frame is drawn, for the observer's input over it; still this tick's picture.
     bool changed = apply(*shown.frames, shown.timeline, shown.observer, asked, ok);
     if (shown.editor) {
-        window::EditAsk ask = window::edit_keys(*shown.editor, !shown.observer.on);
+        // WASD flies the observer or the free view; W, E and R pick the handle otherwise.
+        window::EditAsk ask = window::edit_keys(*shown.editor, !shown.observer.on && !shown.editor->path.free.on);
         ask.undo |= menu.undo;
         ask.redo |= menu.redo;
         ask.save |= menu.save;
@@ -348,6 +354,12 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
             *ok &= window::sync(*shown.editor, [&shown](const std::string& object, const transformf_t& local) {
                 return shown.frames->place(object, local);
             });
+            *ok &= window::sync_paths(
+                *shown.editor,
+                [&shown](const std::string& camera, Frames::PoseAt pose) {
+                    return shown.frames->fly(camera, std::move(pose));
+                },
+                [&shown](const std::string& camera) { return shown.frames->land(camera); });
             changed |= shown.frames->drawn() != drawn;
         }
     }
@@ -438,7 +450,7 @@ Window::tick() {
         menu = {.shown = true,
                 .can_undo = editor.edits.can_undo(),
                 .can_redo = editor.edits.can_redo(),
-                .can_save = !editor.drag.has_value()};
+                .can_save = !window::dragging(editor)};
     }
     if (window::draw_menu(about_, menu) && !update::set_follow(copy_, about_.follow)) {
         std::fprintf(stderr, "loupe: cannot save the update setting in %s\n", utf8(copy_.config).c_str());

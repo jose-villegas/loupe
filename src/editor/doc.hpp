@@ -1,14 +1,18 @@
 // What the editor holds and saves: the scene file's objects, each placed as
-// the file authors it. Engine state is never saved. Every change is an Edit
-// on one EditStack, so undo and redo cross every panel.
+// the file authors it, and its cameras' paths. Engine state is never saved.
+// Every change is an Edit on one EditStack, so undo and redo cross every panel.
 #pragma once
 
 #include <array>
 #include <cstddef>
 #include <filesystem>
+#include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
+
+#include "editor/camera_path.hpp"
 
 namespace loupe::editor {
 
@@ -35,17 +39,26 @@ constexpr std::array<PlacementField, 3> PLACEMENT_FIELDS = {{
     {.name = "scale", .values = &Placement::scale},
 }};
 
+// Where a camera's path comes from: its .keys.toml, empty for a clip from a
+// .glb, which the editor cannot write; and whether a bake reads the path.
+struct PathSource {
+    std::filesystem::path keys;
+    bool feeds_bakes = false;
+};
+
 // One scene object. `kind` is its one component: mesh_renderer,
 // skinned_renderer, light or camera; `baked` a renderer with bake = true.
 // `locked` is why it may not be placed, as autana's scene_edit.py says,
 // empty when it may. `saved` is the placement the file holds, so a save
-// writes only the fields that moved.
+// writes only the fields that moved. `path_source` is a camera's path, none
+// for any other object or a camera on no path.
 struct Object {
     std::string path, parent;
     std::string kind;
     Placement local, saved;
     bool baked = false;
     std::string locked;
+    std::optional<PathSource> path_source;
 };
 
 // Whether the editor may move `object`: scene_edit.py gave no reason it may not.
@@ -62,9 +75,11 @@ struct SceneDoc {
     bool unsaved() const;
 };
 
-// Every document the editor has open.
+// Every document the editor has open: the scene, and each camera path it can
+// write, by camera name.
 struct Docs {
     SceneDoc scene;
+    std::map<std::string, CameraPath> paths;
 };
 
 struct Edit {
@@ -94,6 +109,20 @@ class Place final : public Edit {
     void set(Docs& docs, const Placement& placement) const;
     std::string object_;
     Move move_;
+};
+
+// Sets one camera's whole key list from `before` to `after`: a key moved,
+// retimed, added or deleted alike.
+class SetKeys final : public Edit {
+  public:
+    SetKeys(std::string camera, std::vector<CameraKey> before, std::vector<CameraKey> after);
+    void apply(Docs& docs) override;
+    void undo(Docs& docs) override;
+
+  private:
+    void set(Docs& docs, const std::vector<CameraKey>& keys) const;
+    std::string camera_;
+    std::vector<CameraKey> before_, after_;
 };
 
 // The one undo history. A push applies the edit and drops whatever was

@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "checks.hpp"
 #include "editor/doc.hpp"
 #include "editor/scene_tool.hpp"
 #include "scratch.hpp"
@@ -19,27 +20,10 @@ namespace {
 
 constexpr const char TEST[] = "scene_save_test";
 
-bool
-check(bool ok, const std::string& what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, what.c_str(), ok ? "ok" : "FAILED");
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
-std::string
-read_file(const char* path) {
-    std::ifstream in(path, std::ios::binary);
-    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
-}
-
-std::vector<std::string>
-lines(const std::string& text) {
-    std::vector<std::string> out;
-    std::istringstream in(text);
-    for (std::string line; std::getline(in, line);) {
-        out.push_back(line);
-    }
-    return out;
-}
+using loupe::test::lines;
+using loupe::test::read_file;
 
 } // namespace
 
@@ -57,7 +41,7 @@ main(int argc, char** argv) {
     if (!check(doc.has_value(), "the scene reads: " + why) || !doc) {
         return 1;
     }
-    loupe::editor::Docs docs{.scene = std::move(*doc)};
+    loupe::editor::Docs docs{.scene = std::move(*doc), .paths = {}};
     const loupe::editor::Object* capybara = docs.scene.find("capybara");
     const loupe::editor::Object* meadow = docs.scene.find("meadow");
     bool ok = check(capybara != nullptr && loupe::editor::placeable(*capybara) && meadow != nullptr && meadow->baked,

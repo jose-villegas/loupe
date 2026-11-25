@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "checks.hpp"
 #include "options.hpp"
 #include "pack.hpp"
 #include "tools.hpp"
@@ -33,11 +34,7 @@ parse(const std::vector<std::string>& args, loupe::Options* options) {
     return loupe::parse_options(static_cast<int>(argv.size()), argv.data(), options, &why) ? "" : why;
 }
 
-bool
-check(bool ok, const std::string& what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, ok ? "ok" : "FAILED", what.c_str());
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
 // Says whether `c` parses, or is refused with its reason.
 bool

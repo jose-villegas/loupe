@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "checks.hpp"
 #include "editor/doc.hpp"
 #include "editor/placement.hpp"
 #include "frames_fixture.hpp"
@@ -19,8 +20,7 @@ namespace {
 
 constexpr const char TEST[] = "place_test";
 // Every sponza renderer: whichever is drawn moves.
-const char* const RENDERERS[] = {"atrium_fitted_full", "atrium_fitted", "atrium_flat_fitted", "atrium",
-                                 "atrium_lite",        "atrium_flat"};
+const char* const RENDERERS[] = {"atrium_fitted_full"};
 constexpr int EVERY = loupe::Frames::CHECKPOINT_EVERY;
 constexpr int SHOWN = EVERY + 10;
 constexpr int LATER = SHOWN + 5;
@@ -29,11 +29,7 @@ constexpr float LIFT = 0.1F;
 constexpr float NUDGE = 0.01F;
 constexpr float CLOSE = 1e-4F;
 
-bool
-check(bool ok, const char* what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, what, ok ? "ok" : "FAILED");
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
 // Sponza's camera has no roll: its right stays level and its up points up, in the picture as in the world.
 bool

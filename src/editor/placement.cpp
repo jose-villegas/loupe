@@ -23,9 +23,11 @@ values(vec3f_t v) {
 } // namespace
 
 float
-rounded(float value, float step) {
-    const float steps = std::round(value / step);
-    return steps == 0.0F ? 0.0F : steps * step; // never -0
+rounded(float value, float step) { // NOLINT(bugprone-easily-swappable-parameters): a value, then the step it lands on
+    // Divided by whole steps per unit, not multiplied by the inexact float step: 7500 / 1000 is 7.5 exactly.
+    const double per_unit = std::round(1.0 / static_cast<double>(step));
+    const double steps = std::round(static_cast<double>(value) * per_unit);
+    return steps == 0.0 ? 0.0F : static_cast<float>(steps / per_unit); // never -0
 }
 
 transformf_t
@@ -73,16 +75,6 @@ from_gizmo(const GizmoMatrix& values) {
         for (size_t column = 0; column < 4; column++) {
             out.m[row][column] = values[(column * 4) + row];
         }
-    }
-    return out;
-}
-
-mat4f_t
-mirror_z(const mat4f_t& matrix) {
-    mat4f_t out = matrix;
-    for (int i = 0; i < 4; i++) {
-        out.m[2][i] = -out.m[2][i]; // row 2
-        out.m[i][2] = -out.m[i][2]; // column 2
     }
     return out;
 }

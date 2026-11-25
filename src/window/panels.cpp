@@ -355,4 +355,11 @@ draw_frame(const FrameTexture& texture) {
     return {.min = ImGui::GetItemRectMin(), .max = ImGui::GetItemRectMax()};
 }
 
+void
+hint(const char* text) {
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    ImGui::TextWrapped("%s", text);
+    ImGui::PopStyleColor();
+}
+
 } // namespace loupe::window

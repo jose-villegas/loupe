@@ -36,7 +36,7 @@ function(parity name scene args)
 endfunction()
 parity(defaults "${sponza}" "")
 parity(every_flag "${sponza}"
-       "--object|atrium|--camera|tour|--view|meshlets|--set|render.batched=0|--frames|4|--dt|50|--video")
+       "--object|atrium_fitted_full|--camera|tour|--view|meshlets|--set|render.batched=0|--frames|4|--dt|50|--video")
 
 # loupe on ARGS (|-separated, run in the test's own folder) exits EXIT, saying REASON (a regex) on stderr.
 function(refused name args exit reason)
@@ -86,7 +86,7 @@ if(LOUPE_PACK_TOOL)
     # The scene's own checkout: a folder, and its HEAD checked out as a worktree.
     get_filename_component(autana_dir "${AUTANA_DIR}" ABSOLUTE)
     path_frame(frame_compare "${sponza_toml}" "--camera|${sponza_camera}" "${autana_dir}"
-               "--camera ${sponza_camera} --view meshlets --object atrium")
+               "--camera ${sponza_camera} --view meshlets --object atrium_fitted_full")
     # A's --set must not reach B: B's frame is a fresh run's under its own flags.
     path_frame(frame_compare_set "${sponza_toml}" "--camera|${sponza_camera}|--set|render.cull=0" "${autana_dir}"
                "--camera ${sponza_camera} --view shaded")
@@ -198,6 +198,14 @@ add_test(NAME run_logged COMMAND process_test "${CMAKE_CURRENT_BINARY_DIR}/run_l
 add_executable(editor_test editor_test.cpp)
 target_link_libraries(editor_test PRIVATE loupe_core loupe_window)
 add_test(NAME editor_docs COMMAND editor_test)
+# Camera paths: the curve against autana's camera_keys.py, the key edits, and
+# scene_edit.py's path arguments and parses.
+add_executable(camera_path_test camera_path_test.cpp)
+target_link_libraries(camera_path_test PRIVATE loupe_core)
+add_test(NAME camera_paths COMMAND camera_path_test)
+add_executable(path_editor_test path_editor_test.cpp)
+target_link_libraries(path_editor_test PRIVATE loupe_core loupe_window)
+add_test(NAME path_editor COMMAND path_editor_test)
 add_executable(place_test place_test.cpp)
 target_link_libraries(place_test PRIVATE loupe_core)
 add_test(NAME place COMMAND place_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/place.bmp" ${sponza_camera})
@@ -210,6 +218,13 @@ if(LOUPE_PACK_TOOL)
     target_link_libraries(scene_save_test PRIVATE loupe_core loupe_window)
     add_test(NAME scene_save COMMAND scene_save_test "${capybara_copy}/capybara.scene.toml")
     set_tests_properties(scene_save PROPERTIES FIXTURES_REQUIRED scene_save_copy)
+    set(tour_copy "${CMAKE_CURRENT_BINARY_DIR}/path_save/tour.keys.toml")
+    add_test(NAME path_save_copy COMMAND "${CMAKE_COMMAND}" -E copy "${demo}/sponza/tour.keys.toml" "${tour_copy}")
+    set_tests_properties(path_save_copy PROPERTIES FIXTURES_SETUP path_save_copy)
+    add_executable(path_save_test path_save_test.cpp)
+    target_link_libraries(path_save_test PRIVATE loupe_core)
+    add_test(NAME path_save COMMAND path_save_test "${tour_copy}")
+    set_tests_properties(path_save PROPERTIES FIXTURES_REQUIRED path_save_copy)
 endif()
 
 add_executable(library_test library_test.cpp)
@@ -257,4 +272,14 @@ file(READ "${PROJECT_SOURCE_DIR}/.github/workflows/build.yml" build_yml)
 string(FIND "${build_yml}" "publish_main.sh ${LOUPE_MAIN_TAG} " published)
 if(published EQUAL -1)
     message(FATAL_ERROR "build.yml does not publish the main build as ${LOUPE_MAIN_TAG} (LOUPE_MAIN_TAG)")
+endif()
+
+if(LOUPE_PACK_TOOL)
+    add_executable(path_test path_test.cpp)
+    target_link_libraries(path_test PRIVATE loupe_core)
+    foreach(camera IN ITEMS tour lion)
+        add_test(NAME path_${camera} COMMAND path_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/path_${camera}.bmp"
+                                             "${demo}/sponza/${camera}.keys.toml" ${camera})
+        on_packs(path_${camera})
+    endforeach()
 endif()

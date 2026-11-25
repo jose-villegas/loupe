@@ -90,6 +90,8 @@ void draw_timeline(const Frames& frames, Timeline& timeline);
 float view_picker_width(const std::vector<DebugView>& views);
 // The debug-view picker; true when `view` changed.
 bool draw_view_picker(const std::vector<DebugView>& views, int* view);
+// `text` in the disabled colour, wrapped to the panel.
+void hint(const char* text);
 
 // What the frame debugger shows: the run, its views, and for a stream its
 // counts and, while it records, the recording's state.

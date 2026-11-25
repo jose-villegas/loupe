@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "checks.hpp"
 #include "library.hpp"
 
 namespace fs = std::filesystem;
@@ -22,11 +23,7 @@ touch(const fs::path& file) {
     std::ofstream(file, std::ios::binary).put('\0');
 }
 
-bool
-check(bool ok, const char* what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, what, ok ? "ok" : "FAILED");
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
 } // namespace
 

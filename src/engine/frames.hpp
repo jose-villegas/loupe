@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -107,6 +108,19 @@ class Frames {
     // drawn with it, and the shown frame is drawn again with it now. False when
     // the scene holds no such object or the redraw failed.
     bool place(const std::string& object, const transformf_t& local);
+    // Where a flown camera stands at a clip time.
+    using PoseAt = std::function<transformf_t(uint32_t t_ms)>;
+    // Draws every frame, sought or stepped, with `camera`'s clip paused and the camera at pose(time_ms()).
+    bool fly(const std::string& camera, PoseAt pose);
+    // Hands a flown `camera` back to its clip, so every frame is the clip's
+    // again; a camera not flying is left as it is. False when the redraw failed.
+    bool land(const std::string& camera);
+    // The clip time frame `index` is drawn at: the dts up to it, the run's dt past those drawn.
+    uint32_t time_ms(int index) const;
+    // Whether `object` is the camera the frames are drawn through.
+    bool is_active(const std::string& object) const;
+    // Where the scene object `object` stands now, relative to its parent; none without such an object.
+    std::optional<transformf_t> local_pose(const std::string& object) const;
     // The world matrix of `object`'s parent (the scene root for a top-level
     // object); none when the scene holds no such object.
     std::optional<mat4f_t> parent_world(const std::string& object) const;
@@ -167,6 +181,8 @@ class Frames {
     // advance() for a stream: the provider draws the frame stream_next()
     // names, at its recorded dt.
     bool advance_stream();
+    // Puts each flown camera at its pose for the frame about to be drawn, `dt_ms` after the last.
+    void fly_cameras(uint32_t dt_ms);
     // Draws the shown frame again in one step from a checkpoint held just
     // before it; the first call takes the hold, replaying from the kept
     // checkpoint before. What observe() and place() redraw with, so a drag
