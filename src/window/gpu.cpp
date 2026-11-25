@@ -558,7 +558,7 @@ Gpu::end_frame_read_back(std::string* why) {
         return std::nullopt;
     }
     check(vkDeviceWaitIdle(s.device));
-    void* mapped = nullptr;
+    void* mapped = nullptr; // NOLINT(misc-const-correctness): vkMapMemory writes through a void**
     check(vkMapMemory(s.device, s.read_memory, 0, s.read_size, 0, &mapped));
     Picture picture{.width = s.swapchain.Width, .height = s.swapchain.Height, .rgba = {}};
     const auto* bytes = static_cast<const uint8_t*>(mapped);
