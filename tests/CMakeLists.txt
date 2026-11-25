@@ -226,6 +226,17 @@ endfunction()
 window_smoke(window_smoke "${sponza}")
 window_smoke(window_start "")
 
+# The README's pictures of the window, docs/shots: drawn offscreen, each must
+# hold the pixels committed (doc_shots.cmake). Shots open .scene.toml files.
+if(LOUPE_PACK_TOOL)
+    add_test(NAME doc_shots_current
+             COMMAND "${CMAKE_COMMAND}" "-DLOUPE=$<TARGET_FILE:loupe>" "-DSAME_IMAGE=$<TARGET_FILE:same_image>"
+                     "-DDOCS=${PROJECT_SOURCE_DIR}/docs/shots" "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/doc_shots" -DCHECK=ON
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/doc_shots.cmake")
+    on_packs(doc_shots_current)
+    set_tests_properties(doc_shots_current PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+endif()
+
 # A build's id, and the uninstaller that marks an installed copy (cmake/package.cmake).
 add_executable(build_id_test build_id_test.cpp)
 target_link_libraries(build_id_test PRIVATE loupe_core)

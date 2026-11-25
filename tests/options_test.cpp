@@ -1,4 +1,4 @@
-// --frame, --compare and --b-args parse only together with what they need,
+// --frame, --compare, --b-args and --shot parse only together with what they need,
 // each refusal saying why, and side B takes --b-args' renderer flags in place
 // of A's while keeping the rest.
 #include <cstdio>
@@ -55,6 +55,7 @@ check_refusals() {
     const std::string toml = "s.scene.toml";
     const bool tool = loupe::builds_packs();
     const std::string no_tool = "built without the pack tool";
+    const std::string shot = "--shot takes -o and nothing else";
     const std::vector<Case> cases = {
         {.args = {"s.apak", "--frame", "2", "-o", "f.png"}, .refusal = ""},
         {.args = {"s.apak", "--frame", "2"}, .refusal = "--frame N writes -o"},
@@ -73,6 +74,13 @@ check_refusals() {
          .refusal = "--b-args takes --object, --camera, --view and --set, not --frames"},
         {.args = {toml, "--compare", "HEAD", "--b-args", "--view", "--video", "v.mp4"},
          .refusal = "--b-args: --view needs a value"},
+        {.args = {"--shot", "editor", "-o", "editor.png"}, .refusal = ""},
+        {.args = {"--shot", loupe::ALL_SHOTS, "-o", "shots"}, .refusal = ""},
+        {.args = {"--shot", "editor", "-o", "editor.bmp"}, .refusal = shot},
+        {.args = {"--shot", "editor"}, .refusal = shot},
+        {.args = {toml, "--shot", "editor", "-o", "editor.png"}, .refusal = shot},
+        {.args = {"--shot", "editor", "--camera", "tour", "-o", "editor.png"}, .refusal = shot},
+        {.args = {"--shot", "editor", "--ticks", "3", "-o", "editor.png"}, .refusal = shot},
     };
     bool ok = true;
     for (const Case& c : cases) {

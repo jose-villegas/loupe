@@ -14,6 +14,8 @@ namespace loupe {
 constexpr size_t MIB = size_t{1} << 20;
 // The window's checkpoint budget when --checkpoint-mb is left out.
 constexpr size_t DEFAULT_CHECKPOINT_MB = 1024;
+// --shot's name for every doc shot at once, -o then naming their folder.
+constexpr const char ALL_SHOTS[] = "all";
 
 // The renderer's flags: what a run draws and how it looks.
 struct RenderFlags {
@@ -48,6 +50,8 @@ struct Options {
     std::optional<size_t> checkpoint_mb; // --checkpoint-mb
     std::optional<int> ticks;            // --ticks
     bool version = false;                // --version: print the build's version_line() and exit
+    // A doc shot (src/window/doc_shots.hpp) written to -o OUT.png, or ALL_SHOTS into the folder -o names.
+    std::string shot; // --shot NAME
 };
 
 // False with `why` set for a command line it cannot run.

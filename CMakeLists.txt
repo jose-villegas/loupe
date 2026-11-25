@@ -122,6 +122,7 @@ endif()
 # The window: SDL3, Vulkan through volk, Dear ImGui (third_party/CMakeLists.txt).
 # Only runs that write no file open it, so those need no GPU.
 add_library(loupe_window OBJECT
+    src/window/doc_shots.cpp
     src/window/editor.cpp
     src/window/files.cpp
     src/window/frame_texture.cpp
@@ -145,6 +146,16 @@ target_link_libraries(loupe_path PUBLIC loupe_core SDL3::SDL3-static)
 
 add_executable(loupe src/main.cpp)
 target_link_libraries(loupe PRIVATE loupe_core loupe_path loupe_window)
+
+# docs/shots, the README's pictures of the window, drawn again by every doc
+# shot (src/window/doc_shots.cpp) offscreen (tests/doc_shots.cmake); the
+# doc_shots_current test checks them. Shots open .scene.toml files.
+if(LOUPE_PACK_TOOL)
+    add_custom_target(doc_shots
+                      COMMAND "${CMAKE_COMMAND}" "-DLOUPE=$<TARGET_FILE:loupe>" "-DDOCS=${PROJECT_SOURCE_DIR}/docs/shots"
+                              "-DOUT=${CMAKE_BINARY_DIR}/doc_shots" -P "${PROJECT_SOURCE_DIR}/tests/doc_shots.cmake"
+                      DEPENDS loupe USES_TERMINAL VERBATIM)
+endif()
 
 include(cmake/package.cmake)
 

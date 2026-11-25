@@ -447,6 +447,8 @@ draw_path(Editor& editor, const Frames& frames, const FrameRect& frame, const ma
     const std::vector<CameraKey>& keys = shown_keys(editor, editor.selected);
     const PathView on_frame{.parent = *parent, .clip_from_world = mat4f_mul(projection, view), .frame = frame};
     ImDrawList& draw = *ImGui::GetWindowDrawList();
+    // Past the frame's edges the projection shows nothing the frame does.
+    draw.PushClipRect(frame.min, frame.max, true);
     const bool builds = !editor::path_fault(keys);
     if (builds) {
         draw_curve(draw, on_frame, keys);
@@ -456,6 +458,7 @@ draw_path(Editor& editor, const Frames& frames, const FrameRect& frame, const ma
     if (builds) {
         draw_marker(draw, on_frame, keys, editor.path.shown_ms);
     }
+    draw.PopClipRect();
     bool over_handle = false;
     if (pick && may_edit(editor, editor.selected)) {
         point_handle(editor, *pick, keys, *parent, editor::gizmo(view), editor::gizmo(projection));
@@ -557,27 +560,34 @@ draw_path_scrub(Editor& editor, const Frames& frames, std::optional<int>* seek_t
 }
 
 bool
-draw_free_view_toggle(Editor& editor, const Frames& frames) {
-    PathEdit& edit = editor.path;
-    bool on = edit.free.on;
-    if (!ImGui::Checkbox("Free view", &on)) {
+start_free_view(Editor& editor, const Frames& frames) {
+    const auto& objects = editor.docs.scene.objects;
+    const auto active = std::ranges::find_if(
+        objects, [&frames](const editor::Object& object) { return frames.is_active(object.path); });
+    const std::optional<transformf_t> start = active != objects.end() ? frames.local_pose(active->path) : std::nullopt;
+    if (!start) {
         return false;
     }
+    PathEdit& edit = editor.path;
+    edit.free_camera = active->path;
+    edit.free.fly = fly_motion_start(*start, observer_start_speed(frames.scene_box()), OBSERVER_TUNING);
+    edit.free_moved = true;
+    edit.free.on = true;
+    return true;
+}
+
+bool
+draw_free_view_toggle(Editor& editor, const Frames& frames) {
+    bool on = editor.path.free.on;
+    const bool clicked = ImGui::Checkbox("Free view", &on);
     ImGui::SetItemTooltip("Fly the camera by hand (WASD, right drag) to see its path from outside");
-    if (on) {
-        const auto& objects = editor.docs.scene.objects;
-        const auto active = std::ranges::find_if(
-            objects, [&frames](const editor::Object& object) { return frames.is_active(object.path); });
-        const std::optional<transformf_t> start =
-            active != objects.end() ? frames.local_pose(active->path) : std::nullopt;
-        if (!start) {
-            return false;
-        }
-        edit.free_camera = active->path;
-        edit.free.fly = fly_motion_start(*start, observer_start_speed(frames.scene_box()), OBSERVER_TUNING);
-        edit.free_moved = true;
+    if (!clicked) {
+        return false;
     }
-    edit.free.on = on;
+    if (on) {
+        return start_free_view(editor, frames);
+    }
+    editor.path.free.on = false;
     return true;
 }
 

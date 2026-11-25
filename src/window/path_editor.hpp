@@ -119,6 +119,8 @@ PathHandles draw_path(Editor& editor, const Frames& frames, const FrameRect& fra
 void draw_path_rows(Editor& editor);
 // A scrub bar over the selected camera's path that sets `seek_to` to the frame at the time picked.
 void draw_path_scrub(Editor& editor, const Frames& frames, std::optional<int>* seek_to);
+// Turns the free view on at the active camera's pose and the scene's speed; false when no camera is active.
+bool start_free_view(Editor& editor, const Frames& frames);
 // The free view's checkbox: on, the active camera flies by hand (the
 // observer's steering) instead of on its path, so the path can be seen from
 // outside. True when it was turned on or off.

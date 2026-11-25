@@ -94,6 +94,22 @@ window_flags_fit(const Options& options, std::string* why) {
     return true;
 }
 
+// False with `why` set when --shot comes with anything but -o: OUT.png for
+// one shot, a folder for all. A shot names its own scene and flags.
+bool
+shot_flags_fit(const Options& options, std::string* why) {
+    const bool alone = options.scene.empty() && options.render.args().empty() && !options.frames && !options.dt_ms
+                       && options.out_video.empty() && !options.frame && options.compare.empty() && !options.b_render
+                       && !options.checkpoint_mb && !options.ticks && !options.version;
+    const bool out_fits = options.shot == ALL_SHOTS ? !options.out_bmp.empty() : options.out_bmp.ends_with(".png");
+    if (!alone || !out_fits) {
+        *why =
+            std::format("--shot takes -o and nothing else: --shot NAME -o OUT.png, or --shot {} -o FOLDER", ALL_SHOTS);
+        return false;
+    }
+    return true;
+}
+
 // False with `why` set when --frame, --compare or --b-args come without what
 // they need: --frame writes -o, a compare writes --video or --frame's pair,
 // and B's pack is built from the .scene.toml.
@@ -165,6 +181,8 @@ apply_flag(const std::string& flag, const std::string& value, Options* options, 
         options->out_bmp = value;
     } else if (flag == "--video") {
         options->out_video = value;
+    } else if (flag == "--shot") {
+        options->shot = value;
     } else if (flag == "--compare") {
         options->compare = value;
     } else if (flag == "--b-args") {
@@ -228,6 +246,7 @@ usage() {
            "       loupe SCENE [flags] [--frames N] [--dt MS] --frame N -o out.png\n"
            "       loupe SCENE.scene.toml [flags] [--frames N] [--dt MS] --compare REV|DIR [--b-args \"FLAGS\"]\n"
            "             (--video out.mp4 | --frame N -o out.png)\n"
+           "       loupe --shot NAME -o out.png | --shot all -o FOLDER\n"
            "       loupe --version\n";
 }
 
@@ -254,6 +273,9 @@ parse_options(int argc, char** argv, Options* options, std::string* why) {
         if (!apply_flag(flag, argv[++i], options, why)) {
             return false;
         }
+    }
+    if (!options->shot.empty()) {
+        return shot_flags_fit(*options, why);
     }
     return window_flags_fit(*options, why) && path_flags_fit(*options, why);
 }
