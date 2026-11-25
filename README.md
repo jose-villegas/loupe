@@ -12,7 +12,7 @@ builds the pack of first.
 capybara's move handles, the Inspector and the Frame debugger](docs/shots/editor.png)
 
 Every picture of the window here is drawn by Loupe itself, from
-`src/window/doc_shots.cpp` ([Tests](docs/development/Tests.md)).
+[`src/window/doc_shots.cpp`](src/window/doc_shots.cpp) ([Tests](docs/development/Tests.md)).
 
 | | |
 |---|---|

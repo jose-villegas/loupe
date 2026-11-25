@@ -19,7 +19,7 @@ build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml --
 | `--shot NAME -o out.png` | draws one of the docs' pictures of the window and exits; `--shot all -o FOLDER` draws each as `FOLDER/NAME.png`; needs the pack tool ([Tests](../development/Tests.md)) |
 | `--version` | prints the build's version, commit, channel and autana commit ([Download](../start/Download.md)), and exits |
 
-The flags but the last four are autana's `third_party/autana/launcher/tools/render/scene_viewer.sh` flags, and the output is the same bytes.
+The flags other than `--checkpoint-mb`, `--ticks`, `--shot` and `--version` are autana's `third_party/autana/launcher/tools/render/scene_viewer.sh` flags, and the output is the same bytes.
 A `.apak` opens as it is: its folder is the asset dir, its name the scene id.
 A `.scene.toml` run first brings the scene's pack in `build/packs` up to date
 with autana's `third_party/autana/launcher/tools/r3d/build_pack.py`; a build
