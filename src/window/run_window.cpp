@@ -299,20 +299,20 @@ draw_viewport(Shown& shown, const std::optional<window::Recording::Status>& stat
 // The editor's tick: its keys and the Edit menu applied, then its placements
 // and camera paths synced to the frames; true when that drew a frame.
 bool
-edit_tick(Shown& shown, const window::EditMenu& menu, bool* ok) {
+edit_tick(window::Editor& editor, Shown& shown, const window::EditMenu& menu, bool* ok) {
     // WASD flies the observer or the free view; W, E and R pick the handle otherwise.
-    window::EditAsk ask = window::edit_keys(*shown.editor, !shown.observer.on && !shown.editor->path.free.on);
+    window::EditAsk ask = window::edit_keys(editor, !shown.observer.on && !editor.path.free.on);
     ask.undo |= menu.undo;
     ask.redo |= menu.redo;
     ask.save |= menu.save;
-    window::apply(*shown.editor, ask);
+    window::apply(editor, ask);
     if (!shown.observer.on) {
         const int64_t drawn = shown.frames->drawn();
-        *ok &= window::sync(*shown.editor, [&shown](const std::string& object, const transformf_t& local) {
+        *ok &= window::sync(editor, [&shown](const std::string& object, const transformf_t& local) {
             return shown.frames->place(object, local);
         });
         *ok &= window::sync_paths(
-            *shown.editor,
+            editor,
             [&shown](const std::string& camera, Frames::PoseAt pose) {
                 return shown.frames->fly(camera, std::move(pose));
             },
@@ -369,7 +369,7 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
     // Uploaded after the frame is drawn, for the observer's input over it; still this tick's picture.
     bool changed = apply(*shown.frames, shown.timeline, shown.observer, asked, ok);
     if (shown.editor) {
-        changed |= edit_tick(shown, menu, ok);
+        changed |= edit_tick(*shown.editor, shown, menu, ok);
     }
     if (changed) {
         shown.texture.upload(shown.frames->frame());
