@@ -229,10 +229,9 @@ build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml --
 | `-o out.bmp`, `--video out.avi` | the last frame, every frame |
 | `--checkpoint-mb MB` | the window's checkpoint memory (1024); past it, every other checkpoint goes |
 | `--ticks N` | closes the window after N ticks, for scripted runs |
-| `--shot NAME -o out.png` | draws one of this README's pictures of the window and exits; `--shot all -o FOLDER` draws each as `FOLDER/NAME.png`; needs the pack tool (Tests) |
 | `--version` | prints the build's version, commit, channel and autana commit (Download), and exits |
 
-The flags but the last four are autana's `third_party/autana/launcher/tools/render/scene_viewer.sh` flags, and the output is the same bytes.
+The flags other than `--checkpoint-mb`, `--ticks` and `--version` are autana's `third_party/autana/launcher/tools/render/scene_viewer.sh` flags, and the output is the same bytes.
 A `.apak` opens as it is: its folder is the asset dir, its name the scene id.
 A `.scene.toml` run first brings the scene's pack in `build/packs` up to date
 with autana's `third_party/autana/launcher/tools/r3d/build_pack.py`; a build
@@ -270,6 +269,44 @@ why. `--compare` needs the pack tool, git, ffmpeg and the Python modules in
 `third_party/autana/launcher/tools/render/requirements.txt`; a build with
 `-DLOUPE_PACK_TOOL=OFF` refuses it, and says so.
 
+## Run a recipe
+
+`loupe-storyboard` runs a recipe on the real window: Dear ImGui's test engine
+gives each step to the panels as a person's clicks, keys and typing, so what
+it shows is what that input does. It is built with `-DLOUPE_STORYBOARD=ON`, as
+the `default` preset is, and never into the downloads (License).
+
+```bash
+build/default/loupe-storyboard --recipe tests/stories/doc_shots/sponza.yaml -o shots --scale 1.5
+```
+
+A recipe is the YAML list of steps autana's runner reads too. Each step is a
+map with an optional `name`; the steps whose key starts `loupe.` are Loupe's,
+the rest are autana's, which Loupe skips. A step that fails stops the run at
+its line, and `loupe-storyboard` exits 1.
+
+```yaml
+- name: The Sponza scene
+  loupe.open: ../../../third_party/autana/launcher/demo/sponza/sponza.scene.toml --dt 100
+- loupe.click: //Outliner/tour
+- loupe.input: {ref: "//Inspector/eye/$$0", value: "500"}
+- loupe.screenshot: {out: key-moved.png, crop: Viewport}
+```
+
+| Step | Does |
+|---|---|
+| `loupe.open: SCENE [flags]` | opens a scene as `loupe SCENE [flags]` would; SCENE relative to the recipe |
+| `loupe.click: ITEM` | clicks an item: `//Window/label`, ImGui's id path, such as `//Outliner/tour` |
+| `loupe.check: ITEM`, `loupe.uncheck: ITEM` | sets a checkbox, clicking it only when it is not so already |
+| `loupe.input: {ref: ITEM, value: TEXT}` | Ctrl+clicks a field or slider and types TEXT, then Enter; a three-number field's first is `ITEM/$$0` |
+| `loupe.key: CHORD` | presses a key or chord in ImGui's key names, such as `Escape` or `ctrl+z` |
+| `loupe.hold: {key: KEY, ticks: N}` | holds a key for N ticks |
+| `loupe.wait: N` | lets N ticks pass |
+| `loupe.screenshot: OUT.png` or `{out: OUT.png, crop: PANEL}` | moves the mouse off the window, lets 4 ticks settle, and writes the window, or the panel PANEL names, under `-o` |
+
+Every tick stands for 1/30 s, whatever the machine, so a held key moves as far
+anywhere. `--scale` is the panels' scale, 1 when left out.
+
 ## Tests
 
 The preset's test step (`ctest --preset default`) builds the packs it opens with `third_party/autana/launcher/tools/r3d/build_pack.py`, then runs:
@@ -293,7 +330,8 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `observer_steer` | the observer starts at the speed that crosses the scene's box in 20 seconds; W, A, S, D, Q and E are its axes unless a text field has the keys, a right drag looks only when it began over the frame, and the wheel counts only over it |
 | `view_switch` | a debug view picked mid-run, and kept through a seek back, draws what it drew when picked from the start |
 | `window_smoke`, `window_start` | the window opens, on a scene and on the start panel, and draws 10 ticks offscreen on Mesa's lavapipe under the Khronos validation layer, with no validation error; skipped where either is missing |
-| `doc_shots_current` | every picture of the window in `docs/shots` holds the pixels its shot draws offscreen on lavapipe, each channel within one level (lavapipe compiles for the CPU it runs on), and none is left that no shot draws; skipped without lavapipe, and with autana at any commit but the pinned one (the nightly's `main`), whose scenes can draw other pixels |
+| `doc_shots_current` | every picture of the window in `docs/shots` holds the pixels the recipes in `tests/stories/doc_shots` draw offscreen on lavapipe, each channel within one level (lavapipe compiles for the CPU it runs on), and none is left that no recipe draws; skipped without lavapipe, and with autana at any commit but the pinned one (the nightly's `main`), whose scenes can draw other pixels |
+| `recipe` | a recipe reads as its steps, each with its line, the `loupe.*` ones Loupe's and the rest autana's; a recipe that is no list of maps, or a step with two `loupe.*` keys, is refused at its line |
 | `version` | `--version` names the project version, Loupe's commit, the configured channel and the autana commit |
 | `update` | SHA-256 on the standard's examples; GitHub's saved release answers give each system's download; which offers are newer; the setting; a check stages only a verified newer download and a local build never asks; a running copy, beside its samples and in `bin/`, is swapped for a staged one and says so at its next start |
 | `build_id` | `--version`'s line for each channel, and a copy counts as installed only with the setup's uninstaller beside it |
@@ -310,10 +348,10 @@ CI runs them on Linux and Windows at the pinned autana on every pull request,
 and nightly against autana's `main`, keeping one issue open while that fails.
 
 The pictures of the window in this README, `docs/shots`, are drawn by Loupe
-itself: each shot in `src/window/doc_shots.cpp` opens its scene, sets the
-editor's state in code and keeps the window, or one panel of it. A change
-that alters one redraws them all, on Linux with lavapipe as CI does (WSL on
-Windows):
+itself: each recipe in `tests/stories/doc_shots` opens its scene, clicks and
+types its way to the state it shows, and keeps the window, or one panel of it
+(Run a recipe). A change that alters one redraws them all, on Linux with
+lavapipe as CI does (WSL on Windows):
 
 ```bash
 cmake --build build/default --target doc_shots
@@ -375,4 +413,7 @@ notes list the pull requests since the latest release.
 
 ## License
 
-GPL-3.0, as autana.
+GPL-3.0, as autana. `loupe-storyboard` also links
+[Dear ImGui Test Engine](https://github.com/ocornut/imgui_test_engine), under
+its own licence, so the downloads are built without it (`-DLOUPE_STORYBOARD=OFF`,
+the `release` preset's).

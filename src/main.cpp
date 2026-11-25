@@ -1,7 +1,6 @@
 // loupe: opens a scene in the window, or the window's start panel without one;
 // with -o or --video, writes the scene's frames and exits; with --frame or
-// --compare, writes a frame of its camera path or an A | B video of it; with
-// --shot, writes one of the README's pictures of the window.
+// --compare, writes a frame of its camera path or an A | B video of it.
 #include <cstdio>
 #include <string>
 
@@ -23,9 +22,6 @@ main(int argc, char** argv) {
     if (options.version) {
         std::printf("%s\n", loupe::version_line(loupe::build_id(loupe::exe_path().parent_path())).c_str());
         return 0;
-    }
-    if (!options.shot.empty()) {
-        return loupe::run_shot(options) ? 0 : 1;
     }
     if (options.out_bmp.empty() && options.out_video.empty()) {
         return loupe::run_window(options) ? 0 : 1;

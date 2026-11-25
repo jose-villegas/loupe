@@ -27,6 +27,24 @@ target_include_directories(imgui SYSTEM PUBLIC "${imgui}" "${imgui}/backends")
 target_compile_definitions(imgui PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK IMGUI_DISABLE_OBSOLETE_FUNCTIONS
                                         IMGUI_DISABLE_DEMO_WINDOWS)
 target_link_libraries(imgui PUBLIC SDL3::SDL3-static volk::volk)
+# A storyboard build (LOUPE_STORYBOARD): ImGui with the test engine's hooks,
+# and the engine itself, which drives the window through ImGui's own input.
+# Its licence is not the GPL's, so the downloads are built without it.
+if(LOUPE_STORYBOARD)
+    set(test_engine "${CMAKE_CURRENT_SOURCE_DIR}/imgui_test_engine/imgui_test_engine")
+    file(GLOB test_engine_sources "${test_engine}/*.cpp")
+    target_sources(imgui PRIVATE ${test_engine_sources})
+    target_include_directories(imgui SYSTEM PUBLIC "${test_engine}" "${PROJECT_SOURCE_DIR}/src/storyboard/config")
+    target_compile_definitions(imgui PUBLIC "IMGUI_USER_CONFIG=\"imgui_config.h\"")
+
+    # yaml-cpp: the recipes are YAML.
+    set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL "Build yaml-cpp's tools")
+    set(YAML_CPP_BUILD_CONTRIB OFF CACHE BOOL "Build yaml-cpp's contrib")
+    set(YAML_CPP_INSTALL OFF CACHE BOOL "Install yaml-cpp")
+    set(YAML_CPP_FORMAT_SOURCE OFF CACHE BOOL "Format yaml-cpp's sources")
+    set(YAML_CPP_DISABLE_UNINSTALL ON CACHE BOOL "No uninstall target for yaml-cpp")
+    add_subdirectory(yaml-cpp SYSTEM)
+endif()
 
 # ImGuizmo: the editor's move/rotate/scale handles and the view cube (ImGuizmo.cpp alone).
 set(imguizmo "${CMAKE_CURRENT_SOURCE_DIR}/ImGuizmo/src")

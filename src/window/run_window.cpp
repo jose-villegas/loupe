@@ -23,7 +23,6 @@
 #include "tools.hpp"
 #include "update/update.hpp"
 #include "version.hpp"
-#include "window/doc_shots.hpp"
 #include "window/editor.hpp"
 #include "window/files.hpp"
 #include "window/frame_texture.hpp"
@@ -258,15 +257,14 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
 // The window's state between ticks: the open scene, or the start panel's.
 class Window {
   public:
-    Window(window::Gpu& gpu, const Options& options);
+    // A `scripted` window (--ticks, a recipe) neither updates nor remembers what it opened.
+    Window(window::Gpu& gpu, const Options& options, bool scripted);
     // Opens `options`' scene in place of the open one; false, said on the
     // start panel, when it did not open.
     bool open(const Options& options);
     // One tick's panels, then the scene they asked for; with `picture`, also
     // what the tick drew, which stays empty when it could not be read back.
     void tick(std::optional<window::Picture>* picture = nullptr);
-    // Drives the open scene to `shot`'s state; false without an editor, or when the drive fails.
-    bool drive(const window::Shot& shot);
     // Closes the open scene; false when a run failed along the way.
     bool finish();
 
@@ -283,8 +281,7 @@ class Window {
     std::optional<size_t> checkpoint_mb_;
     Folders folders_;
     update::Copy copy_;
-    // Only a window someone uses updates and remembers what it opened; a
-    // scripted run (--ticks, a shot) does neither.
+    // Only a window someone uses updates and remembers what it opened.
     bool scripted_ = false;
     bool updates_ = false;
     window::About about_;
@@ -296,10 +293,9 @@ class Window {
     bool ok_ = true;
 };
 
-Window::Window(window::Gpu& gpu, const Options& options)
+Window::Window(window::Gpu& gpu, const Options& options, bool scripted)
     : gpu_(gpu), checkpoint_mb_(options.checkpoint_mb), folders_(window::folders()),
-      copy_{.id = build_id(folders_.exe_dir), .exe = exe_path(), .config = folders_.config},
-      scripted_(options.ticks.has_value()),
+      copy_{.id = build_id(folders_.exe_dir), .exe = exe_path(), .config = folders_.config}, scripted_(scripted),
       updates_(!scripted_ && copy_.id.built_for != Channel::None && !copy_.config.empty()),
       library_(library(folders_)) {
     about_.version = version_line(copy_.id);
@@ -364,23 +360,6 @@ Window::tick(std::optional<window::Picture>* picture) {
 }
 
 bool
-Window::drive(const window::Shot& shot) {
-    if (!shown_ || !shown_->editor) {
-        std::fprintf(stderr, "loupe: shot %.*s: no editor: %s\n", static_cast<int>(shot.name.size()), shot.name.data(),
-                     shown_ ? shown_->editor_why.c_str() : "the scene did not open");
-        return false;
-    }
-    const window::ShotState state{
-        .editor = *shown_->editor, .frames = *shown_->frames, .seek_to = shown_->timeline.seek_to};
-    if (!shot.drive(state)) {
-        std::fprintf(stderr, "loupe: shot %.*s: the scene is not what the shot expects\n",
-                     static_cast<int>(shot.name.size()), shot.name.data());
-        return false;
-    }
-    return true;
-}
-
-bool
 Window::finish() {
     close();
     checker_.request_stop();
@@ -429,44 +408,6 @@ Window::open(const Options& options) {
     return true;
 }
 
-// `shot`'s window, driven and settled, as a PNG at `out`; false, said on stderr, when it could not be.
-bool
-shoot(const window::Shot& shot, const std::filesystem::path& out) {
-    std::string why;
-    const std::unique_ptr<window::Gpu> gpu = window::Gpu::open(TITLE, &why, window::SHOT_CONTENT_SCALE);
-    if (gpu == nullptr) {
-        std::fprintf(stderr, "loupe: %s\n", why.c_str());
-        return false;
-    }
-    // A shot draws only what its drive sets: the desk's mouse and keys reach none of it.
-    ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_NoMouse | ImGuiConfigFlags_NoKeyboard;
-    Options run;
-    run.scene = autana_dir() / shot.scene;
-    run.render.camera = shot.camera;
-    run.dt_ms = window::SHOT_DT_MS;
-    run.ticks = window::SHOT_SETTLE_TICKS;
-    Window window(*gpu, run);
-    const bool ok = window.open(run) && window.drive(shot);
-    std::optional<window::Picture> picture;
-    int tick = 0;
-    for (; ok && tick < window::SHOT_SETTLE_TICKS && gpu->begin_frame(); tick++) {
-        window.tick(tick + 1 == window::SHOT_SETTLE_TICKS ? &picture : nullptr);
-    }
-    if (ok && tick < window::SHOT_SETTLE_TICKS) {
-        std::fprintf(stderr, "loupe: shot %.*s: the window closed after %d of %d ticks\n",
-                     static_cast<int>(shot.name.size()), shot.name.data(), tick, window::SHOT_SETTLE_TICKS);
-    }
-    if (picture && !window::write_shot(*picture, shot, out, &why)) {
-        std::fprintf(stderr, "loupe: shot %.*s: %s\n", static_cast<int>(shot.name.size()), shot.name.data(),
-                     why.c_str());
-        picture.reset();
-    }
-    if (picture) {
-        std::printf("%s\n", utf8(out).c_str());
-    }
-    return window.finish() && ok && picture;
-}
-
 } // namespace
 
 bool
@@ -477,7 +418,7 @@ run_window(const Options& options) {
         std::fprintf(stderr, "loupe: %s\n", why.c_str());
         return false;
     }
-    Window window(*gpu, options);
+    Window window(*gpu, options, options.ticks.has_value());
     const bool opened = options.scene.empty() || window.open(options);
     for (int tick = 0; (!options.ticks || tick < *options.ticks) && gpu->begin_frame(); tick++) {
         window.tick();
@@ -486,26 +427,32 @@ run_window(const Options& options) {
 }
 
 bool
-run_shot(const Options& options) {
-    if (options.shot == ALL_SHOTS) {
-        const std::filesystem::path folder = options.out_bmp;
-        std::error_code error;
-        std::filesystem::create_directories(folder, error);
-        bool ok = !error;
-        for (const window::Shot& shot : window::doc_shots()) {
-            ok &= shoot(shot, folder / std::format("{}.png", shot.name));
+run_scripted(float content_scale, Script& script) {
+    std::string why;
+    const std::unique_ptr<window::Gpu> gpu = window::Gpu::open(TITLE, &why, content_scale);
+    if (gpu == nullptr) {
+        std::fprintf(stderr, "loupe: %s\n", why.c_str());
+        return false;
+    }
+    Window window(*gpu, Options{}, true);
+    script.start();
+    for (;;) {
+        Script::Ask ask = script.before_tick();
+        if (ask.done) {
+            break;
         }
-        return ok;
+        Script::Outcome outcome;
+        if (ask.open) {
+            outcome.opened = window.open(*ask.open);
+        }
+        if (!gpu->begin_frame()) {
+            break;
+        }
+        window.tick(ask.picture ? &outcome.picture : nullptr);
+        script.after_tick(std::move(outcome));
     }
-    if (const window::Shot* shot = window::find_shot(options.shot)) {
-        return shoot(*shot, options.out_bmp);
-    }
-    std::string names;
-    for (const window::Shot& shot : window::doc_shots()) {
-        names += std::format(" {}", shot.name);
-    }
-    std::fprintf(stderr, "loupe: no shot %s; shots:%s, or %s\n", options.shot.c_str(), names.c_str(), ALL_SHOTS);
-    return false;
+    script.stop();
+    return window.finish();
 }
 
 } // namespace loupe

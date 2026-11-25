@@ -488,10 +488,11 @@ bake_warning(Editor& editor) {
 }
 
 // A row per key, its time; a click picks it, the handle on the same point as before.
+// The row's id is its index alone, so it stays one row while its time changes.
 void
 key_rows(Editor& editor, const std::vector<CameraKey>& keys, const std::optional<KeyPick>& pick) {
     for (size_t i = 0; i < keys.size(); i++) {
-        const std::string label = std::format("key {}: t = {:.3f} s##key{}", i, keys[i].t, i);
+        const std::string label = std::format("key {}: t = {:.3f} s###key{}", i, keys[i].t, i);
         if (ImGui::Selectable(label.c_str(), pick && pick->index == i)) {
             editor.path.key =
                 KeyPick{.index = i, .point = pick ? pick->point : KeyPoint::Eye, .camera = editor.selected};
@@ -560,34 +561,27 @@ draw_path_scrub(Editor& editor, const Frames& frames, std::optional<int>* seek_t
 }
 
 bool
-start_free_view(Editor& editor, const Frames& frames) {
-    const auto& objects = editor.docs.scene.objects;
-    const auto active = std::ranges::find_if(
-        objects, [&frames](const editor::Object& object) { return frames.is_active(object.path); });
-    const std::optional<transformf_t> start = active != objects.end() ? frames.local_pose(active->path) : std::nullopt;
-    if (!start) {
-        return false;
-    }
-    PathEdit& edit = editor.path;
-    edit.free_camera = active->path;
-    edit.free.fly = fly_motion_start(*start, observer_start_speed(frames.scene_box()), OBSERVER_TUNING);
-    edit.free_moved = true;
-    edit.free.on = true;
-    return true;
-}
-
-bool
 draw_free_view_toggle(Editor& editor, const Frames& frames) {
-    bool on = editor.path.free.on;
-    const bool clicked = ImGui::Checkbox("Free view", &on);
-    ImGui::SetItemTooltip("Fly the camera by hand (WASD, right drag) to see its path from outside");
-    if (!clicked) {
+    PathEdit& edit = editor.path;
+    bool on = edit.free.on;
+    if (!ImGui::Checkbox("Free view", &on)) {
         return false;
     }
+    ImGui::SetItemTooltip("Fly the camera by hand (WASD, right drag) to see its path from outside");
     if (on) {
-        return start_free_view(editor, frames);
+        const auto& objects = editor.docs.scene.objects;
+        const auto active = std::ranges::find_if(
+            objects, [&frames](const editor::Object& object) { return frames.is_active(object.path); });
+        const std::optional<transformf_t> start =
+            active != objects.end() ? frames.local_pose(active->path) : std::nullopt;
+        if (!start) {
+            return false;
+        }
+        edit.free_camera = active->path;
+        edit.free.fly = fly_motion_start(*start, observer_start_speed(frames.scene_box()), OBSERVER_TUNING);
+        edit.free_moved = true;
     }
-    editor.path.free.on = false;
+    edit.free.on = on;
     return true;
 }
 

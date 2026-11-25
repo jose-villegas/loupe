@@ -12,6 +12,10 @@ endif()
 option(LOUPE_PACK_TOOL "Open a .scene.toml by building its pack with autana's build_pack.py" ON)
 # The release's samples: every autana demo scene's pack, installed (cmake/package.cmake).
 option(LOUPE_SAMPLES "Install every autana demo scene's pack as a sample" OFF)
+# loupe-storyboard, which runs a recipe through the real window: Dear ImGui's
+# test engine drives it (third_party/CMakeLists.txt). Off, as its licence is not
+# the GPL's; the development presets turn it on, the downloads never do.
+option(LOUPE_STORYBOARD "Build loupe-storyboard, with Dear ImGui's test engine" OFF)
 # Where this build's updates come from (src/version.hpp); the release workflow
 # sets it for the downloads, and a local build stays None.
 set(LOUPE_CHANNEL None CACHE STRING "The channel this build is for: None, Releases or Main")
@@ -122,7 +126,6 @@ endif()
 # The window: SDL3, Vulkan through volk, Dear ImGui (third_party/CMakeLists.txt).
 # Only runs that write no file open it, so those need no GPU.
 add_library(loupe_window OBJECT
-    src/window/doc_shots.cpp
     src/window/editor.cpp
     src/window/files.cpp
     src/window/frame_texture.cpp
@@ -147,14 +150,26 @@ target_link_libraries(loupe_path PUBLIC loupe_core SDL3::SDL3-static)
 add_executable(loupe src/main.cpp)
 target_link_libraries(loupe PRIVATE loupe_core loupe_path loupe_window)
 
-# docs/shots, the README's pictures of the window, drawn again by every doc
-# shot (src/window/doc_shots.cpp) offscreen (tests/doc_shots.cmake); the
-# doc_shots_current test checks them. Shots open .scene.toml files.
-if(LOUPE_PACK_TOOL)
+# loupe-storyboard: a recipe's loupe.* steps, run on the real window through
+# the test engine (src/storyboard/).
+if(LOUPE_STORYBOARD)
+    add_library(loupe_recipe OBJECT src/storyboard/recipe.cpp)
+    target_link_libraries(loupe_recipe PUBLIC nlohmann_json::nlohmann_json PRIVATE yaml-cpp::yaml-cpp)
+    target_include_directories(loupe_recipe PUBLIC src)
+    add_executable(loupe-storyboard src/storyboard/main.cpp src/storyboard/runner.cpp)
+    target_link_libraries(loupe-storyboard PRIVATE loupe_core loupe_window loupe_recipe yaml-cpp::yaml-cpp)
+endif()
+
+# docs/shots, the docs' pictures of the window, drawn again by the recipes in
+# tests/stories/doc_shots offscreen (tests/doc_shots.cmake); the
+# doc_shots_current test checks them. The recipes open .scene.toml files.
+if(LOUPE_STORYBOARD AND LOUPE_PACK_TOOL)
     add_custom_target(doc_shots
-                      COMMAND "${CMAKE_COMMAND}" "-DLOUPE=$<TARGET_FILE:loupe>" "-DDOCS=${PROJECT_SOURCE_DIR}/docs/shots"
-                              "-DOUT=${CMAKE_BINARY_DIR}/doc_shots" -P "${PROJECT_SOURCE_DIR}/tests/doc_shots.cmake"
-                      DEPENDS loupe USES_TERMINAL VERBATIM)
+                      COMMAND "${CMAKE_COMMAND}" "-DSTORYBOARD=$<TARGET_FILE:loupe-storyboard>"
+                              "-DRECIPES=${PROJECT_SOURCE_DIR}/tests/stories/doc_shots"
+                              "-DDOCS=${PROJECT_SOURCE_DIR}/docs/shots" "-DOUT=${CMAKE_BINARY_DIR}/doc_shots"
+                              -P "${PROJECT_SOURCE_DIR}/tests/doc_shots.cmake"
+                      DEPENDS loupe-storyboard USES_TERMINAL VERBATIM)
 endif()
 
 include(cmake/package.cmake)

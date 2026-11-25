@@ -1,0 +1,6 @@
+# Bistro's camera selected: a bake reads its path, so the inspector warns before an edit.
+- name: The Bistro scene
+  loupe.open: ../../../third_party/autana/launcher/demo/bistro/bistro.scene.toml
+- name: Its camera selected
+  loupe.click: //Outliner/camera
+- loupe.screenshot: bake-warning.png

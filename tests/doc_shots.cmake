@@ -1,12 +1,14 @@
-# Draws every doc shot (src/window/doc_shots.cpp) offscreen (offscreen.cmake)
-# into OUT. That is the one way the pictures in DOCS are drawn, so the same
-# Mesa draws the same pixels on any machine. Without CHECK, they then replace
-# DOCS' pictures: the doc_shots target. With CHECK, each must hold the same
-# pixels as its copy in DOCS (SAME_IMAGE), and DOCS must hold no picture no
-# shot draws: the doc_shots_current test.
+# Runs every recipe in RECIPES with loupe-storyboard (STORYBOARD) offscreen
+# (offscreen.cmake), its pictures into OUT. That is the one way the pictures in
+# DOCS are drawn, so the same Mesa draws the same pixels on any machine.
+# Without CHECK, they then replace DOCS' pictures: the doc_shots target. With
+# CHECK, each must hold the same pixels as its copy in DOCS (SAME_IMAGE), and
+# DOCS must hold no picture no recipe draws: the doc_shots_current test.
 cmake_minimum_required(VERSION 3.25)
 include("${CMAKE_CURRENT_LIST_DIR}/offscreen.cmake")
 set(regenerate "cmake --build <build> --target doc_shots, on Linux with lavapipe (README, Tests)")
+# The panels at a 150% desktop's scale, so the text stays readable where a page shows the picture smaller.
+set(SCALE 1.5)
 # The pictures are of autana's scenes as the pinned commit draws them; another
 # autana (the nightly's main, or -DAUTANA_DIR) can draw other pixels.
 execute_process(COMMAND git -C "${SOURCE}" rev-parse HEAD:third_party/autana OUTPUT_VARIABLE pinned
@@ -23,13 +25,16 @@ if(NOT CHECK AND NOT icd)
 endif()
 draw_offscreen("${OUT}/data" FALSE)
 file(REMOVE_RECURSE "${OUT}")
-execute_process(COMMAND "${LOUPE}" --shot all -o "${OUT}/shots" RESULT_VARIABLE status OUTPUT_VARIABLE out
-                ERROR_VARIABLE out)
-message("${out}")
-if(NOT status EQUAL 0)
-    message(FATAL_ERROR "loupe --shot all on ${icd}: exit ${status}")
-endif()
-fail_on_validation("${out}")
+file(GLOB recipes "${RECIPES}/*.yaml")
+foreach(recipe IN LISTS recipes)
+    execute_process(COMMAND "${STORYBOARD}" --recipe "${recipe}" -o "${OUT}/shots" --scale ${SCALE}
+                    RESULT_VARIABLE status OUTPUT_VARIABLE out ERROR_VARIABLE out)
+    message("${out}")
+    if(NOT status EQUAL 0)
+        message(FATAL_ERROR "loupe-storyboard --recipe ${recipe} on ${icd}: exit ${status}")
+    endif()
+    fail_on_validation("${out}")
+endforeach()
 file(GLOB drawn RELATIVE "${OUT}/shots" "${OUT}/shots/*.png")
 file(GLOB kept RELATIVE "${DOCS}" "${DOCS}/*.png")
 
@@ -63,11 +68,11 @@ foreach(name IN LISTS drawn)
 endforeach()
 foreach(name IN LISTS kept)
     if(NOT name IN_LIST drawn)
-        list(APPEND stale "${name} (no shot draws it)")
+        list(APPEND stale "${name} (no recipe draws it)")
     endif()
 endforeach()
 if(stale)
     list(JOIN stale ", " stale)
-    message(FATAL_ERROR "${DOCS} is not what the shots draw: ${stale}. Redraw them with ${regenerate}; "
+    message(FATAL_ERROR "${DOCS} is not what the recipes draw: ${stale}. Redraw them with ${regenerate}; "
                         "CI uploads the pictures it drew (${OUT}/shots) when this fails.")
 endif()
