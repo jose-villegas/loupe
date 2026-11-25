@@ -422,7 +422,8 @@ main(int argc, char** argv) {
                            .local = {},
                            .saved = {},
                            .baked = false,
-                           .locked = ""});
+                           .locked = "",
+                           .path_source = std::nullopt});
     loupe::window::Editor editor = loupe::window::editor_over(doc);
     editor.selected = doc.objects[0].path;
 
