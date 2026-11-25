@@ -22,6 +22,7 @@
 #include <windows.h>
 #endif
 
+#include "checks.hpp"
 #include "paths.hpp"
 #include "process.hpp"
 
@@ -91,11 +92,7 @@ copy_in(const fs::path& folder) {
     return folder / loupe::exe_path().filename();
 }
 
-bool
-check(bool ok, const std::string& what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, ok ? "ok" : "FAILED", what.c_str());
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
 bool
 check_logged(const fs::path& folder) {

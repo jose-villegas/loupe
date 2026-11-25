@@ -39,6 +39,20 @@ Rebuild rebuild(const std::filesystem::path& toml, const std::filesystem::path& 
 std::vector<std::string> save_args(const SceneDoc& doc);
 // read_scene's parse of scene_edit.py read's JSON; none with `why` set.
 std::optional<SceneDoc> parse_scene(const std::string& json, const std::filesystem::path& toml, std::string* why);
+// The camera path in `keys_toml` as scene_edit.py read-keys reads it, each
+// key's `from` its place in the file; none with `why` set.
+std::optional<CameraPath> read_path(const std::filesystem::path& keys_toml, const std::filesystem::path& folder,
+                                    std::string* why);
+// `path`'s keys written into its file through scene_edit.py set-keys when they
+// changed, then `saved` set to them and each key's `from` to its new place.
+// False with `why` set, the file and `path` untouched.
+bool save_path(CameraPath& path, const std::filesystem::path& folder, std::string* why);
+// The set-keys arguments for `path`: one --key FROM:T:EX,EY,EZ:LX,LY,LZ per key
+// in order, FROM its place in the file or `new`, numbers as save_args writes
+// them; none when the path is as saved.
+std::vector<std::string> path_args(const CameraPath& path);
+// read_path's parse of read-keys' JSON; none with `why` set.
+std::optional<CameraPath> parse_path(const std::string& json, const std::filesystem::path& keys_toml, std::string* why);
 // rebuild's parse of bake.py list's output: the first column of each
 // tab-separated row; other lines are notes.
 std::vector<std::string> rebake_rows(const std::string& listing);

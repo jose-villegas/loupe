@@ -136,9 +136,9 @@ A `.scene.toml` opens as docked panels:
 
 | Panel | Shows |
 |---|---|
-| Viewport | the frame, the move, rotate and scale handles on the selected object (W, E, R; along its own axes or the world's), and a cube showing which way the camera looks |
+| Viewport | the frame, the move, rotate and scale handles on the selected object (W, E, R; along its own axes or the world's), and a cube showing which way the camera looks; for a camera on a path, the path, a scrub bar over it and the Free view |
 | Outliner | the scene's objects by parent, each with its kind, and whether it is baked |
-| Inspector | the selected object's position, rotation in degrees and scale as numbers, why it may not move when it may not, whether anything is unsaved, then the last save and which bakes it re-keys |
+| Inspector | the selected object's position, rotation in degrees and scale as numbers, why it may not move when it may not, a camera path's keys, whether anything is unsaved, then the last save and which bakes it re-keys |
 | Frame debugger | Scenes, the view picker, the observer and the timeline, as above |
 
 A click on a name in the Outliner, or on the frame (the object whose origin
@@ -152,11 +152,14 @@ the shown frame.
 flowchart LR
   H["Viewport handles"] --> U["one undo stack"]
   I["Inspector fields"] --> U
-  U --> D["the scene as read,<br/>with the edits"]
-  D -- "every frame" --> F["the shown frame:<br/>the object where it is now"]
+  U --> D["the scene and its paths as read,<br/>with the edits"]
+  D -- "every frame" --> F["the shown frame:<br/>the object where it is now,<br/>an edited path's camera on it"]
   D -- "Ctrl+S" --> S["scene_edit.py set:<br/>the changed values only"]
+  D -- "Ctrl+S" --> K["scene_edit.py set-keys:<br/>a changed path's keys"]
   S --> T[".scene.toml"]
+  K --> KT[".keys.toml"]
   T --> B["bake.py list --missing:<br/>the bakes the save re-keys"]
+  KT --> B
 ```
 
 What may move is what autana's
@@ -178,6 +181,24 @@ unbaked object re-keys none. A save the tool refuses leaves the file as it was
 and the change unsaved, and the Inspector says why. A pack (`.apak`) has no
 scene file, so it opens without the editor, and so does a build without the
 pack tool.
+
+### Camera paths
+
+A camera whose path is a `.keys.toml` shows that path when selected: the
+curve the camera flies, each key's eye and look_at joined, and a handle on the
+picked point (a click near a point picks it). The Inspector lists the keys and
+edits the picked key's time, eye and look_at; Add key puts one on the curve at
+the shown frame's time, and Delete key removes the picked one. A path that
+loops keeps its ends together. The scrub bar seeks to the frame at the time
+picked on the path. Free view flies the active camera by the observer's
+steering, so the path can be seen from outside.
+
+While a path differs from the one the pack was built with, the camera flies
+the edited path on every frame, and lands back on its clip when the path is
+the pack's again. Save writes each changed path with `scene_edit.py set-keys`,
+which keeps the file's comments and each kept key's lines, then runs the bake
+check. A path a bake reads, such as one a probe fit samples, asks before the
+first edit. A path from a `.glb` clip is shown, not edited.
 
 ## Render a scene
 
@@ -266,6 +287,10 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `editor_docs` | one undo stack, and whether anything is unsaved; only unbaked renderers place, each other object with the tool's reason; a placement's matrix turns as autana's `quatf_from_euler` and comes back from it, and a sheared, mirrored or zero-scale one is refused; the handles' matrices round trip and put a point where autana's pinhole does; a save sets only the fields that moved; the read's JSON parses, anything else is refused; the Outliner's tree by parent; a failed place is tried again the next frame |
 | `place` | a placed object draws there on the shown frame at once and on frames sought or stepped to after; after the first, each place draws one engine frame; placed back, the shown frame and every frame are the straight run's; an unknown name is refused |
 | `scene_save` | on a copy of the capybara scene, moving and scaling the capybara adds only its two lines and the read sees them; a baked renderer is refused, saying why, with the file unchanged and the change still unsaved |
+| `camera_paths` | the curve matches `camera_keys.py`'s numbers, open and looped; key edits keep a loop closed, times in order and each key's id; adds and deletes follow their rules; a path that would not build, or holds more keys than a clip counts, is a fault; set-keys gets each kept key by its table in the file |
+| `path_tour`, `path_lion` | on the Sponza pack, the camera stands where the curve puts it at every frame; flown on an edited path, the shown and later frames follow it while frames it does not reach stay the clip's; landed, every frame is the clip's again |
+| `path_editor` | a key drag is one undo step and holds save; adds pick the new key; deletes refuse the first key and a two-key path; a path a bake reads waits for its warning; each camera flies and lands apart, once per change; the scrub's frame for a time |
+| `path_save` | on a copy of the tour's keys with comments added, a moved eye, an added and a deleted key change only their own lines and the comments stay; a path that would not build is refused with the file unchanged; a delete undone after a save saves again with each comment above its key |
 | `include_gate` | only `src/engine/autana.hpp` includes autana's engine headers; autana's packages, below the engine, are open to every file |
 
 CI runs them on Linux and Windows at the pinned autana on every pull request,

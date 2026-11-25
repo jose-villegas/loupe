@@ -6,6 +6,7 @@
 #include <fstream>
 #include <string>
 
+#include "checks.hpp"
 #include "version.hpp"
 
 namespace fs = std::filesystem;
@@ -14,11 +15,7 @@ namespace {
 
 constexpr const char TEST[] = "build_id_test";
 
-bool
-check(bool ok, const std::string& what) {
-    std::fprintf(stderr, "%s: %s %s\n", TEST, ok ? "ok" : "FAILED", what.c_str());
-    return ok;
-}
+constexpr loupe::test::Checks check{TEST};
 
 bool
 check_lines() {

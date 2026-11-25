@@ -9,6 +9,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "engine/autana.hpp"
@@ -28,8 +29,8 @@ struct Frames::State {
     size_t kept_bytes = 0;
     bool said_over = false;
     int index = 0;
-    uint32_t dt_ms = 0;                                   // the run's, as it opened
-    std::vector<uint32_t> dts;                            // each drawn frame's dt, for replaying it
+    uint32_t dt_ms = 0;          // the run's, as it opened
+    std::vector<uint32_t> times; // each drawn frame's time of play: the dts through it, so replays take each dt again
     std::map<int, render_host_checkpoint_t*> checkpoints; // the state before drawing frame key
     // While observing or placing: the state before drawing the shown frame,
     // apart from the kept checkpoints, which thinning may drop.
@@ -37,6 +38,9 @@ struct Frames::State {
     int64_t drawn = 0; // engine frames, replays included
     // Objects the editor placed, by name: set on the scene before every frame is drawn.
     std::map<std::string, transformf_t> placed;
+    // Cameras flown instead of their clips, by name, and the first frame drawn flying.
+    std::map<std::string, Frames::PoseAt> flown;
+    int flown_from = INT_MAX;
 
     // Checkpoints sit before frames FIRST_SEEKABLE, FIRST_SEEKABLE + every...
     bool
@@ -51,13 +55,26 @@ struct Frames::State {
         return checkpoints.erase(it);
     }
 
-    // Frees the checkpoints after frame `frame` and forgets the dts from it on.
+    // Whether frame `frame` was drawn, so its dt is known.
+    bool
+    drawn_at(int frame) const {
+        return frame >= 0 && frame < std::ssize(times);
+    }
+
+    // The dt frame `frame`, drawn, took.
+    uint32_t
+    dt_at(int frame) const {
+        const auto at = static_cast<size_t>(frame);
+        return times[at] - (at == 0 ? 0 : times[at - 1]);
+    }
+
+    // Frees the checkpoints after frame `frame` and forgets the times from it on.
     void
     forget_after(int frame) {
         for (auto it = checkpoints.upper_bound(frame); it != checkpoints.end();) {
             it = drop(it);
         }
-        dts.resize(static_cast<size_t>(std::max(frame, 0)));
+        times.resize(static_cast<size_t>(std::max(frame, 0)));
     }
 
     // Past the budget, keeps every other checkpoint, so the interval doubles and coverage stays even.
@@ -248,7 +265,7 @@ Frames::step(uint32_t dt_ms) {
 bool
 Frames::advance(uint32_t dt_ms) {
     State& s = *state_;
-    if (s.index < std::ssize(s.dts) && s.dts[s.index] != dt_ms) {
+    if (s.drawn_at(s.index) && s.dt_at(s.index) != dt_ms) {
         s.forget_after(s.index);
     }
     bool saved = true;
@@ -270,14 +287,29 @@ Frames::advance(uint32_t dt_ms) {
             transform_set_local(entity, local);
         }
     }
+    fly_cameras(dt_ms);
     const input_t input = {};
     render_host_step(dt_ms, &input);
     s.drawn++;
-    if (s.index == std::ssize(s.dts)) {
-        s.dts.push_back(dt_ms);
+    if (s.index == std::ssize(s.times)) {
+        s.times.push_back((s.times.empty() ? 0 : s.times.back()) + dt_ms);
     }
     s.index++;
     return saved;
+}
+
+void
+Frames::fly_cameras(uint32_t dt_ms) {
+    State& s = *state_;
+    for (const auto& [name, pose] : s.flown) {
+        const entity_t entity = entity_named(name);
+        if (handle_is_none(entity)) {
+            continue;
+        }
+        s.flown_from = std::min(s.flown_from, s.index);
+        animator_set_paused(entity, ANIMATOR_CURRENT, true);
+        transform_set_local(entity, pose(time_ms(s.index - 1) + dt_ms));
+    }
 }
 
 bool
@@ -306,9 +338,9 @@ Frames::restore_before(int index) {
 
 void
 Frames::step_to(int index) {
-    State& s = *state_;
+    const State& s = *state_;
     while (s.index <= index) {
-        advance(s.index < std::ssize(s.dts) ? s.dts[s.index] : dt_ms());
+        advance(s.drawn_at(s.index) ? s.dt_at(s.index) : dt_ms());
     }
 }
 
@@ -369,7 +401,7 @@ Frames::redraw_held() {
     } else {
         return false;
     }
-    return advance(s.dts[shown]);
+    return advance(s.dt_at(shown));
 }
 
 bool
@@ -384,7 +416,7 @@ Frames::redraw_unheld() {
     if (restored) {
         s.index = shown;
     }
-    const bool drew = restored && advance(s.dts[shown]);
+    const bool drew = restored && advance(s.dt_at(shown));
     release_hold();
     return drew;
 }
@@ -421,6 +453,65 @@ Frames::place(const std::string& object, const transformf_t& local) {
     transform_set_local(entity, local);
     // The redraw sets every placement again before its frame.
     return redraw_held();
+}
+
+bool
+Frames::fly(const std::string& camera, PoseAt pose) {
+    if (handle_is_none(entity_named(camera))) {
+        return false;
+    }
+    state_->flown[camera] = std::move(pose);
+    return redraw_held();
+}
+
+bool
+Frames::land(const std::string& camera) {
+    State& s = *state_;
+    if (s.flown.erase(camera) == 0) {
+        return true;
+    }
+    // Checkpoints from the frames flown hold the clip paused where flying left it: replay from one before them.
+    for (auto it = s.checkpoints.upper_bound(s.flown_from); it != s.checkpoints.end();) {
+        it = s.drop(it);
+    }
+    if (s.flown.empty()) {
+        s.flown_from = INT_MAX;
+    }
+    release_hold();
+    const int shown = s.index - 1;
+    if (shown < 0) {
+        return true;
+    }
+    if (!restore_before(shown)) {
+        return false;
+    }
+    step_to(shown);
+    return true;
+}
+
+uint32_t
+Frames::time_ms(int index) const {
+    const State& s = *state_;
+    if (index < std::ssize(s.times)) {
+        return index < 0 ? 0 : s.times[static_cast<size_t>(index)];
+    }
+    const auto past = static_cast<uint32_t>(index + 1 - std::ssize(s.times));
+    return (s.times.empty() ? 0 : s.times.back()) + (past * s.dt_ms);
+}
+
+bool
+Frames::is_active(const std::string& object) const {
+    const entity_t entity = entity_named(object);
+    return !handle_is_none(entity) && handle_equal(entity, camera_active());
+}
+
+std::optional<transformf_t>
+Frames::local_pose(const std::string& object) const {
+    const entity_t entity = entity_named(object);
+    if (handle_is_none(entity)) {
+        return std::nullopt;
+    }
+    return transform_local(entity);
 }
 
 std::optional<mat4f_t>

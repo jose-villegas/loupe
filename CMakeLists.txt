@@ -57,10 +57,13 @@ autana_cpp_checks()
 # poses cross into the window. Objects, not an archive: an archive would keep
 # render_host.c's weak stand-ins and drop the scene manager's real definitions.
 add_library(loupe_core OBJECT
+    src/editor/camera_path.cpp
     src/editor/doc.cpp
     src/editor/placement.cpp
     src/editor/scene_tool.cpp
+    src/engine/engine_frame.cpp
     src/engine/frames.cpp
+    src/engine/path_curve.cpp
     src/library.cpp
     src/options.cpp
     src/pack.cpp
@@ -125,6 +128,7 @@ add_library(loupe_window OBJECT
     src/window/gpu.cpp
     src/window/observer.cpp
     src/window/panels.cpp
+    src/window/path_editor.cpp
     src/window/run_window.cpp)
 target_link_libraries(loupe_window PUBLIC loupe_core imgui imguizmo)
 # The window's icon, the app logo, built into the binary as the bytes of its PNG.
