@@ -1,4 +1,4 @@
-// The README's pictures of the window, each made by a scripted run instead of
+// The docs' pictures of the window, each made by a scripted run instead of
 // by hand: the scene and camera it opens, the state it drives the editor to
 // through the editor's own calls, and the panel it keeps. `loupe --shot NAME
 // -o OUT.png` writes one; the doc_shots target writes them all into docs/,
@@ -43,7 +43,7 @@ constexpr uint32_t SHOT_DT_MS = 100;
 // dock on the first, and a seek, a fly or an upload lands on the next.
 constexpr int SHOT_SETTLE_TICKS = 4;
 
-// Every shot, in the README's order.
+// Every shot, in the order docs/editor/ shows them.
 std::span<const Shot> doc_shots();
 // The shot called `name`; null for none.
 const Shot* find_shot(std::string_view name);

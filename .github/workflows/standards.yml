@@ -2,7 +2,7 @@ name: Standards
 
 # autana's own gates, run from the submodule on Loupe's tree: they check the
 # repository they run in. Steps marked STAGED_TEXT_GATE also run before each
-# commit through the hooks (README, Standards).
+# commit through the hooks (docs/development/Standards.md).
 
 on:
   pull_request:

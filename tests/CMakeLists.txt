@@ -226,7 +226,7 @@ endfunction()
 window_smoke(window_smoke "${sponza}")
 window_smoke(window_start "")
 
-# The README's pictures of the window, docs/shots: drawn offscreen, each must
+# The docs' pictures of the window, docs/shots: drawn offscreen, each must
 # hold the pixels committed (doc_shots.cmake). Shots open .scene.toml files.
 if(LOUPE_PACK_TOOL)
     add_test(NAME doc_shots_current

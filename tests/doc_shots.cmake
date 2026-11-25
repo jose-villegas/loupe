@@ -6,7 +6,7 @@
 # shot draws: the doc_shots_current test.
 cmake_minimum_required(VERSION 3.25)
 include("${CMAKE_CURRENT_LIST_DIR}/offscreen.cmake")
-set(regenerate "cmake --build <build> --target doc_shots, on Linux with lavapipe (README, Tests)")
+set(regenerate "cmake --build <build> --target doc_shots, on Linux with lavapipe (docs/development/Tests.md)")
 # The pictures are of autana's scenes as the pinned commit draws them; another
 # autana (the nightly's main, or -DAUTANA_DIR) can draw other pixels.
 execute_process(COMMAND git -C "${SOURCE}" rev-parse HEAD:third_party/autana OUTPUT_VARIABLE pinned

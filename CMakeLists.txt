@@ -147,7 +147,7 @@ target_link_libraries(loupe_path PUBLIC loupe_core SDL3::SDL3-static)
 add_executable(loupe src/main.cpp)
 target_link_libraries(loupe PRIVATE loupe_core loupe_path loupe_window)
 
-# docs/shots, the README's pictures of the window, drawn again by every doc
+# docs/shots, the docs' pictures of the window, drawn again by every doc
 # shot (src/window/doc_shots.cpp) offscreen (tests/doc_shots.cmake); the
 # doc_shots_current test checks them. Shots open .scene.toml files.
 if(LOUPE_PACK_TOOL)

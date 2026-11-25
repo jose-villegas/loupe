@@ -1,7 +1,7 @@
 // loupe: opens a scene in the window, or the window's start panel without one;
 // with -o or --video, writes the scene's frames and exits; with --frame or
 // --compare, writes a frame of its camera path or an A | B video of it; with
-// --shot, writes one of the README's pictures of the window.
+// --shot, writes one of the docs' pictures of the window.
 #include <cstdio>
 #include <string>
 
