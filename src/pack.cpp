@@ -95,7 +95,7 @@ firmware_packs(const std::string& commit, std::string* why) {
         *why = "this loupe was built without the pack tool that builds a board's packs";
         return std::nullopt;
     }
-    const fs::path folder = pack_cache() / ("firmware-" + commit);
+    fs::path folder = pack_cache() / ("firmware-" + commit);
     const fs::path stamp = folder / FIRMWARE_STAMP;
     std::error_code error;
     if (fs::is_regular_file(stamp, error) && read_text(stamp) == commit) {
