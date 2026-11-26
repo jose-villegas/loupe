@@ -441,6 +441,21 @@ draw_shown(Shown& shown, const Folders& folders, const window::EditMenu& menu, b
     return back;
 }
 
+// Ends the tick's frame; with `picture`, also reads back what it drew, left
+// empty, and said, when it could not be.
+void
+end_frame(window::Gpu& gpu, std::optional<window::Picture>* picture) {
+    if (picture == nullptr) {
+        gpu.end_frame();
+        return;
+    }
+    std::string why;
+    *picture = gpu.end_frame_read_back(&why);
+    if (!*picture) {
+        std::fprintf(stderr, "loupe: cannot read the window back: %s\n", why.c_str());
+    }
+}
+
 // The window's state between ticks: the open scene, or the start panel's.
 class Window {
   public:
@@ -537,15 +552,7 @@ Window::tick(std::optional<window::Picture>* picture) {
         window::draw_attach(attach_);
     }
     ImGui::End();
-    if (picture != nullptr) {
-        std::string why;
-        *picture = gpu_.end_frame_read_back(&why);
-        if (!*picture) {
-            std::fprintf(stderr, "loupe: cannot read the window back: %s\n", why.c_str());
-        }
-    } else {
-        gpu_.end_frame();
-    }
+    end_frame(gpu_, picture);
     if (back) {
         leave();
     }
