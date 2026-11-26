@@ -23,8 +23,9 @@ boards plugged in here; the others the board pool knows, seen here before or
 named by a lapsed lock, wait under a collapsed "not here". The last list stays
 while a new one is asked, and each wait is one line with a spinner and its
 seconds. View, on a free board plugged in here, starts `autana -b BOARD
-record` and shows its stream live in this window: each tick draws the newest
-frame that has arrived, so a backlog is skipped rather than played through.
+record` and shows its stream live in this window: each tick draws the next
+frame that has arrived, and past 16 waiting it jumps to the newest, so the
+view never falls far behind the board.
 One line says what the screen is: "Live: BOARD", and "· recording NAME" while
 Record saves the frames.
 

@@ -54,6 +54,12 @@ constexpr float DEBUGGER_SHARE = 0.16F;
 constexpr float DEBUGGER_MAX_SHARE = 0.5F;
 // A height within this of another is the same: rounding, not a resize.
 constexpr float FIT_SLACK = 1.0F;
+// How many of a live stream's frames may wait before a tick seeks to the
+// newest rather than stepping. A step draws one frame on from the last; a
+// seek decodes from the keyframe before it, about six steps' time, so it
+// pays only past a backlog that stepping, one a tick, is slow to drain. A
+// board's frames arrive in chunks of up to 8, which stepping keeps up with.
+constexpr int LIVE_SEEK_BEHIND = 16;
 // The outliner's line for a recording, which draws no scene file.
 constexpr const char RECORDING_NO_EDITOR[] = "a recording has no scene file to edit";
 
@@ -176,7 +182,8 @@ struct Asked {
 // Applies one of what the panels asked for this tick, a picked view first, then
 // the observer, which pauses the timeline while on; true when the frame on screen
 // changed. A failure clears `ok`, and a failed step stops play. A live
-// stream shows its newest frame: a backlog is skipped, not stepped through.
+// stream steps one frame a tick, and seeks to its newest once more than
+// LIVE_SEEK_BEHIND frames wait.
 bool
 apply(Frames& frames, window::Timeline& timeline, window::Observer& observer, const Asked& asked, bool* ok) {
     if (asked.view) {
@@ -206,7 +213,7 @@ apply(Frames& frames, window::Timeline& timeline, window::Observer& observer, co
         timeline.playing = frames.live();
         return false;
     }
-    const bool behind = frames.live() && frames.count() - frames.index() > 1;
+    const bool behind = frames.live() && frames.count() - frames.index() > LIVE_SEEK_BEHIND;
     if (!(behind ? frames.seek(frames.count() - 1) : frames.step(frames.dt_ms()))) {
         *ok = false;
         timeline.playing = false;
