@@ -32,10 +32,13 @@ std::string scene_id(const std::filesystem::path& file);
 // `why` set, for a scene that cannot open.
 std::optional<ScenePack> resolve_scene(const std::filesystem::path& path, std::string* why);
 
-// Every pack a development firmware of the pinned autana carries, built by
-// build_pack.py from autana_dir() (tools.hpp) into one folder of the pack
-// cache, keyed by `commit`: the packs a board's recording names. Built once
-// per key; none, with `why` set, without the pack tool or when the build fails.
-std::optional<std::filesystem::path> firmware_packs(const std::string& commit, std::string* why);
+// Every pack a development firmware of autana `commit` carries: the packs a
+// board's recording names. Loupe's build makes them for its pin
+// (cmake/firmware_packs.cmake), so they are found in `shipped`, where an
+// install puts them, or in the build tree; otherwise the pack tool builds them
+// into the pack cache, once per commit. None, with `why` set, when neither
+// holds them and they cannot be built.
+std::optional<std::filesystem::path> firmware_packs(const std::string& commit, const std::filesystem::path& shipped,
+                                                    std::string* why);
 
 } // namespace loupe

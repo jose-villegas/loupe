@@ -357,6 +357,18 @@ waits() {
                  "a refusal after a frame was drawn keeps the frame (the debugger says why)");
 }
 
+// The screen says what it is: the board live and its file while it records, then the recording.
+void
+screen_lines() {
+    const fs::path file = fs::path("recordings") / "907069FEA308-20261117-214512.framerec";
+    const std::string live = loupe::window::screen_line(BOARD, file, true);
+    (void)expect(live.starts_with("Live from ") && live.find(BOARD) != std::string::npos
+                     && live.ends_with("907069FEA308-20261117-214512.framerec"),
+                 "a recording under way is live from its board, saving to its file");
+    (void)expect(loupe::window::screen_line(BOARD, file, false) == "Recording 907069FEA308-20261117-214512.framerec",
+                 "a stopped or saved one is the recording in its file");
+}
+
 } // namespace
 
 int
@@ -417,6 +429,7 @@ main(int argc, char** argv) {
     std::promise<loupe::editor::Rebuild> asking;
     attach.listing = std::async(std::launch::deferred, [] { return loupe::BoardList{}; });
     waits();
+    screen_lines();
 
     loupe::editor::SceneDoc doc;
     doc.objects.push_back({.path = "capybara_body",
@@ -435,8 +448,8 @@ main(int argc, char** argv) {
                                   const std::optional<loupe::window::Recording::Status>& recording) {
             const auto panel = [&] {
                 (void)loupe::window::draw_debugger(
-                    {.frames = *frames, .views = views, .stream = stream, .recording = recording}, controls, observer,
-                    timeline, &view);
+                    {.frames = *frames, .views = views, .stream = stream, .recording = recording, .what = ""}, controls,
+                    observer, timeline, &view);
             };
             (void)fits(name, width, out, panel);
             (void)tall_enough(std::string(name) + "_height", width, panel);

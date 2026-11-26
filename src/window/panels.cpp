@@ -70,6 +70,17 @@ seconds_since(std::chrono::steady_clock::time_point since) {
     return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - since).count();
 }
 
+// A step of a wait's spinner, turning every SPIN_MS: a wait that moves.
+constexpr std::string_view SPIN = "|/-\\";
+constexpr int64_t SPIN_MS = 125;
+
+char
+spinner() {
+    const auto now = std::chrono::steady_clock::now().time_since_epoch();
+    const int64_t step = std::chrono::duration_cast<std::chrono::milliseconds>(now).count() / SPIN_MS;
+    return SPIN[static_cast<size_t>(step) % SPIN.size()];
+}
+
 } // namespace
 
 BoardRows
@@ -147,7 +158,8 @@ draw_attach(Attach& attach) {
     attach.refresh = ImGui::Button(attach.listed ? "List again" : "List boards");
     ImGui::EndDisabled();
     if (listing) {
-        const std::string asking = std::format("asking the board pool ({} s)", seconds_since(attach.listing_since));
+        const std::string asking =
+            std::format("{} asking the board pool ({} s)", spinner(), seconds_since(attach.listing_since));
         flow(text_width(asking.c_str()));
         hint(asking.c_str());
     }
@@ -179,10 +191,7 @@ draw_attach(Attach& attach) {
         ImGui::TreePop();
     }
     if (reserving) {
-        hint(std::format("readying the recording ({} s): a person's reservation, when one holds the board (autana "
-                         "lock hand), then the board's packs, built from autana {} (a minute or so the first time)",
-                         seconds_since(attach.reserving_since), attach.packs_autana)
-                 .c_str());
+        hint(std::format("{} readying the recording ({} s)", spinner(), seconds_since(attach.reserving_since)).c_str());
     }
 }
 
@@ -255,9 +264,18 @@ content_height() {
     return ImGui::GetCursorPosY() - style.ItemSpacing.y + style.WindowPadding.y;
 }
 
+std::string
+screen_line(const std::string& board, const std::filesystem::path& file, bool live) {
+    const std::string name = utf8(file.filename());
+    return live ? std::format("Live from {}, saving to {}", board, name) : std::format("Recording {}", name);
+}
+
 bool
 draw_debugger(const Debugger& shown, RecordControls& controls, Observer& observer, Timeline& timeline,
               std::optional<int>* view) {
+    if (!shown.what.empty()) {
+        ImGui::TextWrapped("%s", shown.what.c_str());
+    }
     const bool back = ImGui::Button("Scenes");
     if (!shown.views.empty()) {
         int picked = shown.frames.view();
@@ -340,31 +358,30 @@ waiting_for_frames(const Recording::Status& status, const Frames::StreamState& s
     }
     if (status.received > 0) {
         return {.phase = Waiting::Reading,
-                .text = std::format(
-                    "Reading {}'s stream: {} bytes so far; its header, packs and first frame next ({:.1f} s)", board,
-                    status.received, seconds)};
+                .text = std::format("Reading {}'s stream, {} bytes ({:.0f} s)", board, status.received, seconds)};
     }
     if (status.began) {
         return {.phase = Waiting::Recording,
-                .text = std::format("{} is recording; waiting for its first frame ({:.1f} s)", board, seconds)};
+                .text = std::format("{} is recording, first frame next ({:.0f} s)", board, seconds)};
     }
     if (!status.latest.empty()) {
-        return {.phase = Waiting::Autana, .text = std::format("autana: {} ({:.1f} s)", status.latest, seconds)};
+        return {.phase = Waiting::Autana, .text = std::format("autana: {} ({:.0f} s)", status.latest, seconds)};
     }
-    return {.phase = Waiting::Starting,
-            .text = std::format("Starting autana record for {}: taking the board and opening its port ({:.1f} s)",
-                                board, seconds)};
+    return {.phase = Waiting::Starting, .text = std::format("Starting the recording on {} ({:.0f} s)", board, seconds)};
 }
 
 void
 draw_waiting(const WaitLine& line) {
+    // A step still under way turns; an end or a refusal stands still.
+    const bool going = line.phase != Waiting::Ended && line.phase != Waiting::Refused;
+    const std::string text = going ? std::format("{} {}", spinner(), line.text) : line.text;
     const ImVec2 room = ImGui::GetContentRegionAvail();
     const ImVec2 at = ImGui::GetCursorPos();
     const float wrap = room.x;
-    const ImVec2 size = ImGui::CalcTextSize(line.text.c_str(), nullptr, false, wrap);
+    const ImVec2 size = ImGui::CalcTextSize(text.c_str(), nullptr, false, wrap);
     ImGui::SetCursorPos(ImVec2(at.x, at.y + std::max(0.0F, (room.y - size.y) / 2)));
     ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + wrap);
-    ImGui::TextUnformatted(line.text.c_str());
+    ImGui::TextUnformatted(text.c_str());
     ImGui::PopTextWrapPos();
 }
 

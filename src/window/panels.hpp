@@ -111,7 +111,12 @@ struct Debugger {
     const std::vector<DebugView>& views;
     std::optional<Frames::StreamState> stream;
     std::optional<Recording::Status> recording;
+    std::string what; // what the screen is (screen_line()); empty for a scene
 };
+
+// What a recording's screen is, in one line: the board live and the file it
+// is saved to while it records (`live`), then the recording in that file.
+std::string screen_line(const std::string& board, const std::filesystem::path& file, bool live);
 
 // The height the current window needs to show what it has drawn so far with
 // no scrolling: its last row's bottom and the window's padding. Call it

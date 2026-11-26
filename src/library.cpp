@@ -53,6 +53,11 @@ samples_dir(const Folders& folders) {
     return folders.exe_dir / LOUPE_SAMPLES_DIR;
 }
 
+fs::path
+firmware_dir(const Folders& folders) {
+    return folders.exe_dir / LOUPE_FIRMWARE_DIR;
+}
+
 Library
 library(const Folders& folders) {
     Library found;

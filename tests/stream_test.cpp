@@ -3,7 +3,7 @@
 // seek back draws the bytes the forward step drew. Fed live in pieces, its
 // count grows as frames arrive and draws them alike; bytes that are no stream
 // are refused, and so is a stream naming a pack its folder lacks, by name. Where
-// loupe has the pack tool, the firmware's packs it builds draw the stream.
+// loupe has the pack tool, its build made the pin's firmware packs, and they draw the stream.
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
@@ -19,6 +19,7 @@
 #include "paths.hpp"
 #include "read_bytes.hpp"
 #include "tools.hpp"
+#include "version.hpp"
 
 namespace fs = std::filesystem;
 
@@ -36,8 +37,6 @@ constexpr const char STREAM[] = "host.framerec";
 // The pack the recorded scene names, and one only a board's firmware carries.
 constexpr const char SCENE_PACK[] = "sponza";
 constexpr const char FIRMWARE_ONLY_PACK[] = "bistro";
-// The key the test's firmware packs are built under, apart from any Loupe's own.
-constexpr const char FIRMWARE_KEY[] = "stream-test";
 
 // Where the scene's packs are and where the test writes.
 struct Folders {
@@ -180,26 +179,26 @@ missing_pack(const std::vector<uint8_t>& bytes, const Folders& at) {
 bool
 firmware_packs_draw(const std::vector<uint8_t>& bytes, const Folders& at) {
     if (!loupe::builds_packs()) {
-        std::fprintf(stderr, "%s: no pack tool in this build: firmware packs not built\n", TEST);
+        std::fprintf(stderr, "%s: no pack tool in this build: no firmware packs built with it\n", TEST);
         return true;
     }
+    const std::string pin = loupe::build_id(at.out).autana_commit;
+    const fs::path cached = loupe::pack_cache() / ("firmware-" + pin);
+    std::error_code error;
+    fs::remove_all(cached, error);
     std::string why;
-    const std::optional<fs::path> packs = loupe::firmware_packs(FIRMWARE_KEY, &why);
+    const std::optional<fs::path> packs = loupe::firmware_packs(pin, at.out / "not_installed", &why);
     if (!packs.has_value()) {
-        (void)expect(false, "the firmware's packs build");
+        (void)expect(false, "the build made the pin's firmware packs");
         std::fprintf(stderr, "%s: %s\n", TEST, why.c_str());
         return false;
     }
-    (void)expect(true, "the firmware's packs build");
+    (void)expect(true, "the build made the pin's firmware packs");
     const fs::path& folder = *packs;
     const auto pack = [&](const char* name) { return folder / (std::string(name) + std::string(loupe::PACK_SUFFIX)); };
     bool ok = expect(fs::is_regular_file(pack(SCENE_PACK)) && fs::is_regular_file(pack(FIRMWARE_ONLY_PACK)),
                      "they hold the recorded scene's pack and one only the firmware carries");
-    std::error_code error;
-    const auto built = fs::last_write_time(pack(SCENE_PACK), error);
-    const std::optional<fs::path> again = loupe::firmware_packs(FIRMWARE_KEY, &why);
-    ok &= expect(again == folder && fs::last_write_time(pack(SCENE_PACK), error) == built,
-                 "a second call for the same key builds nothing");
+    ok &= expect(!fs::exists(cached, error), "asking for them builds nothing");
     const auto state = fed_over(bytes, at, folder, "firmware");
     ok &= expect(state && !state->refused && state->frames == FRAMES, "the stream draws over them");
     return ok;

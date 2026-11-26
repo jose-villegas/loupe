@@ -120,6 +120,20 @@ if(LOUPE_PACK_TOOL)
 else()
     set_property(SOURCE src/tools.cpp APPEND PROPERTY COMPILE_DEFINITIONS LOUPE_PACK_TOOL=0)
 endif()
+# Every pack the pinned autana's firmware carries, which a board's recording
+# names, built with Loupe rather than when Record is pressed
+# (cmake/firmware_packs.cmake) and installed beside the samples
+# (cmake/package.cmake). Built wherever Python is, so a release carries them.
+set(firmware_packs "")
+if((LOUPE_PACK_TOOL OR LOUPE_SAMPLES) AND GIT_EXECUTABLE)
+    set(firmware_packs "${CMAKE_BINARY_DIR}/firmware")
+    add_custom_target(firmware_packs ALL
+        COMMAND "${CMAKE_COMMAND}" "-DGIT=${GIT_EXECUTABLE}" "-DAUTANA_DIR=${AUTANA_DIR}"
+                "-DPYTHON=${Python3_EXECUTABLE}" "-DOUT=${firmware_packs}"
+                -P "${PROJECT_SOURCE_DIR}/cmake/firmware_packs.cmake"
+        VERBATIM)
+endif()
+set_property(SOURCE src/pack.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_FIRMWARE_BUILT=\"${firmware_packs}\"")
 
 # The window: SDL3, Vulkan through volk, Dear ImGui (third_party/CMakeLists.txt).
 # Only runs that write no file open it, so those need no GPU.
@@ -148,6 +162,9 @@ add_library(loupe_path OBJECT src/path/path.cpp)
 target_link_libraries(loupe_path PUBLIC loupe_core SDL3::SDL3-static)
 
 add_executable(loupe src/main.cpp)
+if(TARGET firmware_packs)
+    add_dependencies(loupe firmware_packs)
+endif()
 target_link_libraries(loupe PRIVATE loupe_core loupe_path loupe_window)
 
 include(cmake/package.cmake)

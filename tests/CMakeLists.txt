@@ -115,6 +115,9 @@ endif()
 add_executable(stream_test stream_test.cpp)
 target_link_libraries(stream_test PRIVATE loupe_core)
 add_test(NAME stream COMMAND stream_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/stream")
+if(TARGET firmware_packs)
+    add_dependencies(stream_test firmware_packs)
+endif()
 on_packs(stream)
 
 # A board's recording against a fake autana record, and the board list's parse.

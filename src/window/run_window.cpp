@@ -94,25 +94,14 @@ open_recording(const Options& options, const std::filesystem::path& packs, std::
     return frames;
 }
 
-// The packs a recording is drawn with: every pack the pinned autana's firmware
-// carries, built where this Loupe has the pack tool; elsewhere the scenes it
-// installs. None, with `why` set, when they could not be built.
-std::optional<std::filesystem::path>
-recording_packs(const std::string& commit, const std::filesystem::path& samples, std::string* why) {
-    if (!builds_packs()) {
-        return samples;
-    }
-    return firmware_packs(commit, why);
-}
-
 // What Record readies for `board`, off the frame loop: the reservation when a
-// person holds it (`held`), logged to `log`, then the packs recording_packs
-// gives for `commit`, or `samples` without the pack tool.
+// person holds it (`held`), logged to `log`, then autana `commit`'s firmware
+// packs, which an install keeps in `shipped` (firmware_packs(), pack.hpp).
 struct ReadyJob {
     std::string board;
     std::optional<Board> held;
     std::string commit;
-    std::filesystem::path samples, log;
+    std::filesystem::path shipped, log;
 };
 
 // No packs, with `why` set, when either step of `job` failed.
@@ -125,7 +114,7 @@ ready_recording(const ReadyJob& job) {
             return reserved;
         }
     }
-    reserved.packs = recording_packs(job.commit, job.samples, &reserved.why).value_or(std::filesystem::path());
+    reserved.packs = firmware_packs(job.commit, job.shipped, &reserved.why).value_or(std::filesystem::path());
     return reserved;
 }
 
@@ -155,6 +144,8 @@ struct Shown {
     // as it moves on.
     window::WaitFor wait;
     std::optional<window::Waiting> waited;
+    // The recording's file, saved or being written; empty for a scene.
+    std::filesystem::path recording_file;
     window::RecordControls controls;
     window::FrameTexture texture;
     window::Timeline timeline;
@@ -286,6 +277,17 @@ drive_recording(Shown& shown) {
     }
 }
 
+// What a recording's screen is (screen_line()): live while its recording
+// runs and has not been stopped; empty for a scene.
+std::string
+screen_what(const Shown& shown, const std::optional<window::Recording::Status>& status) {
+    if (shown.recording_file.empty()) {
+        return "";
+    }
+    const bool live = status && status->running && !status->stopped;
+    return window::screen_line(shown.wait.board, shown.recording_file, live);
+}
+
 // What the viewport says in place of a recording's frame until the first one
 // shows; each step is logged with its time, so the wait can be measured.
 // Waiting::Shown for a scene or a saved recording.
@@ -376,7 +378,8 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
         back = window::draw_debugger({.frames = *shown.frames,
                                       .views = shown.views,
                                       .stream = shown.frames->stream_state(),
-                                      .recording = status},
+                                      .recording = status,
+                                      .what = screen_what(shown, status)},
                                      shown.controls, shown.observer, shown.timeline, &asked.view);
         fit_debugger(shown.debugger_fitted, window::content_height());
     }
@@ -579,16 +582,20 @@ Window::record_asked() {
         }
         attach_.packs_autana = copy_.id.autana_commit;
         attach_.reserving_since = std::chrono::steady_clock::now();
+        std::fprintf(stderr, "loupe: readying %s: %sthe packs of autana %s\n", attach_.record->c_str(),
+                     held ? "its reservation (autana lock hand), then " : "", attach_.packs_autana.c_str());
         attach_.reserving = std::async(std::launch::async, ready_recording,
                                        ReadyJob{.board = *attach_.record,
                                                 .held = held,
                                                 .commit = copy_.id.autana_commit,
-                                                .samples = samples_dir(folders_),
+                                                .shipped = firmware_dir(folders_),
                                                 .log = scratch_.path() / "hand.log"});
         attach_.record.reset();
     }
     if (attach_.reserving.valid() && attach_.reserving.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         const window::Reserved reserved = attach_.reserving.get();
+        std::fprintf(stderr, "loupe: readied %s in %.3f s\n", reserved.board.c_str(),
+                     std::chrono::duration<double>(std::chrono::steady_clock::now() - attach_.reserving_since).count());
         if (shown_) {
             // A scene opened while the recording was readied: it stays.
             return;
@@ -627,8 +634,8 @@ Window::open(const Options& options) {
     if (!scratch_.path().empty() && !recording) {
         frames = open_scene(run, options.scene, &why);
     } else if (!scratch_.path().empty()) {
-        // Built once per pin, so only the first replay waits for them.
-        if (const auto packs = recording_packs(copy_.id.autana_commit, samples_dir(folders_), &why)) {
+        // Built with Loupe for its pin, so a replay waits for none.
+        if (const auto packs = firmware_packs(copy_.id.autana_commit, firmware_dir(folders_), &why)) {
             frames = open_recording(run, *packs, utf8(options.scene.stem()), &why);
         }
     }
@@ -643,6 +650,7 @@ Window::open(const Options& options) {
     shown_.emplace(gpu_, std::move(frames));
     if (recording) {
         shown_->editor_why = RECORDING_NO_EDITOR;
+        shown_->recording_file = options.scene;
     } else {
         shown_->editor = window::open_editor(options.scene, &shown_->editor_why);
     }
@@ -676,6 +684,7 @@ Window::attach(const window::Reserved& reserved) {
     gpu_.set_title(std::format("{}: {} (recording)", TITLE, board));
     shown_.emplace(gpu_, std::move(frames));
     shown_->recording = std::move(recording);
+    shown_->recording_file = shown_->recording->saved();
     const auto listed = std::ranges::find(attach_.list.boards, board, &Board::id);
     shown_->wait.board = listed == attach_.list.boards.end() || listed->port.empty()
                              ? board

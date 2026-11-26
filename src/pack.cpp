@@ -17,8 +17,18 @@ namespace loupe {
 
 namespace {
 
-// The file in a firmware_packs() folder naming the key it was built for.
+// The file in a firmware_packs() folder naming the commit it was built for.
 constexpr const char FIRMWARE_STAMP[] = "built-for";
+// Where Loupe's build put its pin's firmware packs; empty when it built none.
+constexpr const char FIRMWARE_BUILT[] = LOUPE_FIRMWARE_BUILT;
+
+// True when `folder` holds the firmware packs of `commit`.
+bool
+built_for(const fs::path& folder, const std::string& commit) {
+    std::error_code error;
+    return !folder.empty() && fs::is_regular_file(folder / FIRMWARE_STAMP, error)
+           && read_text(folder / FIRMWARE_STAMP) == commit;
+}
 
 // One cache folder per scene file, wherever two scenes share a name.
 uint64_t
@@ -90,17 +100,22 @@ resolve_scene(const fs::path& path, std::string* why) {
 }
 
 std::optional<fs::path>
-firmware_packs(const std::string& commit, std::string* why) {
+firmware_packs(const std::string& commit, const fs::path& shipped, std::string* why) {
+    for (const fs::path& made : {shipped, fs::path(FIRMWARE_BUILT)}) {
+        if (built_for(made, commit)) {
+            return made;
+        }
+    }
     if (!builds_packs()) {
-        *why = "this loupe was built without the pack tool that builds a board's packs";
+        *why = "this loupe carries no packs for autana " + commit
+               + " and was built without the pack tool that builds them";
         return std::nullopt;
     }
     fs::path folder = pack_cache() / ("firmware-" + commit);
-    const fs::path stamp = folder / FIRMWARE_STAMP;
-    std::error_code error;
-    if (fs::is_regular_file(stamp, error) && read_text(stamp) == commit) {
+    if (built_for(folder, commit)) {
         return folder;
     }
+    std::error_code error;
     if (fs::create_directories(folder, error), error) {
         *why = "cannot make " + utf8(folder) + ": " + error.message();
         return std::nullopt;
@@ -109,7 +124,7 @@ firmware_packs(const std::string& commit, std::string* why) {
     if (!autana_tool(fs::path("r3d") / "build_pack.py", {"-o", utf8(folder)}, folder / "build_pack.log", why)) {
         return std::nullopt;
     }
-    std::ofstream(stamp, std::ios::binary) << commit;
+    std::ofstream(folder / FIRMWARE_STAMP, std::ios::binary) << commit;
     return folder;
 }
 

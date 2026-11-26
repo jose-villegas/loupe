@@ -23,6 +23,8 @@ struct Folders {
 // Where the samples are installed beside loupe: <exe_dir>/scenes on Windows,
 // <exe_dir>/../share/loupe/scenes elsewhere (cmake/package.cmake).
 std::filesystem::path samples_dir(const Folders& folders);
+// Where an install keeps the firmware packs of its pin (firmware_packs(), pack.hpp).
+std::filesystem::path firmware_dir(const Folders& folders);
 // The .apak files in samples_dir(), and the recent list in <config>/recent.txt
 // without the files gone since.
 Library library(const Folders& folders);
