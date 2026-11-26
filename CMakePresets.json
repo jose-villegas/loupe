@@ -9,7 +9,8 @@
       "cacheVariables": {
         "CMAKE_C_COMPILER": "gcc",
         "CMAKE_CXX_COMPILER": "g++",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "LOUPE_STORYBOARD": "ON"
       }
     },
     {
@@ -28,7 +29,7 @@
       "name": "release",
       "displayName": "The downloads: optimized, no pack tool, every demo scene as a sample",
       "inherits": "default",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "LOUPE_PACK_TOOL": "OFF", "LOUPE_SAMPLES": "ON" }
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "LOUPE_PACK_TOOL": "OFF", "LOUPE_SAMPLES": "ON", "LOUPE_STORYBOARD": "OFF" }
     }
   ],
   "buildPresets": [

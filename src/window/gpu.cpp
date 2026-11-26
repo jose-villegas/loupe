@@ -11,6 +11,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <format>
+#include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "imgui.h"
@@ -45,6 +48,46 @@ set_icon(SDL_Window* window) {
     SDL_DestroySurface(icon);
 }
 
+// A memory type of `bits` with every flag of `wanted`; none when the device has none.
+std::optional<uint32_t>
+memory_type(VkPhysicalDevice physical, uint32_t bits, VkMemoryPropertyFlags wanted) {
+    VkPhysicalDeviceMemoryProperties properties = {};
+    vkGetPhysicalDeviceMemoryProperties(physical, &properties);
+    for (uint32_t type = 0; type < properties.memoryTypeCount; type++) {
+        if ((bits & (1U << type)) != 0 && (properties.memoryTypes[type].propertyFlags & wanted) == wanted) {
+            return type;
+        }
+    }
+    return std::nullopt;
+}
+
+// One step of an image's layout, each pair from before to after: the
+// layouts, the work's access and its stages.
+struct LayoutStep {
+    std::pair<VkImageLayout, VkImageLayout> layout;
+    std::pair<VkAccessFlags, VkAccessFlags> access;
+    std::pair<VkPipelineStageFlags, VkPipelineStageFlags> stage;
+};
+
+void
+image_barrier(VkCommandBuffer commands, VkImage image, const LayoutStep& step) {
+    VkImageMemoryBarrier barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.srcAccessMask = step.access.first;
+    barrier.dstAccessMask = step.access.second;
+    barrier.oldLayout = step.layout.first;
+    barrier.newLayout = step.layout.second;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                .baseMipLevel = 0,
+                                .levelCount = 1,
+                                .baseArrayLayer = 0,
+                                .layerCount = 1};
+    vkCmdPipelineBarrier(commands, step.stage.first, step.stage.second, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+}
+
 // Past setup, a Vulkan error leaves no window to go on with.
 void
 check(VkResult result) {
@@ -65,7 +108,16 @@ struct Gpu::State {
     VkQueue queue = VK_NULL_HANDLE;
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     ImGui_ImplVulkanH_Window swapchain;
+    // TRANSFER_SRC where the surface allows it, so a presented picture can be read back.
+    VkImageUsageFlags image_usage = 0;
     bool rebuild = false;
+    // The read-back: asked of the frame being drawn, recorded into its
+    // commands, and the host-visible buffer the swapchain image is copied into.
+    bool read_asked = false;
+    bool read_recorded = false;
+    VkBuffer read_buffer = VK_NULL_HANDLE;
+    VkDeviceMemory read_memory = VK_NULL_HANDLE;
+    VkDeviceSize read_size = 0;
     // What of ImGui is up, for ~Gpu to take down.
     bool imgui_context = false;
     bool imgui_sdl = false;
@@ -76,7 +128,12 @@ struct Gpu::State {
     bool open_instance(std::string* why);
     bool open_device(std::string* why);
     bool open_swapchain(std::string* why);
-    bool open_imgui(std::string* why);
+    bool open_imgui(std::optional<float> content_scale, std::string* why);
+    // A read buffer of `size` bytes; false when none can be made.
+    bool keep_read_buffer(VkDeviceSize size);
+    void drop_read_buffer();
+    // Copies `image`, about to be presented, into the read buffer after the frame's drawing.
+    void record_read_back(VkCommandBuffer commands, VkImage image);
 
     // The semaphores of the frame being drawn.
     const ImGui_ImplVulkanH_FrameSemaphores&
@@ -165,11 +222,14 @@ Gpu::State::open_swapchain(std::string* why) {
     swapchain.SurfaceFormat = ImGui_ImplVulkanH_SelectSurfaceFormat(
         physical, surface, formats.data(), static_cast<int>(formats.size()), VK_COLORSPACE_SRGB_NONLINEAR_KHR);
     swapchain.PresentMode = ImGui_ImplVulkanH_SelectPresentMode(physical, surface, &fifo, 1);
+    VkSurfaceCapabilitiesKHR capabilities = {};
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical, surface, &capabilities);
+    image_usage = capabilities.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     int width = 0;
     int height = 0;
     SDL_GetWindowSizeInPixels(window, &width, &height);
     ImGui_ImplVulkanH_CreateOrResizeWindow(instance, physical, device, &swapchain, queue_family, nullptr, width, height,
-                                           MIN_IMAGE_COUNT, 0);
+                                           MIN_IMAGE_COUNT, image_usage);
     // Before ImGui's Vulkan backend is up, its helpers say nothing of a failure.
     if (swapchain.Swapchain == VK_NULL_HANDLE || swapchain.RenderPass == VK_NULL_HANDLE) {
         *why = "no Vulkan swapchain for the window";
@@ -179,7 +239,7 @@ Gpu::State::open_swapchain(std::string* why) {
 }
 
 bool
-Gpu::State::open_imgui(std::string* why) {
+Gpu::State::open_imgui(std::optional<float> content_scale, std::string* why) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     imgui_context = true;
@@ -188,7 +248,7 @@ Gpu::State::open_imgui(std::string* why) {
     // The scene's panels dock into one window (run_window.cpp lays them out).
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImGui::StyleColorsDark();
-    const float scale = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
+    const float scale = content_scale.value_or(SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay()));
     ImGui::GetStyle().ScaleAllSizes(scale);
     ImGui::GetStyle().FontScaleDpi = scale;
     imgui_sdl = ImGui_ImplSDL3_InitForVulkan(window);
@@ -246,6 +306,9 @@ Gpu::State::render(ImDrawData* draw_data) {
     vkCmdBeginRenderPass(frame.CommandBuffer, &pass, VK_SUBPASS_CONTENTS_INLINE);
     ImGui_ImplVulkan_RenderDrawData(draw_data, frame.CommandBuffer);
     vkCmdEndRenderPass(frame.CommandBuffer);
+    if (read_asked) {
+        record_read_back(frame.CommandBuffer, frame.Backbuffer);
+    }
     check(vkEndCommandBuffer(frame.CommandBuffer));
     const VkPipelineStageFlags stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     VkSubmitInfo submit = {};
@@ -258,6 +321,88 @@ Gpu::State::render(ImDrawData* draw_data) {
     submit.signalSemaphoreCount = 1;
     submit.pSignalSemaphores = &rendered;
     check(vkQueueSubmit(queue, 1, &submit, frame.Fence));
+}
+
+bool
+Gpu::State::keep_read_buffer(VkDeviceSize size) {
+    if (read_buffer != VK_NULL_HANDLE && read_size == size) {
+        return true;
+    }
+    drop_read_buffer();
+    VkBufferCreateInfo info = {};
+    info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    info.size = size;
+    info.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    if (vkCreateBuffer(device, &info, nullptr, &read_buffer) != VK_SUCCESS) {
+        read_buffer = VK_NULL_HANDLE;
+        return false;
+    }
+    VkMemoryRequirements needs = {};
+    vkGetBufferMemoryRequirements(device, read_buffer, &needs);
+    const std::optional<uint32_t> type = memory_type(
+        physical, needs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    VkMemoryAllocateInfo allocate = {};
+    allocate.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocate.allocationSize = needs.size;
+    allocate.memoryTypeIndex = type.value_or(0);
+    if (!type || vkAllocateMemory(device, &allocate, nullptr, &read_memory) != VK_SUCCESS
+        || vkBindBufferMemory(device, read_buffer, read_memory, 0) != VK_SUCCESS) {
+        drop_read_buffer();
+        return false;
+    }
+    read_size = size;
+    return true;
+}
+
+void
+Gpu::State::drop_read_buffer() {
+    if (read_buffer != VK_NULL_HANDLE) {
+        vkDestroyBuffer(device, read_buffer, nullptr);
+    }
+    if (read_memory != VK_NULL_HANDLE) {
+        vkFreeMemory(device, read_memory, nullptr);
+    }
+    read_buffer = VK_NULL_HANDLE;
+    read_memory = VK_NULL_HANDLE;
+    read_size = 0;
+}
+
+void
+Gpu::State::record_read_back(VkCommandBuffer commands, VkImage image) {
+    const auto width = static_cast<uint32_t>(swapchain.Width);
+    const auto height = static_cast<uint32_t>(swapchain.Height);
+    if ((image_usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) == 0
+        || !keep_read_buffer(VkDeviceSize{width} * height * Picture::CHANNELS)) {
+        return;
+    }
+    // The render pass leaves the image ready to present; the copy reads it, then hands it back.
+    image_barrier(commands, image,
+                  {.layout = {VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL},
+                   .access = {VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT},
+                   // All commands: the render pass's own move to PRESENT_SRC is ordered only by its
+                   // implicit dependency to BOTTOM_OF_PIPE, which COLOR_ATTACHMENT_OUTPUT alone misses.
+                   .stage = {VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT}});
+    VkBufferImageCopy copy = {};
+    copy.imageSubresource = {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .mipLevel = 0, .baseArrayLayer = 0, .layerCount = 1};
+    copy.imageExtent = {.width = width, .height = height, .depth = 1};
+    vkCmdCopyImageToBuffer(commands, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, read_buffer, 1, &copy);
+    image_barrier(commands, image,
+                  {.layout = {VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR},
+                   .access = {VK_ACCESS_TRANSFER_READ_BIT, 0},
+                   .stage = {VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT}});
+    VkBufferMemoryBarrier to_host = {};
+    to_host.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    to_host.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    to_host.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+    to_host.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    to_host.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    to_host.buffer = read_buffer;
+    to_host.size = VK_WHOLE_SIZE;
+    vkCmdPipelineBarrier(commands, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr, 1,
+                         &to_host, 0, nullptr);
+    read_recorded = true;
 }
 
 void
@@ -283,7 +428,7 @@ Gpu::State::present() {
 }
 
 std::unique_ptr<Gpu>
-Gpu::open(const char* title, std::string* why) {
+Gpu::open(const char* title, std::string* why, std::optional<float> content_scale) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         *why = std::format("no video: {}", SDL_GetError());
         return nullptr;
@@ -298,7 +443,7 @@ Gpu::open(const char* title, std::string* why) {
         return nullptr;
     }
     set_icon(s.window);
-    if (!s.open_instance(why) || !s.open_device(why) || !s.open_swapchain(why) || !s.open_imgui(why)) {
+    if (!s.open_instance(why) || !s.open_device(why) || !s.open_swapchain(why) || !s.open_imgui(content_scale, why)) {
         return nullptr;
     }
     return gpu;
@@ -320,6 +465,7 @@ Gpu::~Gpu() {
     if (s.imgui_context) {
         ImGui::DestroyContext();
     }
+    s.drop_read_buffer();
     s.textures.clear();
     if (s.swapchain.Swapchain != VK_NULL_HANDLE) {
         ImGui_ImplVulkanH_DestroyWindow(s.instance, s.device, &s.swapchain, nullptr);
@@ -361,7 +507,7 @@ Gpu::begin_frame() {
     if (width > 0 && height > 0 && (s.rebuild || s.swapchain.Width != width || s.swapchain.Height != height)) {
         ImGui_ImplVulkan_SetMinImageCount(MIN_IMAGE_COUNT);
         ImGui_ImplVulkanH_CreateOrResizeWindow(s.instance, s.physical, s.device, &s.swapchain, s.queue_family, nullptr,
-                                               width, height, MIN_IMAGE_COUNT, 0);
+                                               width, height, MIN_IMAGE_COUNT, s.image_usage);
         s.swapchain.FrameIndex = 0;
         s.rebuild = false;
     }
@@ -389,6 +535,44 @@ Gpu::end_frame() {
         }
         return gone;
     });
+}
+
+std::optional<Picture>
+Gpu::end_frame_read_back(std::string* why) {
+    State& s = *state_;
+    // Four 8-bit channels in one of the two orders open_swapchain asks for; a
+    // surface that offered neither gave another format, read as nothing.
+    const VkFormat format = s.swapchain.SurfaceFormat.format;
+    const bool readable = (s.image_usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0
+                          && (format == VK_FORMAT_B8G8R8A8_UNORM || format == VK_FORMAT_R8G8B8A8_UNORM);
+    s.read_asked = readable;
+    s.read_recorded = false;
+    end_frame();
+    s.read_asked = false;
+    if (!readable) {
+        *why = std::format("the window's swapchain (format {}) cannot be read back", static_cast<int>(format));
+        return std::nullopt;
+    }
+    if (!s.read_recorded) {
+        *why = "the frame was not drawn, or no buffer could hold it";
+        return std::nullopt;
+    }
+    check(vkDeviceWaitIdle(s.device));
+    void* mapped = nullptr; // NOLINT(misc-const-correctness): vkMapMemory writes through a void**
+    check(vkMapMemory(s.device, s.read_memory, 0, s.read_size, 0, &mapped));
+    Picture picture{.width = s.swapchain.Width, .height = s.swapchain.Height, .rgba = {}};
+    const auto* bytes = static_cast<const uint8_t*>(mapped);
+    picture.rgba.assign(bytes, bytes + s.read_size);
+    vkUnmapMemory(s.device, s.read_memory);
+    // The swapchain is BGRA or RGBA (open_swapchain); the window has no alpha to keep.
+    const bool bgra = format == VK_FORMAT_B8G8R8A8_UNORM;
+    for (size_t at = 0; at < picture.rgba.size(); at += Picture::CHANNELS) {
+        if (bgra) {
+            std::swap(picture.rgba[at], picture.rgba[at + 2]);
+        }
+        picture.rgba[at + 3] = UINT8_MAX;
+    }
+    return picture;
 }
 
 ImTextureData&

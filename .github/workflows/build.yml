@@ -118,6 +118,7 @@ jobs:
           name: renders-${{ matrix.runs-on }}
           path: |
             build/*/tests/parity_*
+            build/*/tests/doc_shots/shots
             build/*/packs/*/build_pack.log
             ${{ runner.temp }}/smoke/renders
             ${{ runner.temp }}/installer/smoke/renders

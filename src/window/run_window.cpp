@@ -6,6 +6,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -256,12 +257,14 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
 // The window's state between ticks: the open scene, or the start panel's.
 class Window {
   public:
-    Window(window::Gpu& gpu, const Options& options);
+    // A `scripted` window (--ticks, a recipe) neither updates nor remembers what it opened.
+    Window(window::Gpu& gpu, const Options& options, bool scripted);
     // Opens `options`' scene in place of the open one; false, said on the
     // start panel, when it did not open.
     bool open(const Options& options);
-    // One tick's panels, then the scene they asked for.
-    void tick();
+    // One tick's panels, then the scene they asked for; with `picture`, also
+    // what the tick drew, which stays empty when it could not be read back.
+    void tick(std::optional<window::Picture>* picture = nullptr);
     // Closes the open scene; false when a run failed along the way.
     bool finish();
 
@@ -278,7 +281,8 @@ class Window {
     std::optional<size_t> checkpoint_mb_;
     Folders folders_;
     update::Copy copy_;
-    // Only a window someone uses updates; a scripted run (--ticks) never does.
+    // Only a window someone uses updates and remembers what it opened.
+    bool scripted_ = false;
     bool updates_ = false;
     window::About about_;
     // The update check, stopped and joined before the staged build is applied.
@@ -289,10 +293,10 @@ class Window {
     bool ok_ = true;
 };
 
-Window::Window(window::Gpu& gpu, const Options& options)
+Window::Window(window::Gpu& gpu, const Options& options, bool scripted)
     : gpu_(gpu), checkpoint_mb_(options.checkpoint_mb), folders_(window::folders()),
-      copy_{.id = build_id(folders_.exe_dir), .exe = exe_path(), .config = folders_.config},
-      updates_(!options.ticks && copy_.id.built_for != Channel::None && !copy_.config.empty()),
+      copy_{.id = build_id(folders_.exe_dir), .exe = exe_path(), .config = folders_.config}, scripted_(scripted),
+      updates_(!scripted_ && copy_.id.built_for != Channel::None && !copy_.config.empty()),
       library_(library(folders_)) {
     about_.version = version_line(copy_.id);
     about_.can_update = updates_;
@@ -304,7 +308,7 @@ Window::Window(window::Gpu& gpu, const Options& options)
 }
 
 void
-Window::tick() {
+Window::tick(std::optional<window::Picture>* picture) {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(viewport->WorkPos);
     ImGui::SetNextWindowSize(viewport->WorkSize);
@@ -331,7 +335,15 @@ Window::tick() {
         window::draw_start(library_, refusal_, start);
     }
     ImGui::End();
-    gpu_.end_frame();
+    if (picture != nullptr) {
+        std::string why;
+        *picture = gpu_.end_frame_read_back(&why);
+        if (!*picture) {
+            std::fprintf(stderr, "loupe: cannot read the window back: %s\n", why.c_str());
+        }
+    } else {
+        gpu_.end_frame();
+    }
     if (back) {
         close();
     }
@@ -387,7 +399,9 @@ Window::open(const Options& options) {
         return false;
     }
     refusal_.clear();
-    (void)remember(folders_, options.scene);
+    if (!scripted_) {
+        (void)remember(folders_, options.scene);
+    }
     gpu_.set_title(std::format("{}: {}", TITLE, frames->scene_id()));
     shown_.emplace(gpu_, std::move(frames));
     shown_->editor = window::open_editor(options.scene, &shown_->editor_why);
@@ -404,12 +418,41 @@ run_window(const Options& options) {
         std::fprintf(stderr, "loupe: %s\n", why.c_str());
         return false;
     }
-    Window window(*gpu, options);
+    Window window(*gpu, options, options.ticks.has_value());
     const bool opened = options.scene.empty() || window.open(options);
     for (int tick = 0; (!options.ticks || tick < *options.ticks) && gpu->begin_frame(); tick++) {
         window.tick();
     }
     return window.finish() && opened;
+}
+
+bool
+run_scripted(float content_scale, Script& script) {
+    std::string why;
+    const std::unique_ptr<window::Gpu> gpu = window::Gpu::open(TITLE, &why, content_scale);
+    if (gpu == nullptr) {
+        std::fprintf(stderr, "loupe: %s\n", why.c_str());
+        return false;
+    }
+    Window window(*gpu, Options{}, true);
+    script.start();
+    for (;;) {
+        Script::Ask ask = script.before_tick();
+        if (ask.done) {
+            break;
+        }
+        Script::Outcome outcome;
+        if (ask.open) {
+            outcome.opened = window.open(*ask.open);
+        }
+        if (!gpu->begin_frame()) {
+            break;
+        }
+        window.tick(ask.picture ? &outcome.picture : nullptr);
+        script.after_tick(ask, std::move(outcome));
+    }
+    script.stop();
+    return window.finish();
 }
 
 } // namespace loupe
