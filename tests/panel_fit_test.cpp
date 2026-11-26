@@ -296,9 +296,9 @@ tall_enough(const std::string& name, float width, const std::function<void()>& p
 
 // A recording's state before its first frame, `latest` the last line autana
 // wrote so far, `began` whether FRAMEREC_BEGIN was among them.
-loupe::window::Recording::Status
+loupe::window::BoardLink::Status
 waiting(const std::string& latest, uint64_t received, bool running = true, bool began = false) {
-    loupe::window::Recording::Status status;
+    loupe::window::BoardLink::Status status;
     status.running = running;
     status.exit = running ? std::nullopt : std::optional(1);
     status.last_line = running ? "" : "error: the board 907069FEA308 is held by someone@legion:4242";
@@ -317,7 +317,7 @@ wait_shots() {
     loupe::Frames::StreamState refused;
     refused.refused = true;
     refused.why = "pack sponza: crc 1a2b3c4d here, 5e6f7a8b on the board";
-    const auto line = [&](const loupe::window::Recording::Status& status, const loupe::Frames::StreamState& stream) {
+    const auto line = [&](const loupe::window::BoardLink::Status& status, const loupe::Frames::StreamState& stream) {
         return loupe::window::waiting_for_frames(status, stream, {.board = BOARD, .packs_autana = PACKS_AUTANA});
     };
     return {{"wait_starting", line(waiting("", 0), none)},
@@ -334,7 +334,7 @@ void
 waits() {
     using loupe::window::Waiting;
     const std::vector<std::pair<std::string, loupe::window::WaitLine>> shots = wait_shots();
-    const std::array<Waiting, 6> phases = {Waiting::Starting, Waiting::Autana, Waiting::Recording,
+    const std::array<Waiting, 6> phases = {Waiting::Starting, Waiting::Autana, Waiting::Linked,
                                            Waiting::Reading,  Waiting::Ended,  Waiting::Refused};
     for (size_t i = 0; i < phases.size(); i++) {
         (void)expect(shots[i].second.phase == phases[i] && !shots[i].second.text.empty(),
@@ -357,16 +357,17 @@ waits() {
                  "a refusal after a frame was drawn keeps the frame (the debugger says why)");
 }
 
-// The screen says what it is: the board live and its file while it records, then the recording.
+// The screen says what it is in one line: the board live, the file Record saves to, or that the link ended.
 void
-screen_lines() {
+live_lines() {
     const fs::path file = fs::path("recordings") / "907069FEA308-20261117-214512.framerec";
-    const std::string live = loupe::window::screen_line(BOARD, file, true);
-    (void)expect(live.starts_with("Live from ") && live.find(BOARD) != std::string::npos
-                     && live.ends_with("907069FEA308-20261117-214512.framerec"),
-                 "a recording under way is live from its board, saving to its file");
-    (void)expect(loupe::window::screen_line(BOARD, file, false) == "Recording 907069FEA308-20261117-214512.framerec",
-                 "a stopped or saved one is the recording in its file");
+    (void)expect(loupe::window::live_line(BOARD, {}, true) == std::string("Live: ") + BOARD,
+                 "a live board says it is live");
+    (void)expect(loupe::window::live_line(BOARD, file, true)
+                     == std::string("Live: ") + BOARD + " · recording 907069FEA308-20261117-214512.framerec",
+                 "while Record is on it names the file the frames go to");
+    (void)expect(loupe::window::live_line(BOARD, file, false) == std::string(BOARD) + ": the link ended",
+                 "an ended link says so");
 }
 
 } // namespace
@@ -394,16 +395,16 @@ main(int argc, char** argv) {
     ImGui::GetIO().BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
     ImGui::GetIO().IniFilename = nullptr;
 
-    loupe::window::RecordControls controls;
+    loupe::window::BoardControls controls;
     loupe::window::Observer observer;
     loupe::window::Timeline timeline;
     std::optional<int> view;
     const loupe::Frames::StreamState counts = {.frames = 1234, .dropped = 5, .refused = false, .why = ""};
-    loupe::window::Recording::Status live;
+    loupe::window::BoardLink::Status live;
     live.running = true;
-    loupe::window::Recording::Status stopping = live;
+    loupe::window::BoardLink::Status stopping = live;
     stopping.stopped = true;
-    loupe::window::Recording::Status ended;
+    loupe::window::BoardLink::Status ended;
     ended.stopped = true;
     ended.exit = 0;
     ended.last_line = LAST_LINE;
@@ -429,7 +430,7 @@ main(int argc, char** argv) {
     std::promise<loupe::editor::Rebuild> asking;
     attach.listing = std::async(std::launch::deferred, [] { return loupe::BoardList{}; });
     waits();
-    screen_lines();
+    live_lines();
 
     loupe::editor::SceneDoc doc;
     doc.objects.push_back({.path = "capybara_body",
@@ -445,16 +446,19 @@ main(int argc, char** argv) {
 
     for (const float width : WIDTHS) {
         const auto debugger = [&](const char* name, const loupe::Frames::StreamState& stream,
-                                  const std::optional<loupe::window::Recording::Status>& recording) {
+                                  const std::optional<loupe::window::BoardLink::Status>& link,
+                                  loupe::StreamSaver::State saving = loupe::StreamSaver::State::Off) {
             const auto panel = [&] {
                 (void)loupe::window::draw_debugger(
-                    {.frames = *frames, .views = views, .stream = stream, .recording = recording, .what = ""}, controls,
-                    observer, timeline, &view);
+                    {.frames = *frames, .views = views, .stream = stream, .link = link, .saving = saving, .what = ""},
+                    controls, observer, timeline, &view);
             };
             (void)fits(name, width, out, panel);
             (void)tall_enough(std::string(name) + "_height", width, panel);
         };
-        debugger("debugger_recording", counts, live);
+        debugger("debugger_live", counts, live);
+        debugger("debugger_record_waiting", counts, live, loupe::StreamSaver::State::Waiting);
+        debugger("debugger_recording", counts, live, loupe::StreamSaver::State::Saving);
         debugger("debugger_stopping", counts, stopping);
         debugger("debugger_ended", counts, ended);
         debugger("debugger_refused", refused, live);

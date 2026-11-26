@@ -1,4 +1,4 @@
-#include "window/recording.hpp"
+#include "window/board_link.hpp"
 
 #include <array>
 #include <cstdio>
@@ -33,17 +33,16 @@ read_some(SDL_IOStream* pipe, std::array<uint8_t, READ_BYTES>& buffer, size_t* c
 
 } // namespace
 
-std::unique_ptr<Recording>
-Recording::start(const std::vector<std::string>& command, const fs::path& save_to, std::string* why,
+std::unique_ptr<BoardLink>
+BoardLink::start(const std::vector<std::string>& command, const fs::path& log, std::string* why,
                  std::chrono::milliseconds end_within) {
     std::error_code error;
-    fs::create_directories(save_to.parent_path(), error);
-    std::unique_ptr<Recording> recording(new Recording());
-    recording->saved_ = save_to;
-    recording->log_ = fs::path(save_to).concat(".log");
-    recording->end_within_ = end_within;
-    if (!std::ofstream(recording->log_)) {
-        *why = "cannot write " + utf8(recording->log_);
+    fs::create_directories(log.parent_path(), error);
+    std::unique_ptr<BoardLink> link(new BoardLink());
+    link->log_ = log;
+    link->end_within_ = end_within;
+    if (!std::ofstream(link->log_)) {
+        *why = "cannot write " + utf8(link->log_);
         return nullptr;
     }
     std::vector<char*> argv = argv_of(command);
@@ -55,29 +54,28 @@ Recording::start(const std::vector<std::string>& command, const fs::path& save_t
     // not readable by anyone else on Windows, so its lines could not be
     // followed while the child runs.
     SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDERR_NUMBER, SDL_PROCESS_STDIO_APP);
-    recording->process_ = SDL_CreateProcessWithProperties(props);
+    link->process_ = SDL_CreateProcessWithProperties(props);
     SDL_DestroyProperties(props);
-    if (recording->process_ == nullptr) {
+    if (link->process_ == nullptr) {
         *why = std::string("cannot start autana record: ") + SDL_GetError();
         return nullptr;
     }
-    recording->reader_ = std::jthread([raw = recording.get()](const std::stop_token& stop) {
+    link->reader_ = std::jthread([raw = link.get()](const std::stop_token& stop) {
         try {
             raw->read_pipes(stop);
         } catch (const std::exception& failure) {
-            // No memory for the bytes: the stream stops here, and the saved file holds what came.
-            std::fprintf(stderr, "loupe: recording stopped reading: %s\n", failure.what());
+            // No memory for the bytes: the stream stops here.
+            std::fprintf(stderr, "loupe: the board link stopped reading: %s\n", failure.what());
         }
     });
-    return recording;
+    return link;
 }
 
 void
-Recording::read_pipes(const std::stop_token& stop) {
+BoardLink::read_pipes(const std::stop_token& stop) {
     SDL_IOStream* out = SDL_GetProcessOutput(process_);
     SDL_IOStream* err = static_cast<SDL_IOStream*>(
         SDL_GetPointerProperty(SDL_GetProcessProperties(process_), SDL_PROP_PROCESS_STDERR_POINTER, nullptr));
-    std::ofstream save(saved_, std::ios::binary);
     std::ofstream log(log_, std::ios::binary);
     std::array<uint8_t, READ_BYTES> buffer{};
     while ((out != nullptr || err != nullptr) && !stop.stop_requested()) {
@@ -86,8 +84,6 @@ Recording::read_pipes(const std::stop_token& stop) {
             out = nullptr; // the child closed stdout
         } else if (count > 0) {
             received_ += count;
-            save.write(reinterpret_cast<const char*>(buffer.data()), static_cast<std::streamsize>(count));
-            save.flush();
             const std::scoped_lock lock(mutex_);
             pending_.insert(pending_.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(count));
         }
@@ -109,7 +105,7 @@ Recording::read_pipes(const std::stop_token& stop) {
 }
 
 void
-Recording::take_lines(std::string_view bytes) {
+BoardLink::take_lines(std::string_view bytes) {
     partial_ += bytes;
     size_t start = 0;
     for (size_t end = partial_.find('\n'); end != std::string::npos; end = partial_.find('\n', start)) {
@@ -127,7 +123,7 @@ Recording::take_lines(std::string_view bytes) {
     partial_.erase(0, start);
 }
 
-Recording::~Recording() {
+BoardLink::~BoardLink() {
     stop();
     const auto deadline = std::chrono::steady_clock::now() + end_within_;
     int code = 0;
@@ -145,7 +141,7 @@ Recording::~Recording() {
 }
 
 size_t
-Recording::take(std::vector<uint8_t>& out) {
+BoardLink::take(std::vector<uint8_t>& out) {
     const std::scoped_lock lock(mutex_);
     const size_t count = pending_.size();
     out.insert(out.end(), pending_.begin(), pending_.end());
@@ -156,7 +152,7 @@ Recording::take(std::vector<uint8_t>& out) {
 // No flush: a pipe write is not buffered, and flushing a Windows pipe waits
 // until the child has read it, while the child may be waiting on its stdout.
 bool
-Recording::send(std::string_view line) {
+BoardLink::send(std::string_view line) {
     SDL_IOStream* in = stopped_ ? nullptr : SDL_GetProcessInput(process_);
     if (in == nullptr) {
         return false;
@@ -166,7 +162,7 @@ Recording::send(std::string_view line) {
 }
 
 void
-Recording::stop() {
+BoardLink::stop() {
     if (stopped_) {
         return;
     }
@@ -176,8 +172,8 @@ Recording::stop() {
     }
 }
 
-Recording::Status
-Recording::status() {
+BoardLink::Status
+BoardLink::status() {
     int code = 0;
     if (!exit_ && SDL_WaitProcess(process_, false, &code)) {
         exit_ = code;
@@ -193,11 +189,6 @@ Recording::status() {
             .received = received_.load(),
             .elapsed = std::chrono::steady_clock::now() - started_,
             .log = log_};
-}
-
-const fs::path&
-Recording::saved() const {
-    return saved_;
 }
 
 } // namespace loupe::window

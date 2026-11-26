@@ -18,6 +18,7 @@
 #include "pack.hpp"
 #include "paths.hpp"
 #include "read_bytes.hpp"
+#include "record/stream_saver.hpp"
 #include "tools.hpp"
 #include "version.hpp"
 
@@ -165,6 +166,37 @@ fed_over(const std::vector<uint8_t>& bytes, const Folders& at, const fs::path& p
     return state;
 }
 
+// The middle of a live feed, saved: a file that opens on its own from a
+// keyframe and draws with every CHECK the same.
+bool
+saved_part(const std::vector<uint8_t>& bytes, const Folders& at) {
+    loupe::StreamSaver saver;
+    const fs::path file = at.out / "part.framerec";
+    std::string why;
+    bool ok = true;
+    for (size_t from = 0; from < bytes.size(); from += PIECE) {
+        if (from >= bytes.size() / 4 && saver.state() == loupe::StreamSaver::State::Off && saver.frames() == 0) {
+            ok &= expect(saver.start(file, &why), "a save starts mid-stream");
+        }
+        if (from >= bytes.size() * 3 / 4) {
+            saver.stop();
+        }
+        saver.feed(std::span(bytes).subspan(from, std::min(PIECE, bytes.size() - from)));
+    }
+    ok &= expect(saver.state() == loupe::StreamSaver::State::Off, "it ends at the frame after stop");
+    const int saved = saver.frames();
+    std::fprintf(stderr, "%s: saved %d of %d frames\n", TEST, saved, FRAMES);
+    ok &= expect(saved > 0 && saved < FRAMES, "it holds some frames, not all");
+    const std::unique_ptr<loupe::Frames> frames = open(at, "part", file);
+    if (frames == nullptr) {
+        return false;
+    }
+    loupe::test::Straight drawn;
+    ok &= expect(frames->count() == saved, "the file opens with the frames saved");
+    ok &= expect(forward(*frames, &drawn), "they draw from its keyframe with every CHECK the same");
+    return frames->close() && ok;
+}
+
 bool
 missing_pack(const std::vector<uint8_t>& bytes, const Folders& at) {
     const fs::path empty = at.out / "no_packs";
@@ -223,6 +255,7 @@ main(int argc, char** argv) {
     ok &= live_stream(loupe::test::read_bytes(at.out / STREAM), at, drawn);
     ok &= refused(at);
     const std::vector<uint8_t> bytes = loupe::test::read_bytes(at.out / STREAM);
+    ok &= saved_part(bytes, at);
     ok &= missing_pack(bytes, at);
     ok &= firmware_packs_draw(bytes, at);
     return ok ? 0 : 1;

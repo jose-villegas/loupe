@@ -14,10 +14,11 @@
 #include "engine/frames.hpp"
 #include "imgui.h"
 #include "library.hpp"
+#include "record/stream_saver.hpp"
 #include "update/update.hpp"
+#include "window/board_link.hpp"
 #include "window/frame_texture.hpp"
 #include "window/observer.hpp"
-#include "window/recording.hpp"
 
 namespace loupe::window {
 
@@ -35,14 +36,14 @@ struct Start {
 };
 
 // The listing's boards as the panel shows them: those plugged in here, which
-// Record can take, then the rest the pool knows, under a collapsed heading.
+// View can attach to, then the rest the pool knows, under a collapsed heading.
 struct BoardRows {
     std::vector<const Board*> here, elsewhere;
 };
 
 BoardRows board_rows(const BoardList& list);
 
-// What Record readies before autana record starts: the board, the token of a
+// What View readies before autana record starts: the board, the token of a
 // person's reservation to record inside (empty when no person holds it), and
 // the folder of packs its stream is drawn with; `why` set when either failed.
 struct Reserved {
@@ -51,23 +52,24 @@ struct Reserved {
 };
 
 // The start panel's boards: the pool's last listing, why it failed, and
-// what was asked this tick: list them again, or record one.
+// what was asked this tick: list them again, or view one live.
 struct Attach {
     BoardList list;
     bool listed = false;
     bool refresh = false;
     std::future<BoardList> listing;                                       // valid while `autana devices` runs
     std::chrono::steady_clock::time_point listing_since, reserving_since; // when each began
-    std::optional<std::string> record;
+    std::optional<std::string> view;
     std::future<Reserved> reserving; // valid while the reservation is taken and the packs are built
     std::string packs_autana;        // the autana commit the board's packs are built from
 };
 
-// A live recording's controls: what was asked this tick. `paused` is the
-// panel's own state between ticks: FREEZE sent, RESUME not yet.
-struct RecordControls {
+// A live board's controls: what was asked this tick. `paused` is the
+// panel's own state between ticks: FREEZE sent, RESUME not yet. `record`
+// turns saving on or off.
+struct BoardControls {
     bool paused = false;
-    bool stop = false;
+    bool record = false;
     std::optional<std::string> send; // FREEZE, RESUME or STEP
 };
 
@@ -94,9 +96,10 @@ bool draw_menu(About& about, EditMenu& edit);
 void draw_start(const Library& library, const std::string& refusal, Start& start);
 // The boards to record from: List boards, then each with its port and Record when free.
 void draw_attach(Attach& attach);
-// Stop, Pause or Unpause, Next frame, and the stream's frame and dropped
-// counts; a refused stream or an ended recording says why.
-void draw_record_controls(const Frames::StreamState& stream, const Recording::Status& status, RecordControls& controls);
+// Record or Stop recording, Freeze or Unfreeze, Step, and the stream's frame
+// and dropped counts; a refused stream or an ended link says why.
+void draw_board_controls(const Frames::StreamState& stream, const BoardLink::Status& status, StreamSaver::State saving,
+                         BoardControls& controls);
 // Play or pause, a step back and forward, and a scrubber over the run's frames.
 void draw_timeline(const Frames& frames, Timeline& timeline);
 // How wide draw_view_picker() draws, label included, when the line has room.
@@ -105,34 +108,36 @@ float view_picker_width(const std::vector<DebugView>& views);
 bool draw_view_picker(const std::vector<DebugView>& views, int* view);
 
 // What the frame debugger shows: the run, its views, and for a stream its
-// counts and, while it records, the recording's state.
+// counts and, while it is live, the board's link and the save.
 struct Debugger {
     const Frames& frames;
     const std::vector<DebugView>& views;
     std::optional<Frames::StreamState> stream;
-    std::optional<Recording::Status> recording;
-    std::string what; // what the screen is (screen_line()); empty for a scene
+    std::optional<BoardLink::Status> link;
+    StreamSaver::State saving = StreamSaver::State::Off;
+    std::string what; // what the screen is (live_line()); empty for a scene
 };
 
-// What a recording's screen is, in one line: the board live and the file it
-// is saved to while it records (`live`), then the recording in that file.
-std::string screen_line(const std::string& board, const std::filesystem::path& file, bool live);
+// What a live board's screen is, in one line: "Live: BOARD", and the file
+// its frames are saved to while Record is on (`saving`, else empty); once
+// the link has ended (`running` false), that it ended.
+std::string live_line(const std::string& board, const std::filesystem::path& saving, bool running);
 
 // The height the current window needs to show what it has drawn so far with
 // no scrolling: its last row's bottom and the window's padding. Call it
 // after the rows, before End().
 float content_height();
 
-// Scenes, the view picker and the observer; a stream's line, with a
-// recording's controls; then the timeline. Each row wraps at the panel's
+// Scenes, the view picker and the observer; a live board's controls, or a
+// saved stream's counts and its timeline. Each row wraps at the panel's
 // edge. True when Scenes was pressed; a picked view goes into `*view`.
-bool draw_debugger(const Debugger& shown, RecordControls& controls, Observer& observer, Timeline& timeline,
+bool draw_debugger(const Debugger& shown, BoardControls& controls, Observer& observer, Timeline& timeline,
                    std::optional<int>* view);
 
-// Where a recording stands until its first frame shows, from what autana has
-// written so far: started, its own lines, the board recording, stream bytes
+// Where a live view stands until its first frame shows, from what autana has
+// written so far: started, its own lines, the board streaming, stream bytes
 // read; or why it ended or was refused before any frame.
-enum class Waiting : uint8_t { Starting, Autana, Recording, Reading, Shown, Ended, Refused };
+enum class Waiting : uint8_t { Starting, Autana, Linked, Reading, Shown, Ended, Refused };
 
 struct WaitLine {
     Waiting phase = Waiting::Starting;
@@ -149,7 +154,7 @@ struct WaitFor {
 
 // Shown once a frame was drawn. A refusal before that is said in the frame's
 // place, as the stream may count a frame it then refuses to draw.
-WaitLine waiting_for_frames(const Recording::Status& status, const Frames::StreamState& stream, const WaitFor& wait);
+WaitLine waiting_for_frames(const BoardLink::Status& status, const Frames::StreamState& stream, const WaitFor& wait);
 // `line` wrapped to the room left in the window, centred top to bottom.
 void draw_waiting(const WaitLine& line);
 

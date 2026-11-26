@@ -112,7 +112,7 @@ Run without a scene, the window opens on a start panel: the sample packs beside
 `loupe` (`scenes/`, or `../share/loupe/scenes/` when installed), the last 10
 scenes or recordings opened, and Open... for any other. A scene picked there
 opens in this window with the scene's own defaults. Scenes, in a scene's window,
-closes the scene and goes back to the panel, stopping a recording first (Record
+closes the scene and goes back to the panel, ending a live board first (View
 a board). The recent list is `recent.txt` in
 `%APPDATA%\autana\loupe` on Windows and `~/.local/share/autana/loupe` on Linux.
 
@@ -140,7 +140,7 @@ A `.scene.toml` opens as docked panels:
 | Viewport | the frame, the move, rotate and scale handles on the selected object (W, E, R; along its own axes or the world's), and a cube showing which way the camera looks; for a camera on a path, the path, a scrub bar over it and the Free view |
 | Outliner | the scene's objects by parent, each with its kind, and whether it is baked |
 | Inspector | the selected object's position, rotation in degrees and scale as numbers, why it may not move when it may not, a camera path's keys, whether anything is unsaved, then the last save and which bakes it re-keys |
-| Frame debugger | Scenes, a recording's controls (Record a board), the view picker, the observer and the timeline, as above |
+| Frame debugger | Scenes, a live board's controls (View a board), the view picker, the observer and the timeline, as above |
 
 A click on a name in the Outliner, or on the frame (the object whose origin
 lies nearest the click), selects an object. A drag of a handle or a field, from
@@ -201,7 +201,7 @@ which keeps the file's comments and each kept key's lines, then runs the bake
 check. A path a bake reads, such as one a probe fit samples, asks before the
 first edit. A path from a `.glb` clip is shown, not edited.
 
-## Record a board
+## View a board
 
 A board running a development build of autana streams the render input of every
 frame it draws over USB: the views, meshes, poses and settings, and a crc of
@@ -213,9 +213,9 @@ board takes the debug views, the cull view and the observer like a scene's.
 ```mermaid
 flowchart LR
   board["board<br/>FRAMEREC stream"] -- USB --> rec["autana -b BOARD record"]
-  rec -- "stdout" --> loupe["Loupe window<br/>timeline fills as frames arrive"]
+  rec -- "stdout" --> loupe["Loupe window<br/>draws the newest frame"]
   loupe -- "stdin: FREEZE · STEP · RESUME" --> rec
-  loupe -- "kept as it arrives" --> file["recordings/BOARD-TIME.framerec"]
+  loupe -- "while Record is on" --> file["recordings/BOARD-TIME.framerec"]
   file -- "Open... · recent · command line" --> replay["Loupe replays it"]
 ```
 
@@ -225,26 +225,27 @@ On the start panel, List boards runs `autana devices --json` and lists the
 boards plugged in here; the others the board pool knows, seen here before or
 named by a lapsed lock, wait under a collapsed "not here". The last list stays
 while a new one is asked, and each wait is one line with a spinner and its
-seconds. Record, on a free board plugged in here, starts `autana -b BOARD
-record` and opens its stream in this window: frames fill the timeline as they
-arrive, and Play draws each one in turn. One line says what the screen is: live
-from the board and the file it is saved to, then that recording once stopped.
+seconds. View, on a free board plugged in here, starts `autana -b BOARD
+record` and shows its stream live in this window: each tick draws the newest
+frame that has arrived, so a backlog is skipped rather than played through.
+One line says what the screen is: "Live: BOARD", and "· recording NAME" while
+Record saves the frames.
 
 | Control | Sends to the board |
 |---|---|
 | Freeze board | `FREEZE`: the board's frame loop stops where it is |
 | Step board | `STEP`: one more frame, while frozen; that frame waits for room on the board rather than being dropped |
 | Unfreeze board | `RESUME`: the frame loop runs again |
-| Stop recording | closes `autana record`'s input: the board sends what it still holds and the recording ends |
 
-The board's controls are its own: the timeline's Play and Pause only move
-through the frames already received. The panel counts the frames received and
-how many of them came right after a drop on the board, and shows autana's
-reason when the stream is refused.
+Record, beside them, saves the frames from the board's next keyframe on into a
+new file, and Stop recording ends that file before the next frame; the view
+stays live either way. The panel counts the frames received and how many of
+them came right after a drop on the board, and shows autana's reason when the
+stream is refused.
 
-Scenes during a recording stops it first, and the window shows the board
-draining until autana ends; autana gives the board 30 s. Quitting waits up to
-35 s, then ends autana's process.
+Scenes while a board is live ends its link first, and the window shows the
+board draining until autana ends; autana gives the board 30 s. Quitting waits
+up to 35 s, then ends autana's process.
 
 ### Where recordings are kept
 
@@ -252,9 +253,9 @@ Each recording is written as it arrives to
 `recordings/<board>-<yyyymmdd>-<hhmmss>.framerec` in Loupe's settings folder
 (`%APPDATA%\autana\loupe` on Windows, `~/.local/share/autana/loupe` on Linux),
 the board's serial without its colons; a second one within the same second
-takes `-2`, `-3`, and so on. Beside it, `<same name>.framerec.log` holds
-`autana record`'s own output. A recording joins the recent list once anything
-has arrived.
+takes `-2`, `-3`, and so on. A recording joins the recent list when it ends
+with a frame in it. `logs/<board>.log` holds `autana record`'s own output for
+the last live view of that board.
 
 ### From the command line
 
@@ -311,7 +312,7 @@ build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml --
 | `--frames N`, `--dt MS` | how many frames, how far apart (30 at 16 ms) |
 | `--set owner.name=value` | a tunable; repeatable |
 | `-o out.bmp`, `--video out.avi` | the last frame, every frame |
-| `--record out.framerec` | also write the stream of the frames drawn (Record a board) |
+| `--record out.framerec` | also write the stream of the frames drawn (View a board) |
 | `--checkpoint-mb MB` | the window's checkpoint memory (1024); past it, every other checkpoint goes |
 | `--ticks N` | closes the window after N ticks, for scripted runs |
 | `--version` | prints the build's version, commit, channel and autana commit (Download), and exits |
@@ -383,8 +384,8 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `editor_docs` | one undo stack, and whether anything is unsaved; only unbaked renderers place, each other object with the tool's reason; a placement's matrix turns as autana's `quatf_from_euler` and comes back from it, and a sheared, mirrored or zero-scale one is refused; the handles' matrices round trip and put a point where autana's pinhole does; a save sets only the fields that moved; the read's JSON parses, anything else is refused; the Outliner's tree by parent; a failed place is tried again the next frame |
 | `place` | a placed object draws there on the shown frame at once and on frames sought or stepped to after; after the first, each place draws one engine frame; placed back, the shown frame and every frame are the straight run's; an unknown name is refused |
 | `scene_save` | on a copy of the capybara scene, moving and scaling the capybara adds only its two lines and the read sees them; a baked renderer is refused, saying why, with the file unchanged and the change still unsaved |
-| `stream` | a run's `--record`, opened as a `.framerec`, draws every frame with each keyframe's CHECK the same, and seeks back draw the bytes stepping forward drew; fed live in pieces its count grows to every frame and draws them alike; bytes that are no stream are refused |
-| `recording` | against a stand-in for `autana record`, every stream byte arrives in order and in the saved file, console lines reach its input, Stop ends it, and one that hangs is let go within its bound; `autana devices --json` parses into free, held and remote boards |
+| `stream` | a run's `--record`, opened as a `.framerec`, draws every frame with each keyframe's CHECK the same, and seeks back draw the bytes stepping forward drew; fed live in pieces its count grows to every frame and draws them alike; a part saved from a keyframe to a stop opens and draws alike; bytes that are no stream are refused |
+| `board_link` | against a stand-in for `autana record`, every stream byte arrives in order, its output goes to the log, console lines reach its input, Stop ends it, and one that hangs is let go within its bound; `autana devices --json` parses into free, held and remote boards |
 | `camera_paths` | the curve matches `camera_keys.py`'s numbers, open and looped; key edits keep a loop closed, times in order and each key's id; adds and deletes follow their rules; a path that would not build, or holds more keys than a clip counts, is a fault; set-keys gets each kept key by its table in the file |
 | `path_tour`, `path_lion` | on the Sponza pack, the camera stands where the curve puts it at every frame; flown on an edited path, the shown and later frames follow it while frames it does not reach stay the clip's; landed, every frame is the clip's again |
 | `path_editor` | a key drag is one undo step and holds save; adds pick the new key; deletes refuse the first key and a two-key path; a path a bake reads waits for its warning; each camera flies and lands apart, once per change; the scrub's frame for a time |

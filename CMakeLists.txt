@@ -70,6 +70,7 @@ add_library(loupe_core OBJECT
     src/pack.cpp
     src/paths.cpp
     src/process.cpp
+    src/record/stream_saver.cpp
     src/scratch.cpp
     src/tools.cpp
     src/update/sha256.cpp
@@ -146,7 +147,7 @@ add_library(loupe_window OBJECT
     src/window/observer.cpp
     src/window/panels.cpp
     src/window/path_editor.cpp
-    src/window/recording.cpp
+    src/window/board_link.cpp
     src/window/run_window.cpp)
 target_link_libraries(loupe_window PUBLIC loupe_core imgui imguizmo)
 # The window's icon, the app logo, built into the binary as the bytes of its PNG.

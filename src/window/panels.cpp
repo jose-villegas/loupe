@@ -18,7 +18,7 @@ namespace loupe::window {
 namespace {
 
 constexpr const char ABOUT[] = "About";
-// The console lines a recording's controls send (console_freeze).
+// The console lines a live board's controls send (console_freeze).
 constexpr const char FREEZE[] = "FREEZE";
 constexpr const char RESUME[] = "RESUME";
 constexpr const char STEP[] = "STEP";
@@ -173,8 +173,8 @@ draw_attach(Attach& attach) {
     for (const Board* board : rows.here) {
         ImGui::PushID(board->id.c_str());
         ImGui::BeginDisabled(!recordable(*board) || reserving);
-        if (ImGui::Button("Record")) {
-            attach.record = board->id;
+        if (ImGui::Button("View")) {
+            attach.view = board->id;
         }
         ImGui::EndDisabled();
         const std::string where = std::format("{}  {}{}", board->id, board->port, holder_text(*board));
@@ -191,16 +191,16 @@ draw_attach(Attach& attach) {
         ImGui::TreePop();
     }
     if (reserving) {
-        hint(std::format("{} readying the recording ({} s)", spinner(), seconds_since(attach.reserving_since)).c_str());
+        hint(std::format("{} readying the live view ({} s)", spinner(), seconds_since(attach.reserving_since)).c_str());
     }
 }
 
 void
-draw_record_controls(const Frames::StreamState& stream, const Recording::Status& status, RecordControls& controls) {
-    // The board's own controls, apart from the timeline's Play and Pause.
+draw_board_controls(const Frames::StreamState& stream, const BoardLink::Status& status, StreamSaver::State saving,
+                    BoardControls& controls) {
     ImGui::PushID("board");
     ImGui::BeginDisabled(status.stopped || !status.running);
-    controls.stop = ImGui::Button("Stop recording");
+    controls.record = ImGui::Button(saving == StreamSaver::State::Off ? "Record" : "Stop recording");
     const char* freeze = controls.paused ? "Unfreeze board" : "Freeze board";
     flow(button_width(freeze));
     if (ImGui::Button(freeze)) {
@@ -222,10 +222,11 @@ draw_record_controls(const Frames::StreamState& stream, const Recording::Status&
     if (stream.refused) {
         ImGui::TextWrapped("Refused: %s", stream.why.c_str());
     }
+    if (saving == StreamSaver::State::Waiting) {
+        hint("Recording starts at the board's next keyframe");
+    }
     if (!status.running) {
-        ImGui::TextWrapped("Recording ended (exit %d): %s", status.exit.value_or(-1), status.last_line.c_str());
-    } else if (status.stopped) {
-        hint("Stopping: the board drains what it holds");
+        ImGui::TextWrapped("The link ended (exit %d): %s", status.exit.value_or(-1), status.last_line.c_str());
     }
 }
 
@@ -265,13 +266,16 @@ content_height() {
 }
 
 std::string
-screen_line(const std::string& board, const std::filesystem::path& file, bool live) {
-    const std::string name = utf8(file.filename());
-    return live ? std::format("Live from {}, saving to {}", board, name) : std::format("Recording {}", name);
+live_line(const std::string& board, const std::filesystem::path& saving, bool running) {
+    if (!running) {
+        return std::format("{}: the link ended", board);
+    }
+    return saving.empty() ? std::format("Live: {}", board)
+                          : std::format("Live: {} · recording {}", board, utf8(saving.filename()));
 }
 
 bool
-draw_debugger(const Debugger& shown, RecordControls& controls, Observer& observer, Timeline& timeline,
+draw_debugger(const Debugger& shown, BoardControls& controls, Observer& observer, Timeline& timeline,
               std::optional<int>* view) {
     if (!shown.what.empty()) {
         ImGui::TextWrapped("%s", shown.what.c_str());
@@ -288,9 +292,12 @@ draw_debugger(const Debugger& shown, RecordControls& controls, Observer& observe
         flow(check_width(OBSERVER));
         draw_observer_toggle(shown.frames, observer);
     }
-    if (shown.stream && shown.recording) {
-        draw_record_controls(*shown.stream, *shown.recording, controls);
-    } else if (shown.stream) {
+    if (shown.stream && shown.link) {
+        // Live: the newest frame shows, so there is no timeline to step.
+        draw_board_controls(*shown.stream, *shown.link, shown.saving, controls);
+        return back;
+    }
+    if (shown.stream) {
         ImGui::TextWrapped("%s", counts_line(*shown.stream).c_str());
     }
     ImGui::BeginDisabled(observer.on);
@@ -331,7 +338,7 @@ draw_view_picker(const std::vector<DebugView>& views, int* view) {
 }
 
 WaitLine
-waiting_for_frames(const Recording::Status& status, const Frames::StreamState& stream, const WaitFor& wait) {
+waiting_for_frames(const BoardLink::Status& status, const Frames::StreamState& stream, const WaitFor& wait) {
     const double seconds = std::chrono::duration<double>(status.elapsed).count();
     const std::string log = utf8(status.log);
     const std::string& board = wait.board;
@@ -361,13 +368,13 @@ waiting_for_frames(const Recording::Status& status, const Frames::StreamState& s
                 .text = std::format("Reading {}'s stream, {} bytes ({:.0f} s)", board, status.received, seconds)};
     }
     if (status.began) {
-        return {.phase = Waiting::Recording,
-                .text = std::format("{} is recording, first frame next ({:.0f} s)", board, seconds)};
+        return {.phase = Waiting::Linked,
+                .text = std::format("{} is live, first frame next ({:.0f} s)", board, seconds)};
     }
     if (!status.latest.empty()) {
         return {.phase = Waiting::Autana, .text = std::format("autana: {} ({:.0f} s)", status.latest, seconds)};
     }
-    return {.phase = Waiting::Starting, .text = std::format("Starting the recording on {} ({:.0f} s)", board, seconds)};
+    return {.phase = Waiting::Starting, .text = std::format("Starting the live view on {} ({:.0f} s)", board, seconds)};
 }
 
 void

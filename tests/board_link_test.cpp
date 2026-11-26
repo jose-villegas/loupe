@@ -1,25 +1,25 @@
-// Recording against a fake `autana record`: every stream byte arrives through
-// take() and in the saved file, console lines reach the child's stdin, and
+// A board link against a fake `autana record`: every stream byte arrives
+// through take(), stderr goes to the log, console lines reach the child's stdin, and
 // stop() ends it; a child that never ends is let go within its bound.
 // parse_boards reads `autana devices --json`'s shape.
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "board/boards.hpp"
 #include "paths.hpp"
-#include "read_bytes.hpp"
-#include "window/recording.hpp"
+#include "window/board_link.hpp"
 
 namespace fs = std::filesystem;
 
 namespace {
 
-constexpr const char TEST[] = "recording_test";
+constexpr const char TEST[] = "board_link_test";
 // Several of the fake's pieces, and not a whole number of them.
 constexpr size_t PAYLOAD_BYTES = 300 * 1024 + 17;
 // How long the fake may take to end once stdin is closed.
@@ -88,65 +88,63 @@ token_found() {
     return ok;
 }
 
-// A recording whose child ends on stop: every byte, the lines sent, its last line.
+// A link whose child ends on stop: every byte, the lines sent, its last line.
 bool
 ends_on_stop(const fs::path& fake, const fs::path& folder, const std::vector<uint8_t>& payload) {
     std::string why;
-    const fs::path saved = folder / "board.framerec";
-    std::unique_ptr<loupe::window::Recording> recording =
-        loupe::window::Recording::start({loupe::utf8(fake), loupe::utf8(folder / "payload.bin")}, saved, &why);
-    if (recording == nullptr) {
+    const fs::path log_file = folder / "board.log";
+    std::unique_ptr<loupe::window::BoardLink> link =
+        loupe::window::BoardLink::start({loupe::utf8(fake), loupe::utf8(folder / "payload.bin")}, log_file, &why);
+    if (link == nullptr) {
         std::fprintf(stderr, "%s: %s\n", TEST, why.c_str());
         return false;
     }
-    bool ok = expect(recording->send("FREEZE") && recording->send("STEP"), "console lines sent");
+    bool ok = expect(link->send("FREEZE") && link->send("STEP"), "console lines sent");
     std::vector<uint8_t> taken;
     const auto deadline = std::chrono::steady_clock::now() + END_WITHIN;
     while (taken.size() < payload.size() && std::chrono::steady_clock::now() < deadline) {
-        recording->take(taken);
+        link->take(taken);
         std::this_thread::sleep_for(POLL);
     }
     // While it runs, the log's lines come in as written: STEP, echoed after
     // FRAMEREC_BEGIN, is the latest, and the begin stays seen past it.
-    loupe::window::Recording::Status running = recording->status();
+    loupe::window::BoardLink::Status running = link->status();
     while (running.latest != "STEP" && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(POLL);
-        running = recording->status();
+        running = link->status();
     }
     ok &= expect(running.running && running.latest == "STEP" && running.began,
                  "the latest log line is read while it runs, and the begin before it is kept");
     ok &= expect(running.received == payload.size(), "every stream byte is counted as received");
-    ok &= expect(running.log == fs::path(saved).concat(".log"), "the status names the log");
-    recording->stop();
-    ok &= expect(!recording->send("RESUME"), "nothing is sent after stop");
-    loupe::window::Recording::Status status = recording->status();
+    ok &= expect(running.log == log_file, "the status names the log");
+    link->stop();
+    ok &= expect(!link->send("RESUME"), "nothing is sent after stop");
+    loupe::window::BoardLink::Status status = link->status();
     while (status.running && std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(POLL);
-        status = recording->status();
+        status = link->status();
     }
-    recording->take(taken);
+    link->take(taken);
     ok &= expect(!status.running && status.exit == 0 && status.stopped, "it ended on stop, exit 0");
     ok &= expect(taken == payload, "take() gave every stream byte, in order");
     ok &= expect(status.last_line == DONE, "the last stderr line is read back");
-    const std::vector<std::string> log = loupe::read_lines(fs::path(saved).concat(".log"));
+    const std::vector<std::string> log = loupe::read_lines(log_file);
     ok &= expect(log.size() == 4 && log[1] == "FREEZE" && log[2] == "STEP", "the child read the lines sent");
-    recording.reset();
-    ok &= expect(loupe::test::read_bytes(saved) == payload, "the saved file holds the stream");
     return ok;
 }
 
-// A child that never ends: dropping its recording returns within the bound.
+// A child that never ends: dropping its link returns within the bound.
 bool
 hung_is_let_go(const fs::path& fake, const fs::path& folder) {
     std::string why;
-    std::unique_ptr<loupe::window::Recording> recording = loupe::window::Recording::start(
-        {loupe::utf8(fake), loupe::utf8(folder / "payload.bin"), "--hang"}, folder / "hung.framerec", &why, HUNG_BOUND);
-    if (recording == nullptr) {
+    std::unique_ptr<loupe::window::BoardLink> link = loupe::window::BoardLink::start(
+        {loupe::utf8(fake), loupe::utf8(folder / "payload.bin"), "--hang"}, folder / "hung.log", &why, HUNG_BOUND);
+    if (link == nullptr) {
         std::fprintf(stderr, "%s: %s\n", TEST, why.c_str());
         return false;
     }
     const auto began = std::chrono::steady_clock::now();
-    recording.reset();
+    link.reset();
     return expect(std::chrono::steady_clock::now() - began < HUNG_LET_GO, "a child that never ends is let go");
 }
 

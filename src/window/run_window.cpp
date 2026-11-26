@@ -26,6 +26,7 @@
 #include "tools.hpp"
 #include "update/update.hpp"
 #include "version.hpp"
+#include "window/board_link.hpp"
 #include "window/editor.hpp"
 #include "window/files.hpp"
 #include "window/flow.hpp"
@@ -33,7 +34,6 @@
 #include "window/gpu.hpp"
 #include "window/observer.hpp"
 #include "window/panels.hpp"
-#include "window/recording.hpp"
 
 namespace loupe {
 
@@ -94,7 +94,7 @@ open_recording(const Options& options, const std::filesystem::path& packs, std::
     return frames;
 }
 
-// What Record readies for `board`, off the frame loop: the reservation when a
+// What View readies for `board`, off the frame loop: the reservation when a
 // person holds it (`held`), logged to `log`, then autana `commit`'s firmware
 // packs, which an install keeps in `shipped` (firmware_packs(), pack.hpp).
 struct ReadyJob {
@@ -137,16 +137,17 @@ recording_file(const std::filesystem::path& config, std::string board) {
 // The open scene's run and what the window keeps for it.
 struct Shown {
     std::unique_ptr<Frames> frames;
-    // A board's recording feeding a live stream; none for a scene or a saved recording.
-    std::unique_ptr<window::Recording> recording;
+    // A board's link feeding a live stream; none for a scene or a saved recording.
+    std::unique_ptr<window::BoardLink> link;
+    // The live board's id, and what Record saves of its stream.
+    std::string board;
+    StreamSaver saver;
     // What the viewport names while waiting (the board, our packs' autana,
     // whether a frame was drawn), and where the wait stood last tick, logged
     // as it moves on.
     window::WaitFor wait;
     std::optional<window::Waiting> waited;
-    // The recording's file, saved or being written; empty for a scene.
-    std::filesystem::path recording_file;
-    window::RecordControls controls;
+    window::BoardControls controls;
     window::FrameTexture texture;
     window::Timeline timeline;
     window::Observer observer;
@@ -173,7 +174,8 @@ struct Asked {
 
 // Applies one of what the panels asked for this tick, a picked view first, then
 // the observer, which pauses the timeline while on; true when the frame on screen
-// changed. A failure clears `ok`, and a failed step stops play.
+// changed. A failure clears `ok`, and a failed step stops play. A live
+// stream shows its newest frame: a backlog is skipped, not stepped through.
 bool
 apply(Frames& frames, window::Timeline& timeline, window::Observer& observer, const Asked& asked, bool* ok) {
     if (asked.view) {
@@ -203,7 +205,8 @@ apply(Frames& frames, window::Timeline& timeline, window::Observer& observer, co
         timeline.playing = frames.live();
         return false;
     }
-    if (!frames.step(frames.dt_ms())) {
+    const bool behind = frames.live() && frames.count() - frames.index() > 1;
+    if (!(behind ? frames.seek(frames.count() - 1) : frames.step(frames.dt_ms()))) {
         *ok = false;
         timeline.playing = false;
     }
@@ -256,43 +259,62 @@ fit_debugger(std::optional<float>& fitted, float needed) {
     }
 }
 
-// What a recording's controls asked, sent to the board, then the bytes it
-// sent since the last tick fed to the stream.
+// Record turns saving on, into a new file under <config>/recordings, or off.
 void
-drive_recording(Shown& shown) {
-    if (!shown.recording) {
+toggle_record(Shown& shown, const Folders& folders) {
+    if (shown.saver.state() != StreamSaver::State::Off) {
+        shown.saver.stop();
         return;
     }
-    if (shown.controls.send) {
-        (void)shown.recording->send(*shown.controls.send);
-        shown.controls.send.reset();
-    }
-    if (shown.controls.stop) {
-        shown.recording->stop();
-        shown.controls.stop = false;
-    }
-    std::vector<uint8_t> bytes;
-    if (shown.recording->take(bytes) > 0) {
-        (void)shown.frames->feed(bytes);
+    std::string why;
+    if (!shown.saver.start(recording_file(folders.config, shown.board), &why)) {
+        std::fprintf(stderr, "loupe: %s\n", why.c_str());
     }
 }
 
-// What a recording's screen is (screen_line()): live while its recording
-// runs and has not been stopped; empty for a scene.
+// What a live board's controls asked, sent to the board, then the bytes it
+// sent since the last tick fed to the stream and to the save. A save that
+// ends joins the recent list.
+void
+drive_link(Shown& shown, const Folders& folders) {
+    if (!shown.link) {
+        return;
+    }
+    if (shown.controls.send) {
+        (void)shown.link->send(*shown.controls.send);
+        shown.controls.send.reset();
+    }
+    if (shown.controls.record) {
+        toggle_record(shown, folders);
+        shown.controls.record = false;
+    }
+    const StreamSaver::State was = shown.saver.state();
+    std::vector<uint8_t> bytes;
+    if (shown.link->take(bytes) > 0) {
+        (void)shown.frames->feed(bytes);
+        shown.saver.feed(bytes);
+    }
+    if (was == StreamSaver::State::Saving && shown.saver.state() == StreamSaver::State::Off) {
+        (void)remember(folders, shown.saver.file());
+    }
+}
+
+// What a live board's screen is (live_line()); empty for a scene or a saved recording.
 std::string
-screen_what(const Shown& shown, const std::optional<window::Recording::Status>& status) {
-    if (shown.recording_file.empty()) {
+screen_what(const Shown& shown, const std::optional<window::BoardLink::Status>& status) {
+    if (!shown.link) {
         return "";
     }
-    const bool live = status && status->running && !status->stopped;
-    return window::screen_line(shown.wait.board, shown.recording_file, live);
+    const bool saving = shown.saver.state() != StreamSaver::State::Off;
+    return window::live_line(shown.wait.board, saving ? shown.saver.file() : std::filesystem::path(),
+                             status && status->running);
 }
 
 // What the viewport says in place of a recording's frame until the first one
 // shows; each step is logged with its time, so the wait can be measured.
 // Waiting::Shown for a scene or a saved recording.
 window::Waiting
-draw_wait(Shown& shown, const std::optional<window::Recording::Status>& status) {
+draw_wait(Shown& shown, const std::optional<window::BoardLink::Status>& status) {
     const std::optional<Frames::StreamState> stream = shown.frames->stream_state();
     if (!status || !stream) {
         return window::Waiting::Shown;
@@ -312,7 +334,7 @@ draw_wait(Shown& shown, const std::optional<window::Recording::Status>& status) 
 // The viewport: the handle picker, the frame, and over it the observer's
 // steering or the editor's handles. True when the observer moved.
 bool
-draw_viewport(Shown& shown, const std::optional<window::Recording::Status>& status) {
+draw_viewport(Shown& shown, const std::optional<window::BoardLink::Status>& status) {
     if (draw_wait(shown, status) != window::Waiting::Shown) {
         return false;
     }
@@ -362,7 +384,7 @@ edit_tick(window::Editor& editor, Shown& shown, const window::EditMenu& menu, bo
 // The open scene's tick: its docked panels, then what they and the Edit menu
 // asked; true when Scenes was pressed, to go back to the start panel.
 bool
-draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
+draw_shown(Shown& shown, const Folders& folders, const window::EditMenu& menu, bool* ok) {
     const ImGuiID dock = ImGui::GetID("panels");
     if (!shown.laid_out) {
         lay_out(dock, ImGui::GetContentRegionAvail());
@@ -372,13 +394,14 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
     Asked asked;
     const bool was_on = shown.observer.on;
     bool back = false;
-    const std::optional<window::Recording::Status> status =
-        shown.recording ? std::optional(shown.recording->status()) : std::nullopt;
+    const std::optional<window::BoardLink::Status> status =
+        shown.link ? std::optional(shown.link->status()) : std::nullopt;
     if (ImGui::Begin(DEBUGGER)) {
         back = window::draw_debugger({.frames = *shown.frames,
                                       .views = shown.views,
                                       .stream = shown.frames->stream_state(),
-                                      .recording = status,
+                                      .link = status,
+                                      .saving = shown.saver.state(),
                                       .what = screen_what(shown, status)},
                                      shown.controls, shown.observer, shown.timeline, &asked.view);
         fit_debugger(shown.debugger_fitted, window::content_height());
@@ -403,7 +426,7 @@ draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
     }
     ImGui::End();
     asked.observe = moved || shown.observer.on != was_on;
-    drive_recording(shown);
+    drive_link(shown, folders);
     // Uploaded after the frame is drawn, for the observer's input over it; still this tick's picture.
     bool changed = apply(*shown.frames, shown.timeline, shown.observer, asked, ok);
     if (shown.editor) {
@@ -441,9 +464,9 @@ class Window {
     void leave();
     // Starts a board listing when asked, off this thread; takes it when done.
     void list_boards();
-    // Records the board Record was pressed for. A person's reservation is
-    // first taken off this thread, so the recording runs inside it.
-    void record_asked();
+    // Shows the board View was pressed for, live. A person's reservation is
+    // first taken off this thread, so the link runs inside it.
+    void view_asked();
 
     window::Gpu& gpu_;
     // A window run's stand-in for -o: autana's close writes the last frame, to
@@ -504,7 +527,7 @@ Window::tick() {
     window::Start start;
     bool back = false;
     if (shown_) {
-        back = draw_shown(*shown_, menu, &ok_);
+        back = draw_shown(*shown_, folders_, menu, &ok_);
     } else {
         window::draw_start(library_, refusal_, start);
         window::draw_attach(attach_);
@@ -514,12 +537,12 @@ Window::tick() {
     if (back) {
         leave();
     }
-    if (leaving_ && (!shown_ || !shown_->recording->status().running)) {
+    if (leaving_ && (!shown_ || !shown_->link || !shown_->link->status().running)) {
         leaving_ = false;
         close();
     }
     list_boards();
-    record_asked();
+    view_asked();
     if (start.browse) {
         window::browse(gpu_.sdl_window());
     }
@@ -551,8 +574,8 @@ Window::finish() {
 
 void
 Window::leave() {
-    if (shown_ && shown_->recording && shown_->recording->status().running) {
-        shown_->recording->stop();
+    if (shown_ && shown_->link && shown_->link->status().running) {
+        shown_->link->stop();
         leaving_ = true;
         return;
     }
@@ -573,31 +596,31 @@ Window::list_boards() {
 }
 
 void
-Window::record_asked() {
-    if (attach_.record) {
-        const auto listed = std::ranges::find(attach_.list.boards, *attach_.record, &Board::id);
+Window::view_asked() {
+    if (attach_.view) {
+        const auto listed = std::ranges::find(attach_.list.boards, *attach_.view, &Board::id);
         std::optional<Board> held;
         if (listed != attach_.list.boards.end() && listed->holder == Holder::Person) {
             held = *listed;
         }
         attach_.packs_autana = copy_.id.autana_commit;
         attach_.reserving_since = std::chrono::steady_clock::now();
-        std::fprintf(stderr, "loupe: readying %s: %sthe packs of autana %s\n", attach_.record->c_str(),
+        std::fprintf(stderr, "loupe: readying %s: %sthe packs of autana %s\n", attach_.view->c_str(),
                      held ? "its reservation (autana lock hand), then " : "", attach_.packs_autana.c_str());
         attach_.reserving = std::async(std::launch::async, ready_recording,
-                                       ReadyJob{.board = *attach_.record,
+                                       ReadyJob{.board = *attach_.view,
                                                 .held = held,
                                                 .commit = copy_.id.autana_commit,
                                                 .shipped = firmware_dir(folders_),
                                                 .log = scratch_.path() / "hand.log"});
-        attach_.record.reset();
+        attach_.view.reset();
     }
     if (attach_.reserving.valid() && attach_.reserving.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         const window::Reserved reserved = attach_.reserving.get();
         std::fprintf(stderr, "loupe: readied %s in %.3f s\n", reserved.board.c_str(),
                      std::chrono::duration<double>(std::chrono::steady_clock::now() - attach_.reserving_since).count());
         if (shown_) {
-            // A scene opened while the recording was readied: it stays.
+            // A scene opened while the live view was readied: it stays.
             return;
         }
         if (reserved.packs.empty()) {
@@ -612,9 +635,12 @@ Window::record_asked() {
 void
 Window::close() {
     if (shown_) {
-        // A recording joins the recent list once it holds bytes; one refused at once does not.
-        if (shown_->recording && shown_->recording->status().received > 0) {
-            (void)remember(folders_, shown_->recording->saved());
+        // A save under way ends with the frames that came; one that saved none leaves no file.
+        if (shown_->saver.state() != StreamSaver::State::Off) {
+            shown_->saver.stop();
+            if (shown_->saver.frames() > 0) {
+                (void)remember(folders_, shown_->saver.file());
+            }
         }
         ok_ &= shown_->frames->close();
         shown_.reset();
@@ -650,7 +676,6 @@ Window::open(const Options& options) {
     shown_.emplace(gpu_, std::move(frames));
     if (recording) {
         shown_->editor_why = RECORDING_NO_EDITOR;
-        shown_->recording_file = options.scene;
     } else {
         shown_->editor = window::open_editor(options.scene, &shown_->editor_why);
     }
@@ -661,11 +686,11 @@ bool
 Window::attach(const window::Reserved& reserved) {
     const std::string& board = reserved.board;
     close();
-    std::string why = "no settings folder to keep the recording in";
+    std::string why = "no settings folder to keep the link's log in";
     std::unique_ptr<Frames> frames;
-    std::unique_ptr<window::Recording> recording;
+    std::unique_ptr<window::BoardLink> link;
     if (!folders_.config.empty() && !scratch_.path().empty()) {
-        const std::filesystem::path file = recording_file(folders_.config, board);
+        const std::filesystem::path log = folders_.config / "logs" / std::format("{}.log", board);
         Options live;
         live.out_bmp = utf8(scratch_.path() / "frame.bmp");
         frames = open_recording(live, reserved.packs, board, &why);
@@ -673,18 +698,18 @@ Window::attach(const window::Reserved& reserved) {
         if (!reserved.token.empty()) {
             args.insert(args.begin(), {"--lock-token", reserved.token});
         }
-        recording = frames != nullptr ? window::Recording::start(autana_command(args), file, &why) : nullptr;
+        link = frames != nullptr ? window::BoardLink::start(autana_command(args), log, &why) : nullptr;
     }
-    if (recording == nullptr) {
+    if (link == nullptr) {
         refusal_ = std::format("{}: {}", board, why);
         std::fprintf(stderr, "loupe: %s\n", refusal_.c_str());
         return false;
     }
     refusal_.clear();
-    gpu_.set_title(std::format("{}: {} (recording)", TITLE, board));
+    gpu_.set_title(std::format("{}: {} (live)", TITLE, board));
     shown_.emplace(gpu_, std::move(frames));
-    shown_->recording = std::move(recording);
-    shown_->recording_file = shown_->recording->saved();
+    shown_->link = std::move(link);
+    shown_->board = board;
     const auto listed = std::ranges::find(attach_.list.boards, board, &Board::id);
     shown_->wait.board = listed == attach_.list.boards.end() || listed->port.empty()
                              ? board

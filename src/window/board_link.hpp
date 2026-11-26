@@ -1,5 +1,5 @@
-// A board's frames as they are drawn: one `autana -b BOARD record` child, its
-// stream read off stdout, console lines (FREEZE, STEP, RESUME) written to its
+// A board's live stream: one `autana -b BOARD record` child, its stream read
+// off stdout, console lines (FREEZE, STEP, RESUME) written to its
 // stdin. Through SDL3's processes, so it lives in the window layer.
 #pragma once
 
@@ -25,29 +25,28 @@ namespace loupe::window {
 // console's FRAMEREC_BEGIN, Console-Framing.md in autana's docs).
 constexpr std::string_view RECORDING_BEGAN = "FRAMEREC_BEGIN";
 
-// How long a recording may take to end once its input closes: autana gives
+// How long the link may take to end once its input closes: autana gives
 // the board's drain 30 s (RECORD_END_SECONDS in its device.py), and a margin.
 constexpr std::chrono::seconds END_WITHIN{35};
 
-// One window's recording: send, stop and status come from one thread; only
+// One window's live board: send, stop and status come from one thread; only
 // take shares the bytes with the reader.
-class Recording {
+class BoardLink {
   public:
-    // Starts `command` (autana_command({"-b", BOARD, "record"})), its stdout
-    // copied to `save_to` as it arrives and its stderr to `save_to` + ".log".
+    // Starts `command` (autana_command({"-b", BOARD, "record"})), its stderr
+    // copied to `log` as it arrives.
     // `end_within` bounds the destructor's wait. Null, with `why` set, when
     // it did not start.
-    static std::unique_ptr<Recording> start(const std::vector<std::string>& command,
-                                            const std::filesystem::path& save_to, std::string* why,
-                                            std::chrono::milliseconds end_within = END_WITHIN);
-    // Stops the recording and waits for it to end, `end_within` at most; then
+    static std::unique_ptr<BoardLink> start(const std::vector<std::string>& command, const std::filesystem::path& log,
+                                            std::string* why, std::chrono::milliseconds end_within = END_WITHIN);
+    // Stops the stream and waits for it to end, `end_within` at most; then
     // it kills the child and stops reading. On Windows that kill reaches only
     // cmd.exe, and autana goes on to end its drain by itself.
-    ~Recording();
-    Recording(const Recording&) = delete;
-    Recording& operator=(const Recording&) = delete;
-    Recording(Recording&&) = delete;
-    Recording& operator=(Recording&&) = delete;
+    ~BoardLink();
+    BoardLink(const BoardLink&) = delete;
+    BoardLink& operator=(const BoardLink&) = delete;
+    BoardLink(BoardLink&&) = delete;
+    BoardLink& operator=(BoardLink&&) = delete;
 
     // Appends the stream bytes read since the last take to `out`; how many.
     size_t take(std::vector<uint8_t>& out);
@@ -72,18 +71,17 @@ class Recording {
     };
 
     Status status();
-    const std::filesystem::path& saved() const;
 
   private:
-    Recording() = default;
-    // Copies stdout to the saved file and the pending bytes, and stderr to the
+    BoardLink() = default;
+    // Copies stdout to the pending bytes, and stderr to the
     // log and its lines, until both close or `stop` is asked.
     void read_pipes(const std::stop_token& stop);
     // Takes the whole lines in `bytes`, after what came before them, as stderr's latest.
     void take_lines(std::string_view bytes);
 
     SDL_Process* process_ = nullptr;
-    std::filesystem::path saved_, log_;
+    std::filesystem::path log_;
     std::chrono::milliseconds end_within_{END_WITHIN};
     std::mutex mutex_; // guards pending_, latest_ and began_
     std::vector<uint8_t> pending_;
