@@ -189,15 +189,16 @@ firmware_packs_draw(const std::vector<uint8_t>& bytes, const Folders& at) {
         std::fprintf(stderr, "%s: %s\n", TEST, why.c_str());
         return false;
     }
-    const auto pack = [&](const char* name) { return *packs / (std::string(name) + std::string(loupe::PACK_SUFFIX)); };
+    const fs::path& folder = *packs;
+    const auto pack = [&](const char* name) { return folder / (std::string(name) + std::string(loupe::PACK_SUFFIX)); };
     bool ok = expect(fs::is_regular_file(pack(SCENE_PACK)) && fs::is_regular_file(pack(FIRMWARE_ONLY_PACK)),
                      "they hold the recorded scene's pack and one only the firmware carries");
     std::error_code error;
     const auto built = fs::last_write_time(pack(SCENE_PACK), error);
     const std::optional<fs::path> again = loupe::firmware_packs(FIRMWARE_KEY, &why);
-    ok &= expect(again == packs && fs::last_write_time(pack(SCENE_PACK), error) == built,
+    ok &= expect(again == folder && fs::last_write_time(pack(SCENE_PACK), error) == built,
                  "a second call for the same key builds nothing");
-    const auto state = fed_over(bytes, at, *packs, "firmware");
+    const auto state = fed_over(bytes, at, folder, "firmware");
     ok &= expect(state && !state->refused && state->frames == FRAMES, "the stream draws over them");
     return ok;
 }

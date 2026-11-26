@@ -105,6 +105,30 @@ recording_packs(const std::string& commit, const std::filesystem::path& samples,
     return firmware_packs(commit, why);
 }
 
+// What Record readies for `board`, off the frame loop: the reservation when a
+// person holds it (`held`), logged to `log`, then the packs recording_packs
+// gives for `commit`, or `samples` without the pack tool.
+struct ReadyJob {
+    std::string board;
+    std::optional<Board> held;
+    std::string commit;
+    std::filesystem::path samples, log;
+};
+
+// No packs, with `why` set, when either step of `job` failed.
+window::Reserved
+ready_recording(const ReadyJob& job) {
+    window::Reserved reserved{.board = job.board, .token = "", .why = "", .packs = {}};
+    if (job.held) {
+        reserved.token = reservation_token(*job.held, job.log, &reserved.why);
+        if (reserved.token.empty()) {
+            return reserved;
+        }
+    }
+    reserved.packs = recording_packs(job.commit, job.samples, &reserved.why).value_or(std::filesystem::path());
+    return reserved;
+}
+
 // Where a recording from `board` is kept: <config>/recordings/<board>-<local time>.framerec,
 // the board's serial without its colons, which a Windows file name cannot hold.
 // A second recording within the same second takes -2, -3, ... rather than overwrite.
@@ -555,19 +579,12 @@ Window::record_asked() {
         }
         attach_.packs_autana = copy_.id.autana_commit;
         attach_.reserving_since = std::chrono::steady_clock::now();
-        attach_.reserving =
-            std::async(std::launch::async, [board = *attach_.record, held, commit = copy_.id.autana_commit,
-                                            samples = samples_dir(folders_), log = scratch_.path() / "hand.log"] {
-                window::Reserved reserved{.board = board, .token = "", .why = "", .packs = {}};
-                if (held) {
-                    reserved.token = reservation_token(*held, log, &reserved.why);
-                    if (reserved.token.empty()) {
-                        return reserved;
-                    }
-                }
-                reserved.packs = recording_packs(commit, samples, &reserved.why).value_or(std::filesystem::path());
-                return reserved;
-            });
+        attach_.reserving = std::async(std::launch::async, ready_recording,
+                                       ReadyJob{.board = *attach_.record,
+                                                .held = held,
+                                                .commit = copy_.id.autana_commit,
+                                                .samples = samples_dir(folders_),
+                                                .log = scratch_.path() / "hand.log"});
         attach_.record.reset();
     }
     if (attach_.reserving.valid() && attach_.reserving.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
