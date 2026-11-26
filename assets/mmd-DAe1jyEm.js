@@ -27,8 +27,9 @@ title: "Loupe: components"
 ---
 graph TB
   subgraph LoupeLoupe["\`Loupe\`"]
-    LoupeLoupe.C_window@{ shape: rectangle, label: "window" }
     LoupeLoupe.C_path@{ shape: rectangle, label: "path" }
+    LoupeLoupe.C_storyboard@{ shape: rectangle, label: "storyboard" }
+    LoupeLoupe.C_window@{ shape: rectangle, label: "window" }
     LoupeLoupe.C_editor@{ shape: rectangle, label: "editor" }
     LoupeLoupe.C_engine@{ shape: rectangle, label: "engine" }
     LoupeLoupe.C_update@{ shape: rectangle, label: "update" }
@@ -42,6 +43,7 @@ graph TB
   LoupeLoupe.C_src -.-> LoupeLoupe.C_path
   LoupeLoupe.C_src -.-> LoupeLoupe.C_window
   LoupeLoupe.C_update -.-> LoupeLoupe.C_src
+  LoupeLoupe.C_storyboard -.-> LoupeLoupe.C_window
   LoupeLoupe.C_window -.-> LoupeLoupe.C_update
 `;case`loupe_all`:return`---
 title: "Loupe: components, with tests and tools"
@@ -50,6 +52,7 @@ graph TB
   subgraph LoupeLoupe["\`Loupe\`"]
     LoupeLoupe.C_tests@{ shape: rectangle, label: "tests" }
     LoupeLoupe.C_path@{ shape: rectangle, label: "path" }
+    LoupeLoupe.C_storyboard@{ shape: rectangle, label: "storyboard" }
     LoupeLoupe.C_window@{ shape: rectangle, label: "window" }
     LoupeLoupe.C_editor@{ shape: rectangle, label: "editor" }
     LoupeLoupe.C_update@{ shape: rectangle, label: "update" }
@@ -69,9 +72,12 @@ graph TB
   LoupeLoupe.C_src -.-> LoupeLoupe.C_path
   LoupeLoupe.C_tests -.-> LoupeLoupe.C_path
   LoupeLoupe.C_src -.-> LoupeLoupe.C_window
+  LoupeLoupe.C_storyboard -.-> LoupeLoupe.C_src
   LoupeLoupe.C_tests -.-> LoupeLoupe.C_src
   LoupeLoupe.C_update -.-> LoupeLoupe.C_src
   LoupeLoupe.C_window -.-> LoupeLoupe.C_src
+  LoupeLoupe.C_storyboard -.-> LoupeLoupe.C_window
+  LoupeLoupe.C_tests -.-> LoupeLoupe.C_storyboard
   LoupeLoupe.C_tests -.-> LoupeLoupe.C_update
   LoupeLoupe.C_tests -.-> LoupeLoupe.C_window
   LoupeLoupe.C_window -.-> LoupeLoupe.C_update
@@ -140,6 +146,7 @@ title: "src"
 graph TB
   LoupeLoupeC_editor@{ shape: rectangle, label: "editor" }
   LoupeLoupeC_engine@{ shape: rectangle, label: "engine" }
+  LoupeLoupeC_storyboard@{ shape: rectangle, label: "storyboard" }
   LoupeLoupeC_update@{ shape: rectangle, label: "update" }
   subgraph LoupeLoupeC_src["\`src\`"]
     LoupeLoupeC_src.M_main@{ shape: rectangle, label: "main" }
@@ -158,6 +165,7 @@ graph TB
   LoupeLoupeC_engine -.-> LoupeLoupeC_src.M_options
   LoupeLoupeC_path -.-> LoupeLoupeC_src.M_pack
   LoupeLoupeC_path -.-> LoupeLoupeC_src.M_scratch
+  LoupeLoupeC_storyboard -.-> LoupeLoupeC_src.M_options
   LoupeLoupeC_update -.-> LoupeLoupeC_src.M_options
   LoupeLoupeC_update -.-> LoupeLoupeC_src.M_scratch
   LoupeLoupeC_update -.-> LoupeLoupeC_src.M_version
@@ -172,6 +180,22 @@ graph TB
   LoupeLoupeC_src.M_main -.-> LoupeLoupeC_path
   LoupeLoupeC_src.M_main -.-> LoupeLoupeC_window
   LoupeLoupeC_src.M_pack -.-> LoupeLoupeC_engine
+`;case`c_storyboard`:return`---
+title: "storyboard"
+---
+graph TB
+  subgraph LoupeLoupeC_storyboard["\`storyboard\`"]
+    LoupeLoupeC_storyboard.M_main@{ shape: rectangle, label: "main" }
+    LoupeLoupeC_storyboard.M_runner@{ shape: rectangle, label: "runner" }
+    LoupeLoupeC_storyboard.M_recipe@{ shape: rectangle, label: "recipe" }
+    LoupeLoupeC_storyboard.C_config@{ shape: rectangle, label: "storyboard/config" }
+  end
+  LoupeLoupeC_window@{ shape: rectangle, label: "window" }
+  LoupeLoupeC_src@{ shape: rectangle, label: "src" }
+  LoupeLoupeC_storyboard.M_main -.-> LoupeLoupeC_storyboard.M_runner
+  LoupeLoupeC_storyboard.M_runner -.-> LoupeLoupeC_storyboard.M_recipe
+  LoupeLoupeC_storyboard.M_recipe -.-> LoupeLoupeC_src
+  LoupeLoupeC_storyboard.M_runner -.-> LoupeLoupeC_window
 `;case`c_tests`:return`---
 title: "tests"
 ---
@@ -194,6 +218,7 @@ title: "window"
 ---
 graph TB
   LoupeLoupeC_src@{ shape: rectangle, label: "src" }
+  LoupeLoupeC_storyboard@{ shape: rectangle, label: "storyboard" }
   subgraph LoupeLoupeC_window["\`window\`"]
     LoupeLoupeC_window.M_run_window@{ shape: rectangle, label: "run_window" }
     LoupeLoupeC_window.M_editor@{ shape: rectangle, label: "editor" }
@@ -208,6 +233,7 @@ graph TB
   LoupeLoupeC_engine@{ shape: rectangle, label: "engine" }
   LoupeLoupeC_editor@{ shape: rectangle, label: "editor" }
   LoupeLoupeC_src -.-> LoupeLoupeC_window.M_run_window
+  LoupeLoupeC_storyboard -.-> LoupeLoupeC_window.M_run_window
   LoupeLoupeC_window.M_editor -.-> LoupeLoupeC_window.M_path_editor
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_editor
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_files
@@ -221,4 +247,11 @@ graph TB
   LoupeLoupeC_window.M_panels -.-> LoupeLoupeC_src
   LoupeLoupeC_window.M_path_editor -.-> LoupeLoupeC_editor
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_update
+`;case`c_storyboard_config`:return`---
+title: "config"
+---
+graph TB
+  subgraph LoupeLoupeC_storyboardC_config["\`storyboard/config\`"]
+    LoupeLoupeC_storyboardC_config.M_imgui_config@{ shape: rectangle, label: "imgui_config" }
+  end
 `;default:throw Error(`Unknown viewId: `+e)}};export{e as mmdSource};
