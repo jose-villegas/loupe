@@ -185,10 +185,12 @@ firmware_packs_draw(const std::vector<uint8_t>& bytes, const Folders& at) {
     }
     std::string why;
     const std::optional<fs::path> packs = loupe::firmware_packs(FIRMWARE_KEY, &why);
-    if (!expect(packs.has_value(), "the firmware's packs build")) {
+    if (!packs.has_value()) {
+        (void)expect(false, "the firmware's packs build");
         std::fprintf(stderr, "%s: %s\n", TEST, why.c_str());
         return false;
     }
+    (void)expect(true, "the firmware's packs build");
     const fs::path& folder = *packs;
     const auto pack = [&](const char* name) { return folder / (std::string(name) + std::string(loupe::PACK_SUFFIX)); };
     bool ok = expect(fs::is_regular_file(pack(SCENE_PACK)) && fs::is_regular_file(pack(FIRMWARE_ONLY_PACK)),
