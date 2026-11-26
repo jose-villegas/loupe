@@ -564,10 +564,11 @@ bool
 draw_free_view_toggle(Editor& editor, const Frames& frames) {
     PathEdit& edit = editor.path;
     bool on = edit.free.on;
-    if (!ImGui::Checkbox("Free view", &on)) {
+    const bool clicked = ImGui::Checkbox("Free view", &on);
+    ImGui::SetItemTooltip("Fly the camera by hand (WASD, right drag) to see its path from outside");
+    if (!clicked) {
         return false;
     }
-    ImGui::SetItemTooltip("Fly the camera by hand (WASD, right drag) to see its path from outside");
     if (on) {
         const auto& objects = editor.docs.scene.objects;
         const auto active = std::ranges::find_if(

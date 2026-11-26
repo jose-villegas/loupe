@@ -449,7 +449,7 @@ run_scripted(float content_scale, Script& script) {
             break;
         }
         window.tick(ask.picture ? &outcome.picture : nullptr);
-        script.after_tick(std::move(outcome));
+        script.after_tick(ask, std::move(outcome));
     }
     script.stop();
     return window.finish();

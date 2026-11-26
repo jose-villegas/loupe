@@ -6,6 +6,7 @@
 #include <SDL3/SDL_surface.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cfloat>
 #include <cmath>
@@ -14,10 +15,10 @@
 #include <cstdio>
 #include <format>
 #include <memory>
-#include <sstream>
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <variant>
 
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -31,13 +32,6 @@ namespace loupe::storyboard {
 namespace {
 
 constexpr const char OPEN[] = "loupe.open";
-constexpr const char CLICK[] = "loupe.click";
-constexpr const char CHECK[] = "loupe.check";
-constexpr const char UNCHECK[] = "loupe.uncheck";
-constexpr const char INPUT[] = "loupe.input";
-constexpr const char KEY[] = "loupe.key";
-constexpr const char HOLD[] = "loupe.hold";
-constexpr const char WAIT[] = "loupe.wait";
 constexpr const char SCREENSHOT[] = "loupe.screenshot";
 // Where a picture is taken with the mouse: off the window, so no item shows hovered.
 constexpr ImVec2 OFF_WINDOW(-FLT_MAX, -FLT_MAX);
@@ -95,16 +89,14 @@ chord(const std::string& text) {
     return std::nullopt;
 }
 
-// The command line's words in a loupe.open: a string split on spaces, or a list.
+// The command line's words in a loupe.open: a string split at white space, or a list.
 std::vector<std::string>
-words(const nlohmann::json& value) {
-    std::vector<std::string> out;
+open_words(const nlohmann::json& value) {
     if (value.is_string()) {
-        std::istringstream split(value.get<std::string>());
-        for (std::string word; split >> word;) {
-            out.push_back(word);
-        }
-    } else if (value.is_array()) {
+        return words(value.get<std::string>());
+    }
+    std::vector<std::string> out;
+    if (value.is_array()) {
         for (const nlohmann::json& word : value) {
             out.push_back(word.is_string() ? word.get<std::string>() : word.dump());
         }
@@ -135,15 +127,129 @@ picture_rect(const window::Picture& picture, const std::string& crop, std::strin
 
 } // namespace
 
-Runner::Runner(std::vector<Item> items, const std::filesystem::path& recipe, std::filesystem::path out_dir)
-    : items_(std::move(items)), recipe_(utf8(recipe)), recipe_dir_(recipe.parent_path()), out_dir_(std::move(out_dir)) {
+namespace {
+
+// A step that is input alone, needing nothing of the window between ticks.
+struct InputStep {
+    std::string_view key;
+    bool (*run)(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why);
+};
+
+bool
+wait(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
+    const std::optional<int> ticks = count(value, 1);
+    if (!ticks) {
+        *why = "loupe.wait needs a number of ticks";
+        return false;
+    }
+    ctx->Yield(*ticks);
+    return true;
 }
+
+// The item a click, check or uncheck names; empty, with `why` set, for none.
+std::string
+item_ref(const nlohmann::json& value, std::string* why) {
+    if (!value.is_string() || value.get<std::string>().empty()) {
+        *why = "the step needs an item, such as //Outliner/tour";
+        return "";
+    }
+    return value.get<std::string>();
+}
+
+bool
+click(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
+    const std::string ref = item_ref(value, why);
+    if (!ref.empty()) {
+        ctx->ItemClick(ref.c_str());
+    }
+    return !ref.empty();
+}
+
+bool
+check(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
+    const std::string ref = item_ref(value, why);
+    if (!ref.empty()) {
+        ctx->ItemCheck(ref.c_str());
+    }
+    return !ref.empty();
+}
+
+bool
+uncheck(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
+    const std::string ref = item_ref(value, why);
+    if (!ref.empty()) {
+        ctx->ItemUncheck(ref.c_str());
+    }
+    return !ref.empty();
+}
+
+bool
+input(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
+    const std::string ref = member(value, "ref");
+    const std::string typed = member(value, "value");
+    if (ref.empty() || typed.empty()) {
+        *why = "loupe.input needs {ref: ITEM, value: TEXT}";
+        return false;
+    }
+    ctx->ItemInputValue(ref.c_str(), typed.c_str());
+    return true;
+}
+
+// `name` as a chord; none, with `why` set, for a name that is none.
+std::optional<ImGuiKeyChord>
+named_chord(const std::string& name, std::string* why) {
+    const std::optional<ImGuiKeyChord> keys = chord(name);
+    if (!keys) {
+        *why = std::format("no key \"{}\": a chord of ImGui's key names, such as ctrl+z or Escape", name);
+    }
+    return keys;
+}
+
+bool
+key(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
+    const std::optional<ImGuiKeyChord> keys = named_chord(value.is_string() ? value.get<std::string>() : "", why);
+    if (keys) {
+        ctx->KeyPress(*keys);
+    }
+    return keys.has_value();
+}
+
+bool
+hold(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
+    const std::optional<ImGuiKeyChord> keys = named_chord(member(value, "key"), why);
+    const std::optional<int> ticks = count(value.is_object() ? value.value("ticks", nlohmann::json()) : value, 1);
+    if (!keys || !ticks) {
+        *why = "loupe.hold needs {key: KEY, ticks: N}: " + *why;
+        return false;
+    }
+    ctx->KeyDown(*keys);
+    ctx->Yield(*ticks);
+    ctx->KeyUp(*keys);
+    return true;
+}
+
+constexpr std::array INPUT_STEPS = {
+    InputStep{.key = "loupe.wait", .run = wait},   InputStep{.key = "loupe.click", .run = click},
+    InputStep{.key = "loupe.check", .run = check}, InputStep{.key = "loupe.uncheck", .run = uncheck},
+    InputStep{.key = "loupe.input", .run = input}, InputStep{.key = "loupe.key", .run = key},
+    InputStep{.key = "loupe.hold", .run = hold},
+};
+
+} // namespace
+
+Runner::Runner(Recipe recipe, std::filesystem::path out_dir)
+    : recipe_(std::move(recipe)), out_dir_(std::move(out_dir)) {}
 
 // After ImGui's own context is gone (run_scripted's window), as the engine asks.
 Runner::~Runner() {
     if (engine_ != nullptr) {
         ImGuiTestEngine_DestroyContext(engine_);
     }
+}
+
+bool
+Runner::ok() const {
+    return ok_;
 }
 
 // The engine in fast mode at a fixed TICK_S, quiet but for its warnings, and
@@ -164,42 +270,52 @@ Runner::start() {
     io.ConfigWatchdogKillTest = FLT_MAX;
     ImGuiTestEngine_Start(engine_, ImGui::GetCurrentContext());
     ImGuiTest* test = ImGuiTestEngine_RegisterTest(engine_, "storyboard", "recipe");
-    test->TestFunc = &Runner::run_items;
+    test->TestFunc = &Runner::run_steps;
     test->UserData = this;
     ImGuiTestEngine_QueueTest(engine_, test);
 }
 
 Script::Ask
 Runner::before_tick() {
-    asked_ = {.open = open_,
-              .picture = shot_.has_value(),
-              .done = !ok_
-                      || (ImGuiTestEngine_IsTestQueueEmpty(engine_) && !ImGuiTestEngine_GetIO(engine_).IsRunningTests)};
-    return asked_;
-}
-
-// A step's ask is done by the tick after the one it was made in, which this
-// tick's ask says: a step runs inside a tick, after its ask was taken.
-void
-Runner::after_tick(Outcome outcome) {
-    ImGuiTestEngine_PostSwap(engine_);
-    if (asked_.open) {
-        opened_ = outcome.opened;
-        open_.reset();
-    }
-    if (asked_.picture) {
-        shot_why_.clear();
-        if (!outcome.picture) {
-            shot_why_ = "the window could not be read back";
-        } else if (write_picture(*outcome.picture, shot_->crop, shot_->out, &shot_why_)) {
-            std::printf("%s\n", utf8(shot_->out).c_str());
+    Ask ask;
+    ask.done = !ok_ || (ImGuiTestEngine_IsTestQueueEmpty(engine_) && !ImGuiTestEngine_GetIO(engine_).IsRunningTests);
+    if (pending_) {
+        if (const Options* open = std::get_if<Options>(&*pending_)) {
+            ask.open = *open;
+        } else {
+            ask.picture = true;
         }
-        shot_.reset();
     }
+    return ask;
 }
 
+// A step's request is done by the tick after the one it was made in, which
+// `asked` carries: a step runs inside a tick, after that tick's ask was taken.
+void
+Runner::after_tick(const Ask& asked, Outcome outcome) {
+    ImGuiTestEngine_PostSwap(engine_);
+    if (asked.open) {
+        pending_why_ = outcome.opened ? "" : "the scene did not open, as said above";
+        pending_.reset();
+        return;
+    }
+    const Shot* shot = pending_ ? std::get_if<Shot>(&*pending_) : nullptr;
+    if (!asked.picture || shot == nullptr) {
+        return;
+    }
+    pending_why_ = "the window could not be read back";
+    if (outcome.picture && write_picture(*outcome.picture, shot->crop, shot->out, &pending_why_)) {
+        pending_why_.clear();
+        std::puts(utf8(shot->out).c_str());
+    }
+    pending_.reset();
+}
+
+// The test aborted first, so a step waiting on the window, which will not
+// tick again, gives up instead of holding the engine's stop.
 void
 Runner::stop() {
+    ImGuiTestEngine_AbortCurrentTest(engine_);
     ImGuiTestEngine_Stop(engine_);
     ImGuiTestEngineResultSummary summary;
     ImGuiTestEngine_GetResultSummary(engine_, &summary);
@@ -207,17 +323,14 @@ Runner::stop() {
 }
 
 void
-Runner::run_items(ImGuiTestContext* ctx) {
+Runner::run_steps(ImGuiTestContext* ctx) {
     Runner& self = *static_cast<Runner*>(ctx->Test->UserData);
-    for (const Item& item : self.items_) {
-        if (!item.ours()) {
-            std::printf("%s:%d: %s is autana's, skipped\n", self.recipe_.c_str(), item.line, item.label().c_str());
-            continue;
-        }
+    const std::string recipe = utf8(self.recipe_.path);
+    for (const Item& item : self.recipe_.steps) {
         std::string why;
         if (!self.step(ctx, item, &why) || ctx->IsError()) {
-            std::fprintf(stderr, "loupe-storyboard: %s:%d: %s: %s\n", self.recipe_.c_str(), item.line,
-                         item.label().c_str(), why.empty() ? "failed, as the test engine says above" : why.c_str());
+            std::fprintf(stderr, "loupe-storyboard: %s:%d: %s: %s\n", recipe.c_str(), item.line, item.label().c_str(),
+                         why.empty() ? "failed, as the test engine says above" : why.c_str());
             self.ok_ = false;
             return;
         }
@@ -226,94 +339,34 @@ Runner::run_items(ImGuiTestContext* ctx) {
 
 bool
 Runner::step(ImGuiTestContext* ctx, const Item& item, std::string* why) {
-    const std::string key = *item.ours();
-    const nlohmann::json& value = item.raw[key];
-    const std::string word = value.is_string() ? value.get<std::string>() : "";
-    if (key == OPEN) {
+    const nlohmann::json& value = item.raw[item.key];
+    if (item.key == OPEN) {
         return open(ctx, value, why);
     }
-    if (key == SCREENSHOT) {
+    if (item.key == SCREENSHOT) {
         return screenshot(ctx, value, why);
     }
-    if (key == WAIT) {
-        const std::optional<int> ticks = count(value, 1);
-        if (!ticks) {
-            *why = "loupe.wait needs a number of ticks";
-            return false;
-        }
-        ctx->Yield(*ticks);
-        return true;
+    const auto* found = std::ranges::find(INPUT_STEPS, item.key, &InputStep::key);
+    if (found == INPUT_STEPS.end()) {
+        *why = std::format("no step {}", item.key);
+        return false;
     }
-    if (key == CLICK || key == CHECK || key == UNCHECK) {
-        if (word.empty()) {
-            *why = std::format("{} needs an item, such as //Outliner/tour", key);
-            return false;
-        }
-        if (key == CLICK) {
-            ctx->ItemClick(word.c_str());
-        } else if (key == CHECK) {
-            ctx->ItemCheck(word.c_str());
-        } else {
-            ctx->ItemUncheck(word.c_str());
-        }
-        return true;
-    }
-    if (key == INPUT) {
-        const std::string ref = member(value, "ref");
-        const std::string typed = member(value, "value");
-        if (ref.empty() || typed.empty()) {
-            *why = "loupe.input needs {ref: ITEM, value: TEXT}";
-            return false;
-        }
-        ctx->ItemInputValue(ref.c_str(), typed.c_str());
-        return true;
-    }
-    if (key == KEY || key == HOLD) {
-        const std::string name = key == KEY ? word : member(value, "key");
-        const std::optional<ImGuiKeyChord> keys = chord(name);
-        if (!keys) {
-            *why = std::format("no key \"{}\": a chord of ImGui's key names, such as ctrl+z or Escape", name);
-            return false;
-        }
-        if (key == KEY) {
-            ctx->KeyPress(*keys);
-            return true;
-        }
-        const std::optional<int> ticks = count(value.is_object() ? value.value("ticks", nlohmann::json()) : value, 1);
-        if (!ticks) {
-            *why = "loupe.hold needs {key: KEY, ticks: N}";
-            return false;
-        }
-        ctx->KeyDown(*keys);
-        ctx->Yield(*ticks);
-        ctx->KeyUp(*keys);
-        return true;
-    }
-    *why = std::format("no step {}", key);
-    return false;
+    return found->run(ctx, value, why);
 }
 
 bool
 Runner::open(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
-    std::vector<std::string> args = words(value);
-    std::vector<char*> argv{const_cast<char*>("loupe")};
-    for (std::string& arg : args) {
-        argv.push_back(arg.data());
-    }
     Options options;
-    if (!parse_options(static_cast<int>(argv.size()), argv.data(), &options, why) || options.scene.empty()) {
+    if (!parse_args(open_words(value), &options, why) || options.scene.empty()) {
         *why = std::format("loupe.open takes a scene and the window's flags, as loupe does: {}",
                            why->empty() ? "no scene" : *why);
         return false;
     }
     if (options.scene.is_relative()) {
-        options.scene = recipe_dir_ / options.scene;
+        options.scene = recipe_.path.parent_path() / options.scene;
     }
-    open_ = std::move(options);
-    opened_ = false;
-    await(ctx);
-    if (!opened_) {
-        *why = "the scene did not open, as said above";
+    *why = request(ctx, std::move(options));
+    if (!why->empty()) {
         return false;
     }
     ctx->Yield(SETTLE_TICKS);
@@ -333,17 +386,18 @@ Runner::screenshot(ImGuiTestContext* ctx, const nlohmann::json& value, std::stri
     std::filesystem::create_directories(shot.out.parent_path(), error);
     ctx->MouseTeleportToPos(OFF_WINDOW);
     ctx->Yield(SETTLE_TICKS);
-    shot_ = std::move(shot);
-    await(ctx);
-    *why = shot_why_;
-    return shot_why_.empty();
+    *why = request(ctx, std::move(shot));
+    return why->empty();
 }
 
-void
-Runner::await(ImGuiTestContext* ctx) {
-    while (open_ || shot_) {
+std::string
+Runner::request(ImGuiTestContext* ctx, std::variant<Options, Shot> request) {
+    pending_ = std::move(request);
+    pending_why_.clear();
+    while (pending_ && !ctx->IsError()) {
         ctx->Yield();
     }
+    return pending_ ? "the run stopped first" : pending_why_;
 }
 
 bool

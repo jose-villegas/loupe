@@ -40,7 +40,7 @@ class Script {
     virtual ~Script() = default;
     virtual void start() = 0;
     virtual Ask before_tick() = 0;
-    virtual void after_tick(Outcome outcome) = 0;
+    virtual void after_tick(const Ask& asked, Outcome outcome) = 0;
     virtual void stop() = 0;
 };
 

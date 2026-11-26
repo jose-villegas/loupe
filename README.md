@@ -274,15 +274,15 @@ why. `--compare` needs the pack tool, git, ffmpeg and the Python modules in
 `loupe-storyboard` runs a recipe on the real window: Dear ImGui's test engine
 gives each step to the panels as a person's clicks, keys and typing, so what
 it shows is what that input does. It is built with `-DLOUPE_STORYBOARD=ON`, as
-the `default` preset is, and never into the downloads (License).
+the `default` preset is, and never for the downloads (License).
 
 ```bash
 build/default/loupe-storyboard --recipe tests/stories/doc_shots/sponza.yaml -o shots --scale 1.5
 ```
 
-A recipe is the YAML list of steps autana's runner reads too. Each step is a
-map with an optional `name`; the steps whose key starts `loupe.` are Loupe's,
-the rest are autana's, which Loupe skips. A step that fails stops the run at
+A recipe is a YAML list of steps. Each step is a map of one `loupe.` key,
+its value the step's arguments, and an optional `name`; any other map is
+refused at its line before the run starts. A step that fails stops the run at
 its line, and `loupe-storyboard` exits 1.
 
 ```yaml
@@ -331,7 +331,7 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `view_switch` | a debug view picked mid-run, and kept through a seek back, draws what it drew when picked from the start |
 | `window_smoke`, `window_start` | the window opens, on a scene and on the start panel, and draws 10 ticks offscreen on Mesa's lavapipe under the Khronos validation layer, with no validation error; skipped where either is missing |
 | `doc_shots_current` | every picture of the window in `docs/shots` holds the pixels the recipes in `tests/stories/doc_shots` draw offscreen on lavapipe, each channel within one level (lavapipe compiles for the CPU it runs on), and none is left that no recipe draws; skipped without lavapipe, and with autana at any commit but the pinned one (the nightly's `main`), whose scenes can draw other pixels |
-| `recipe` | a recipe reads as its steps, each with its line, the `loupe.*` ones Loupe's and the rest autana's; a recipe that is no list of maps, or a step with two `loupe.*` keys, is refused at its line |
+| `recipe` | a recipe reads as its steps, each with its line, its `loupe.*` key and its name; a recipe that is no list of maps, or a step that is not one `loupe.*` key and a name (a misspelt key, another key, none, two), is refused at its line |
 | `version` | `--version` names the project version, Loupe's commit, the configured channel and the autana commit |
 | `update` | SHA-256 on the standard's examples; GitHub's saved release answers give each system's download; which offers are newer; the setting; a check stages only a verified newer download and a local build never asks; a running copy, beside its samples and in `bin/`, is swapped for a staged one and says so at its next start |
 | `build_id` | `--version`'s line for each channel, and a copy counts as installed only with the setup's uninstaller beside it |
@@ -413,7 +413,7 @@ notes list the pull requests since the latest release.
 
 ## License
 
-GPL-3.0, as autana. `loupe-storyboard` also links
-[Dear ImGui Test Engine](https://github.com/ocornut/imgui_test_engine), under
-its own licence, so the downloads are built without it (`-DLOUPE_STORYBOARD=OFF`,
-the `release` preset's).
+GPL-3.0, as autana. A build with `-DLOUPE_STORYBOARD=ON`, as the `default`
+preset is, links [Dear ImGui Test Engine](https://github.com/ocornut/imgui_test_engine),
+under its own licence, into every program it builds, `loupe` too; the downloads
+are built without it (the `release` preset).

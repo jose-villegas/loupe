@@ -7,7 +7,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
-#include <vector>
+#include <variant>
 
 #include "options.hpp"
 #include "storyboard/recipe.hpp"
@@ -27,8 +27,8 @@ constexpr int SETTLE_TICKS = 4;
 
 class Runner final : public Script {
   public:
-    // `items` from the recipe at `recipe`, its pictures written under `out_dir`.
-    Runner(std::vector<Item> items, const std::filesystem::path& recipe, std::filesystem::path out_dir);
+    // `recipe`'s steps, its pictures written under `out_dir`.
+    Runner(Recipe recipe, std::filesystem::path out_dir);
     Runner(const Runner&) = delete;
     Runner& operator=(const Runner&) = delete;
     Runner(Runner&&) = delete;
@@ -37,41 +37,34 @@ class Runner final : public Script {
 
     void start() override;
     Ask before_tick() override;
-    void after_tick(Outcome outcome) override;
+    void after_tick(const Ask& asked, Outcome outcome) override;
     void stop() override;
 
     // Whether every step ran.
-    bool
-    ok() const {
-        return ok_;
-    }
+    bool ok() const;
 
   private:
-    // What a step asked of the window, until the window has done it.
+    // A picture a step asks the window for.
     struct Shot {
         std::filesystem::path out;
         std::string crop;
     };
 
-    static void run_items(ImGuiTestContext* ctx);
+    static void run_steps(ImGuiTestContext* ctx);
     // Runs `item`; false, with `why` set, when it failed.
     bool step(ImGuiTestContext* ctx, const Item& item, std::string* why);
     bool open(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why);
     bool screenshot(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why);
-    // Yields ticks until the window has done what was asked of it.
-    void await(ImGuiTestContext* ctx);
+    // Asks the window for `request` and yields ticks until it is done; why it
+    // failed, or empty when it was done.
+    std::string request(ImGuiTestContext* ctx, std::variant<Options, Shot> request);
 
-    std::vector<Item> items_;
-    std::string recipe_;
-    std::filesystem::path recipe_dir_, out_dir_;
+    Recipe recipe_;
+    std::filesystem::path out_dir_;
     ImGuiTestEngine* engine_ = nullptr;
-    // Asked by a step, done by the window: the scene to open, the picture to write.
-    std::optional<Options> open_;
-    std::optional<Shot> shot_;
-    // What this tick was asked for.
-    Ask asked_;
-    bool opened_ = false;
-    std::string shot_why_;
+    // Asked by a step, done by the window between ticks, and why it failed.
+    std::optional<std::variant<Options, Shot>> pending_;
+    std::string pending_why_;
     bool ok_ = true;
 };
 

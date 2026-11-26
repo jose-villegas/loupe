@@ -66,12 +66,12 @@ main(int argc, char** argv) {
     }
     std::string why;
     const std::filesystem::path recipe = loupe::from_utf8(args->recipe);
-    std::optional<std::vector<loupe::storyboard::Item>> items = loupe::storyboard::load_recipe(recipe, &why);
-    if (!items) {
+    std::optional<loupe::storyboard::Recipe> loaded = loupe::storyboard::load_recipe(recipe, &why);
+    if (!loaded) {
         std::fprintf(stderr, "loupe-storyboard: %s\n", why.c_str());
         return 2;
     }
-    loupe::storyboard::Runner runner(std::move(*items), recipe, loupe::from_utf8(args->out));
+    loupe::storyboard::Runner runner(std::move(*loaded), loupe::from_utf8(args->out));
     const bool ran = loupe::run_scripted(args->scale, runner);
     return ran && runner.ok() ? 0 : 1;
 }
