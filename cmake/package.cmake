@@ -70,7 +70,7 @@ install(TARGETS loupe RUNTIME DESTINATION "${bin_dir}")
 install(FILES LICENSE DESTINATION "${doc_dir}")
 # The start panel lists the samples where this installs them.
 file(RELATIVE_PATH samples_from_exe "/prefix/${bin_dir}" "/prefix/${scenes_dir}")
-# Record finds the firmware's packs where this installs them, stamped with their commit.
+# A live board's stream finds the firmware's packs where this installs them, stamped with their commit.
 file(RELATIVE_PATH firmware_from_exe "/prefix/${bin_dir}" "/prefix/${firmware_dir}")
 set_property(SOURCE src/library.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_SAMPLES_DIR=\"${samples_from_exe}\""
              "LOUPE_FIRMWARE_DIR=\"${firmware_from_exe}\"")
