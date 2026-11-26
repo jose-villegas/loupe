@@ -1,0 +1,9 @@
+# The editor on the capybara scene: an object selected, then the baked meadow.
+- name: The capybara scene
+  loupe.open: ../../../third_party/autana/launcher/demo/capybara/capybara.scene.toml
+- name: The capybara selected
+  loupe.click: //Outliner/capybara
+- loupe.screenshot: editor.png
+- name: The baked meadow selected
+  loupe.click: //Outliner/meadow
+- loupe.screenshot: editor-baked.png

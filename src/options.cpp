@@ -65,13 +65,6 @@ const CountFlag COUNT_FLAGS[] = {
      .set = set_count<int, &Options::frame>},
 };
 
-// `text` split at white space.
-std::vector<std::string>
-words(const std::string& text) {
-    std::istringstream in(text);
-    return {std::istream_iterator<std::string>(in), std::istream_iterator<std::string>()};
-}
-
 const CountFlag*
 find_count_flag(const std::string& flag) {
     const auto found = std::ranges::find(COUNT_FLAGS, flag, &CountFlag::name);
@@ -89,28 +82,6 @@ window_flags_fit(const Options& options, std::string* why) {
     }
     if (!windowed && (options.checkpoint_mb || options.ticks)) {
         *why = "--checkpoint-mb and --ticks are for the window, not for -o or --video";
-        return false;
-    }
-    return true;
-}
-
-// False with `why` set when --shot comes with anything but -o (OUT.png for one
-// shot, a folder for all), or without the pack tool: a shot names its own
-// .scene.toml and flags.
-bool
-shot_flags_fit(const Options& options, std::string* why) {
-    const bool alone = options.scene.empty() && options.render.args().empty() && !options.frames && !options.dt_ms
-                       && options.out_video.empty() && !options.frame && options.compare.empty() && !options.b_render
-                       && !options.checkpoint_mb && !options.ticks && !options.version;
-    const bool png = options.out_bmp.ends_with(".png");
-    const bool out_fits = options.shot == ALL_SHOTS ? !options.out_bmp.empty() && !png : png;
-    if (!builds_packs()) {
-        *why = "this loupe was built without the pack tool --shot needs to build the shots' scenes";
-        return false;
-    }
-    if (!alone || !out_fits) {
-        *why =
-            std::format("--shot takes -o and nothing else: --shot NAME -o OUT.png, or --shot {} -o FOLDER", ALL_SHOTS);
         return false;
     }
     return true;
@@ -187,12 +158,6 @@ apply_flag(const std::string& flag, const std::string& value, Options* options, 
         options->out_bmp = value;
     } else if (flag == "--video") {
         options->out_video = value;
-    } else if (flag == "--shot") {
-        if (value.empty()) {
-            *why = std::format("--shot needs a shot's name, or {}", ALL_SHOTS);
-            return false;
-        }
-        options->shot = value;
     } else if (flag == "--compare") {
         options->compare = value;
     } else if (flag == "--b-args") {
@@ -256,14 +221,20 @@ usage() {
            "       loupe SCENE [flags] [--frames N] [--dt MS] --frame N -o out.png\n"
            "       loupe SCENE.scene.toml [flags] [--frames N] [--dt MS] --compare REV|DIR [--b-args \"FLAGS\"]\n"
            "             (--video out.mp4 | --frame N -o out.png)\n"
-           "       loupe --shot NAME -o out.png | --shot all -o FOLDER\n"
            "       loupe --version\n";
 }
 
+// `text` split at white space.
+std::vector<std::string>
+words(const std::string& text) {
+    std::istringstream in(text);
+    return {std::istream_iterator<std::string>(in), std::istream_iterator<std::string>()};
+}
+
 bool
-parse_options(int argc, char** argv, Options* options, std::string* why) {
-    for (int i = 1; i < argc; i++) {
-        const std::string flag = argv[i];
+parse_args(const std::vector<std::string>& args, Options* options, std::string* why) {
+    for (size_t i = 0; i < args.size(); i++) {
+        const std::string& flag = args[i];
         if (flag.empty() || flag[0] != '-') {
             if (!options->scene.empty()) {
                 *why = "one scene file only, not also " + flag;
@@ -276,18 +247,20 @@ parse_options(int argc, char** argv, Options* options, std::string* why) {
             options->version = true;
             continue;
         }
-        if (i + 1 >= argc) {
+        if (i + 1 >= args.size()) {
             *why = flag + " needs a value";
             return false;
         }
-        if (!apply_flag(flag, argv[++i], options, why)) {
+        if (!apply_flag(flag, args[++i], options, why)) {
             return false;
         }
     }
-    if (!options->shot.empty()) {
-        return shot_flags_fit(*options, why);
-    }
     return window_flags_fit(*options, why) && path_flags_fit(*options, why);
+}
+
+bool
+parse_options(int argc, char** argv, Options* options, std::string* why) {
+    return parse_args(std::vector<std::string>(argv + 1, argv + argc), options, why);
 }
 
 } // namespace loupe

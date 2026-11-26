@@ -21,7 +21,8 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `observer_steer` | the observer starts at the speed that crosses the scene's box in 20 seconds; W, A, S, D, Q and E are its axes unless a text field has the keys, a right drag looks only when it began over the frame, and the wheel counts only over it |
 | `view_switch` | a debug view picked mid-run, and kept through a seek back, draws what it drew when picked from the start |
 | `window_smoke`, `window_start` | the window opens, on a scene and on the start panel, and draws 10 ticks offscreen on Mesa's lavapipe under the Khronos validation layer, with no validation error; skipped where either is missing |
-| `doc_shots_current` | every picture of the window in `docs/shots` holds the pixels its shot draws offscreen on lavapipe, each channel within one level (lavapipe compiles for the CPU it runs on), and none is left that no shot draws; skipped without lavapipe, and with autana at any commit but the pinned one (the nightly's `main`), whose scenes can draw other pixels |
+| `doc_shots_current` | every picture of the window in `docs/shots` holds the pixels the recipes in `tests/stories/doc_shots` draw offscreen on lavapipe, each channel within one level (lavapipe compiles for the CPU it runs on), and none is left that no recipe draws; skipped without lavapipe, and with autana at any commit but the pinned one (the nightly's `main`), whose scenes can draw other pixels |
+| `recipe` | a recipe reads as its steps, each with its line, its `loupe.*` key and its name; a recipe that is no list of maps, or a step that is not one `loupe.*` key and a name (a misspelt key, another key, none, two), is refused at its line |
 | `version` | `--version` names the project version, Loupe's commit, the configured channel and the autana commit |
 | `update` | SHA-256 on the standard's examples; GitHub's saved release answers give each system's download; which offers are newer; the setting; a check stages only a verified newer download and a local build never asks; a running copy, beside its samples and in `bin/`, is swapped for a staged one and says so at its next start |
 | `build_id` | `--version`'s line for each channel, and a copy counts as installed only with the setup's uninstaller beside it |
@@ -38,10 +39,10 @@ CI runs them on Linux and Windows at the pinned autana on every pull request,
 and nightly against autana's `main`, keeping one issue open while that fails.
 
 The pictures of the window in these docs, `docs/shots`, are drawn by Loupe
-itself: each shot in `src/window/doc_shots.cpp` opens its scene, sets the
-editor's state in code and keeps the window, or one panel of it. A change
-that alters one redraws them all, on Linux with lavapipe as CI does (WSL on
-Windows):
+itself: each recipe in `tests/stories/doc_shots` opens its scene, clicks and
+types its way to the state it shows, and keeps the window, or one panel of it
+([Recipes](Recipes.md)). A change that alters one redraws them all, on Linux
+with lavapipe as CI does (WSL on Windows):
 
 ```bash
 cmake --build build/default --target doc_shots

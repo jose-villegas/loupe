@@ -93,8 +93,9 @@ struct EditAsk {
     bool undo = false, redo = false, save = false;
 };
 
-// Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z, Ctrl+S; with `letters`, W, E and R pick the
-// handle when no text field has the keyboard (the observer flies on WASD).
+// Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z, Ctrl+S; Escape clears the selection, and
+// with `letters`, W, E and R pick the handle, when no text field has the
+// keyboard (the observer flies on WASD).
 EditAsk edit_keys(Editor& editor, bool letters);
 // Applies `ask`: undo, redo, or a save through autana's tool, which then
 // starts the bake check (bake.py list --missing) in the background.

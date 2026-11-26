@@ -11,8 +11,9 @@ builds the pack of first.
 ![Loupe editing the capybara scene: the Outliner, the Viewport with the
 capybara's move handles, the Inspector and the Frame debugger](docs/shots/editor.png)
 
-Every picture of the window here is drawn by Loupe itself, from
-[`src/window/doc_shots.cpp`](src/window/doc_shots.cpp) ([Tests](docs/development/Tests.md)).
+Every picture of the window here is drawn by Loupe itself: a recipe in
+[`tests/stories/doc_shots`](tests/stories/doc_shots) clicks and types its way
+to it on the real window ([Recipes](docs/development/Recipes.md)).
 
 | | |
 |---|---|
@@ -47,8 +48,11 @@ build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml
 | [Getting started](docs/start/README.md) | the downloads, updates, and building from source |
 | [The editor](docs/editor/README.md) | opening a scene, moving its objects, editing camera paths |
 | [Rendering from the command line](docs/render/README.md) | frames, videos, every flag, A \| B compares |
-| [Developing Loupe](docs/development/README.md) | the architecture, the tests, the standards, releases |
+| [Developing Loupe](docs/development/README.md) | the architecture, the tests, recipes, the standards, releases |
 
 ## License
 
-GPL-3.0, as autana.
+GPL-3.0, as autana. A build with `-DLOUPE_STORYBOARD=ON`, as the `default`
+preset is, links [Dear ImGui Test Engine](https://github.com/ocornut/imgui_test_engine),
+under its own licence, into every program it builds, `loupe` too; the downloads
+are built without it (the `release` preset).
