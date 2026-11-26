@@ -91,8 +91,13 @@ list_boards(const std::filesystem::path& log) {
 }
 
 bool
+plugged_here(const Board& board) {
+    return !board.port.empty();
+}
+
+bool
 recordable(const Board& board) {
-    return board.holder != Holder::Command && !board.port.empty();
+    return board.holder != Holder::Command && plugged_here(board);
 }
 
 std::string

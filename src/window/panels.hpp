@@ -2,6 +2,7 @@
 // (run_window.cpp) applies it to Frames.
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <future>
@@ -33,10 +34,20 @@ struct Start {
     bool browse = false;
 };
 
-// A person's reservation taken to record inside it: the board, and its token
-// or why there is none.
+// The listing's boards as the panel shows them: those plugged in here, which
+// Record can take, then the rest the pool knows, under a collapsed heading.
+struct BoardRows {
+    std::vector<const Board*> here, elsewhere;
+};
+
+BoardRows board_rows(const BoardList& list);
+
+// What Record readies before autana record starts: the board, the token of a
+// person's reservation to record inside (empty when no person holds it), and
+// the folder of packs its stream is drawn with; `why` set when either failed.
 struct Reserved {
     std::string board, token, why;
+    std::filesystem::path packs;
 };
 
 // The start panel's boards: the pool's last listing, why it failed, and
@@ -45,9 +56,11 @@ struct Attach {
     BoardList list;
     bool listed = false;
     bool refresh = false;
-    std::future<BoardList> listing; // valid while `autana devices` runs
+    std::future<BoardList> listing;                                       // valid while `autana devices` runs
+    std::chrono::steady_clock::time_point listing_since, reserving_since; // when each began
     std::optional<std::string> record;
-    std::future<Reserved> reserving; // valid while `autana lock hand` runs
+    std::future<Reserved> reserving; // valid while the reservation is taken and the packs are built
+    std::string packs_autana;        // the autana commit the board's packs are built from
 };
 
 // A live recording's controls: what was asked this tick. `paused` is the

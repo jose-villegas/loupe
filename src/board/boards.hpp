@@ -35,6 +35,9 @@ std::vector<std::string> autana_command(const std::vector<std::string>& args);
 BoardList parse_boards(const std::string& output);
 // The pool's boards, from `autana devices --json`, its output into `log`.
 BoardList list_boards(const std::filesystem::path& log);
+// Whether `board` is plugged in here: autana gave its port. The pool also
+// lists boards only seen here before, or named by a lapsed lock, with none.
+bool plugged_here(const Board& board);
 // Whether `board` can be recorded from here: plugged in here (autana record
 // reads its USB port) and not held by a command.
 bool recordable(const Board& board);

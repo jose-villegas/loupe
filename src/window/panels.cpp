@@ -4,6 +4,7 @@
 #include <cfloat>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <string>
 #include <string_view>
@@ -63,7 +64,22 @@ holder_text(const Board& board) {
     return "  (held)";
 }
 
+// Whole seconds since `since`, for a waiting step's line.
+int64_t
+seconds_since(std::chrono::steady_clock::time_point since) {
+    return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - since).count();
+}
+
 } // namespace
+
+BoardRows
+board_rows(const BoardList& list) {
+    BoardRows rows;
+    for (const Board& board : list.boards) {
+        (plugged_here(board) ? rows.here : rows.elsewhere).push_back(&board);
+    }
+    return rows;
+}
 
 bool
 draw_menu(About& about, EditMenu& edit) {
@@ -131,9 +147,9 @@ draw_attach(Attach& attach) {
     attach.refresh = ImGui::Button(attach.listed ? "List again" : "List boards");
     ImGui::EndDisabled();
     if (listing) {
-        const char* asking = "asking the board pool";
-        flow(text_width(asking));
-        hint(asking);
+        const std::string asking = std::format("asking the board pool ({} s)", seconds_since(attach.listing_since));
+        flow(text_width(asking.c_str()));
+        hint(asking.c_str());
     }
     if (!attach.list.why.empty()) {
         ImGui::TextWrapped("%s", attach.list.why.c_str());
@@ -141,21 +157,32 @@ draw_attach(Attach& attach) {
         ImGui::TextDisabled("none");
     }
     const bool reserving = attach.reserving.valid();
-    for (const Board& board : attach.list.boards) {
-        ImGui::PushID(board.id.c_str());
-        ImGui::BeginDisabled(!recordable(board) || reserving);
+    const BoardRows rows = board_rows(attach.list);
+    for (const Board* board : rows.here) {
+        ImGui::PushID(board->id.c_str());
+        ImGui::BeginDisabled(!recordable(*board) || reserving);
         if (ImGui::Button("Record")) {
-            attach.record = board.id;
+            attach.record = board->id;
         }
         ImGui::EndDisabled();
-        const std::string where =
-            std::format("{}  {}{}", board.id, board.port.empty() ? "on another host" : board.port, holder_text(board));
+        const std::string where = std::format("{}  {}{}", board->id, board->port, holder_text(*board));
         flow(text_width(where.c_str()));
         ImGui::TextWrapped("%s", where.c_str());
         ImGui::PopID();
     }
+    if (!rows.elsewhere.empty() && ImGui::TreeNode("elsewhere", "not here (%zu)", rows.elsewhere.size())) {
+        // A tree row cannot wrap: the heading stays short, and this line says what it holds.
+        hint("not plugged in here: boards the pool saw here before, or names in a lapsed lock");
+        for (const Board* board : rows.elsewhere) {
+            ImGui::TextWrapped("%s%s", board->id.c_str(), holder_text(*board).c_str());
+        }
+        ImGui::TreePop();
+    }
     if (reserving) {
-        hint("taking the person's reservation to record inside it (autana lock hand)");
+        hint(std::format("readying the recording ({} s): a person's reservation, when one holds the board (autana "
+                         "lock hand), then the board's packs, built from autana {} (a minute or so the first time)",
+                         seconds_since(attach.reserving_since), attach.packs_autana)
+                 .c_str());
     }
 }
 
@@ -295,9 +322,12 @@ waiting_for_frames(const Recording::Status& status, const Frames::StreamState& s
     }
     if (stream.refused) {
         return {.phase = Waiting::Refused,
-                .text = std::format("The stream was refused: {}\nThis Loupe carries autana {}'s packs: flash the board "
-                                    "from autana {}, or use a Loupe built from the board's autana. The stream names "
-                                    "the board's build only by its image hash, not its autana commit.\nLog: {}",
+                .text = std::format("The stream was refused: {}\nLoupe draws a board's frames with the packs its "
+                                    "pinned autana {} builds, so a pack the stream names that is missing or differs "
+                                    "means the board runs another build. Flash the board from autana {} (autana flash "
+                                    "dev in a checkout at that commit), or use a Loupe pinned to the board's autana. "
+                                    "The stream names the board's build only by its image hash, not its autana "
+                                    "commit.\nLog: {}",
                                     stream.why, wait.packs_autana, wait.packs_autana, log)};
     }
     if (stream.frames > 0) {

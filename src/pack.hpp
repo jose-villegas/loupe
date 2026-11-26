@@ -32,4 +32,10 @@ std::string scene_id(const std::filesystem::path& file);
 // `why` set, for a scene that cannot open.
 std::optional<ScenePack> resolve_scene(const std::filesystem::path& path, std::string* why);
 
+// Every pack a development firmware of the pinned autana carries, built by
+// build_pack.py from autana_dir() (tools.hpp) into one folder of the pack
+// cache, keyed by `commit`: the packs a board's recording names. Built once
+// per key; none, with `why` set, without the pack tool or when the build fails.
+std::optional<std::filesystem::path> firmware_packs(const std::string& commit, std::string* why);
+
 } // namespace loupe

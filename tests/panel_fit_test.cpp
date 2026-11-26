@@ -411,6 +411,9 @@ main(int argc, char** argv) {
                            .port = "COM9",
                            .holder = loupe::Holder::Person,
                            .note = "checking the panel after the reflash"}};
+    const loupe::window::BoardRows rows = loupe::window::board_rows(attach.list);
+    (void)expect(rows.here.size() == 3 && rows.elsewhere.size() == 1 && rows.elsewhere[0]->id == "0123456789AB",
+                 "the boards plugged in here are listed, a board with no port goes under not plugged in here");
     std::promise<loupe::editor::Rebuild> asking;
     attach.listing = std::async(std::launch::deferred, [] { return loupe::BoardList{}; });
     waits();

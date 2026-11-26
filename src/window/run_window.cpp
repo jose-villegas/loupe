@@ -94,6 +94,17 @@ open_recording(const Options& options, const std::filesystem::path& packs, std::
     return frames;
 }
 
+// The packs a recording is drawn with: every pack the pinned autana's firmware
+// carries, built where this Loupe has the pack tool; elsewhere the scenes it
+// installs. None, with `why` set, when they could not be built.
+std::optional<std::filesystem::path>
+recording_packs(const std::string& commit, const std::filesystem::path& samples, std::string* why) {
+    if (!builds_packs()) {
+        return samples;
+    }
+    return firmware_packs(commit, why);
+}
+
 // Where a recording from `board` is kept: <config>/recordings/<board>-<local time>.framerec,
 // the board's serial without its colons, which a Windows file name cannot hold.
 // A second recording within the same second takes -2, -3, ... rather than overwrite.
@@ -525,6 +536,7 @@ void
 Window::list_boards() {
     if (attach_.refresh && !attach_.listing.valid()) {
         attach_.listing = std::async(std::launch::async, loupe::list_boards, scratch_.path() / "devices.log");
+        attach_.listing_since = std::chrono::steady_clock::now();
         attach_.refresh = false;
     }
     if (attach_.listing.valid() && attach_.listing.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
@@ -537,24 +549,34 @@ void
 Window::record_asked() {
     if (attach_.record) {
         const auto listed = std::ranges::find(attach_.list.boards, *attach_.record, &Board::id);
+        std::optional<Board> held;
         if (listed != attach_.list.boards.end() && listed->holder == Holder::Person) {
-            attach_.reserving = std::async(std::launch::async, [board = *listed, log = scratch_.path() / "hand.log"] {
-                window::Reserved reserved{.board = board.id, .token = "", .why = ""};
-                reserved.token = reservation_token(board, log, &reserved.why);
+            held = *listed;
+        }
+        attach_.packs_autana = copy_.id.autana_commit;
+        attach_.reserving_since = std::chrono::steady_clock::now();
+        attach_.reserving =
+            std::async(std::launch::async, [board = *attach_.record, held, commit = copy_.id.autana_commit,
+                                            samples = samples_dir(folders_), log = scratch_.path() / "hand.log"] {
+                window::Reserved reserved{.board = board, .token = "", .why = "", .packs = {}};
+                if (held) {
+                    reserved.token = reservation_token(*held, log, &reserved.why);
+                    if (reserved.token.empty()) {
+                        return reserved;
+                    }
+                }
+                reserved.packs = recording_packs(commit, samples, &reserved.why).value_or(std::filesystem::path());
                 return reserved;
             });
-        } else {
-            (void)attach({.board = *attach_.record, .token = "", .why = ""});
-        }
         attach_.record.reset();
     }
     if (attach_.reserving.valid() && attach_.reserving.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         const window::Reserved reserved = attach_.reserving.get();
         if (shown_) {
-            // A scene opened while the reservation was taken: it stays.
+            // A scene opened while the recording was readied: it stays.
             return;
         }
-        if (reserved.token.empty()) {
+        if (reserved.packs.empty()) {
             refusal_ = std::format("{}: {}", reserved.board, reserved.why);
             std::fprintf(stderr, "loupe: %s\n", refusal_.c_str());
             return;
@@ -585,9 +607,13 @@ Window::open(const Options& options) {
     std::string why = "cannot make a scratch folder for its frames";
     const bool recording = utf8(options.scene.filename()).ends_with(RECORDING_SUFFIX);
     std::unique_ptr<Frames> frames;
-    if (!scratch_.path().empty()) {
-        frames = recording ? open_recording(run, samples_dir(folders_), utf8(options.scene.stem()), &why)
-                           : open_scene(run, options.scene, &why);
+    if (!scratch_.path().empty() && !recording) {
+        frames = open_scene(run, options.scene, &why);
+    } else if (!scratch_.path().empty()) {
+        // Built once per pin, so only the first replay waits for them.
+        if (const auto packs = recording_packs(copy_.id.autana_commit, samples_dir(folders_), &why)) {
+            frames = open_recording(run, *packs, utf8(options.scene.stem()), &why);
+        }
     }
     if (frames == nullptr) {
         refusal_ = std::format("{}: {}", utf8(options.scene), why);
@@ -617,7 +643,7 @@ Window::attach(const window::Reserved& reserved) {
         const std::filesystem::path file = recording_file(folders_.config, board);
         Options live;
         live.out_bmp = utf8(scratch_.path() / "frame.bmp");
-        frames = open_recording(live, samples_dir(folders_), board, &why);
+        frames = open_recording(live, reserved.packs, board, &why);
         std::vector<std::string> args = {"-b", board, "record"};
         if (!reserved.token.empty()) {
             args.insert(args.begin(), {"--lock-token", reserved.token});

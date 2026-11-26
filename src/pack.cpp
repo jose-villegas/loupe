@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <system_error>
 
@@ -15,6 +16,9 @@ namespace fs = std::filesystem;
 namespace loupe {
 
 namespace {
+
+// The file in a firmware_packs() folder naming the key it was built for.
+constexpr const char FIRMWARE_STAMP[] = "built-for";
 
 // One cache folder per scene file, wherever two scenes share a name.
 uint64_t
@@ -83,6 +87,30 @@ resolve_scene(const fs::path& path, std::string* why) {
         return std::nullopt;
     }
     return built_pack(path, id, why);
+}
+
+std::optional<fs::path>
+firmware_packs(const std::string& commit, std::string* why) {
+    if (!builds_packs()) {
+        *why = "this loupe was built without the pack tool that builds a board's packs";
+        return std::nullopt;
+    }
+    const fs::path folder = pack_cache() / ("firmware-" + commit);
+    const fs::path stamp = folder / FIRMWARE_STAMP;
+    std::error_code error;
+    if (fs::is_regular_file(stamp, error) && read_text(stamp) == commit) {
+        return folder;
+    }
+    if (fs::create_directories(folder, error), error) {
+        *why = "cannot make " + utf8(folder) + ": " + error.message();
+        return std::nullopt;
+    }
+    // No scene named: build_pack.py builds every pack the firmware carries.
+    if (!autana_tool(fs::path("r3d") / "build_pack.py", {"-o", utf8(folder)}, folder / "build_pack.log", why)) {
+        return std::nullopt;
+    }
+    std::ofstream(stamp, std::ios::binary) << commit;
+    return folder;
 }
 
 } // namespace loupe

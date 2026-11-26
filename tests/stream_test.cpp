@@ -2,18 +2,23 @@
 // a .framerec, draws every frame with each keyframe's CHECK the same, and a
 // seek back draws the bytes the forward step drew. Fed live in pieces, its
 // count grows as frames arrive and draws them alike; bytes that are no stream
-// are refused.
+// are refused, and so is a stream naming a pack its folder lacks, by name. Where
+// loupe has the pack tool, the firmware's packs it builds draw the stream.
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
 
 #include "frames_fixture.hpp"
+#include "pack.hpp"
 #include "paths.hpp"
 #include "read_bytes.hpp"
+#include "tools.hpp"
 
 namespace fs = std::filesystem;
 
@@ -28,6 +33,11 @@ const int SEEKS[] = {45, 5, 61, 0, 30, 29};
 constexpr size_t PIECE = 1000;
 // The recording, in the test's folder.
 constexpr const char STREAM[] = "host.framerec";
+// The pack the recorded scene names, and one only a board's firmware carries.
+constexpr const char SCENE_PACK[] = "sponza";
+constexpr const char FIRMWARE_ONLY_PACK[] = "bistro";
+// The key the test's firmware packs are built under, apart from any Loupe's own.
+constexpr const char FIRMWARE_KEY[] = "stream-test";
 
 // Where the scene's packs are and where the test writes.
 struct Folders {
@@ -141,6 +151,57 @@ refused(const Folders& at) {
     return ok;
 }
 
+// The live stream fed whole into a stream over `packs`: its state after.
+std::optional<loupe::Frames::StreamState>
+fed_over(const std::vector<uint8_t>& bytes, const Folders& at, const fs::path& packs, const std::string& id) {
+    const std::unique_ptr<loupe::Frames> frames = open({.packs = packs, .out = at.out}, id);
+    if (frames == nullptr) {
+        return std::nullopt;
+    }
+    for (size_t from = 0; from < bytes.size(); from += PIECE) {
+        (void)frames->feed(std::span(bytes).subspan(from, std::min(PIECE, bytes.size() - from)));
+    }
+    std::optional<loupe::Frames::StreamState> state = frames->stream_state();
+    (void)frames->close();
+    return state;
+}
+
+bool
+missing_pack(const std::vector<uint8_t>& bytes, const Folders& at) {
+    const fs::path empty = at.out / "no_packs";
+    fs::create_directories(empty);
+    const auto state = fed_over(bytes, at, empty, "missing");
+    std::fprintf(stderr, "%s: missing pack refused because: %s\n", TEST, state ? state->why.c_str() : "");
+    return expect(state && state->refused
+                      && state->why.find(std::string("missing pack ") + SCENE_PACK) != std::string::npos,
+                  "a stream naming a pack its folder lacks is refused, naming the pack");
+}
+
+bool
+firmware_packs_draw(const std::vector<uint8_t>& bytes, const Folders& at) {
+    if (!loupe::builds_packs()) {
+        std::fprintf(stderr, "%s: no pack tool in this build: firmware packs not built\n", TEST);
+        return true;
+    }
+    std::string why;
+    const std::optional<fs::path> packs = loupe::firmware_packs(FIRMWARE_KEY, &why);
+    if (!expect(packs.has_value(), "the firmware's packs build")) {
+        std::fprintf(stderr, "%s: %s\n", TEST, why.c_str());
+        return false;
+    }
+    const auto pack = [&](const char* name) { return *packs / (std::string(name) + std::string(loupe::PACK_SUFFIX)); };
+    bool ok = expect(fs::is_regular_file(pack(SCENE_PACK)) && fs::is_regular_file(pack(FIRMWARE_ONLY_PACK)),
+                     "they hold the recorded scene's pack and one only the firmware carries");
+    std::error_code error;
+    const auto built = fs::last_write_time(pack(SCENE_PACK), error);
+    const std::optional<fs::path> again = loupe::firmware_packs(FIRMWARE_KEY, &why);
+    ok &= expect(again == packs && fs::last_write_time(pack(SCENE_PACK), error) == built,
+                 "a second call for the same key builds nothing");
+    const auto state = fed_over(bytes, at, *packs, "firmware");
+    ok &= expect(state && !state->refused && state->frames == FRAMES, "the stream draws over them");
+    return ok;
+}
+
 } // namespace
 
 int
@@ -159,5 +220,8 @@ main(int argc, char** argv) {
     bool ok = saved_stream(at, &drawn);
     ok &= live_stream(loupe::test::read_bytes(at.out / STREAM), at, drawn);
     ok &= refused(at);
+    const std::vector<uint8_t> bytes = loupe::test::read_bytes(at.out / STREAM);
+    ok &= missing_pack(bytes, at);
+    ok &= firmware_packs_draw(bytes, at);
     return ok ? 0 : 1;
 }

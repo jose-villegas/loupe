@@ -222,7 +222,10 @@ flowchart LR
 ### From the window
 
 On the start panel, List boards runs `autana devices --json` and lists the
-boards the board pool knows. Record, on a free board plugged in here, starts
+boards plugged in here; the others the board pool knows, seen here before or
+named by a lapsed lock, wait under a collapsed "not here". The last list stays
+while a new one is asked, and each waiting step counts its seconds. Record, on
+a free board plugged in here, builds the board's packs if needed, then starts
 `autana -b BOARD record` and opens its stream in this window: frames fill the
 timeline as they arrive, and Play draws each one in turn.
 
@@ -281,10 +284,14 @@ they draw a scene.
 loupe board.framerec
 ```
 
-The stream names its packs by name and crc, and Loupe loads them from its
-samples folder. A pack whose crc differs from the board's refuses the stream,
-saying which. So the board runs a build of the autana commit Loupe is pinned
-to (`third_party/autana`): from that checkout, `autana flash dev`.
+The stream names its packs by name and crc. Loupe draws it with every pack a
+development firmware of its pinned autana (`third_party/autana`) carries,
+built with `build_pack.py` into its pack cache once per pin, before a recording
+starts or a replay opens; the first takes a minute or so. A build without the
+pack tool loads its installed samples instead. A pack missing from them, or
+whose crc differs from the board's, refuses the stream, saying which: the board
+runs another build. So the board runs a build of the pinned commit: from that
+checkout, `autana flash dev`.
 
 ## Render a scene
 
