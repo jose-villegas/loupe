@@ -6,7 +6,7 @@
 # DOCS must hold no picture no recipe draws: the doc_shots_current test.
 cmake_minimum_required(VERSION 3.25)
 include("${CMAKE_CURRENT_LIST_DIR}/offscreen.cmake")
-set(regenerate "cmake --build <build> --target doc_shots, on Linux with lavapipe (README, Tests)")
+set(regenerate "cmake --build <build> --target doc_shots, on Linux with lavapipe (docs/development/Tests.md)")
 # The panels at a 150% desktop's scale, so the text stays readable where a page shows the picture smaller.
 set(SCALE 1.5)
 # The pictures are of autana's scenes as the pinned commit draws them; another

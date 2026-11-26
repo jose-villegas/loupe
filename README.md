@@ -11,405 +11,44 @@ builds the pack of first.
 ![Loupe editing the capybara scene: the Outliner, the Viewport with the
 capybara's move handles, the Inspector and the Frame debugger](docs/shots/editor.png)
 
-```mermaid
-flowchart LR
-  cli["loupe"] --> window["loupe_window<br/>SDL3 · Vulkan (volk) · Dear ImGui · ImGuizmo<br/>panels · editor"]
-  cli --> path["loupe_path<br/>--frame · --compare"]
-  cli --> core
-  window --> core
-  path --> core
-  core["loupe_core<br/>Frames · documents · undo · options · pack · tools · library"]
-  core -- "render_host_*" --> autana["autana::scene_provider<br/>third_party/autana"]
-  core -- "pack tool builds only" --> tools["git · build_pack.py · render_compare.py<br/>scene_edit.py · bake.py list"]
-```
+Every picture of the window here is drawn by Loupe itself: a recipe in
+[`tests/stories/doc_shots`](tests/stories/doc_shots) clicks and types its way
+to it on the real window ([Recipes](docs/development/Recipes.md)).
 
-The [architecture explorer](https://jose-villegas.github.io/loupe/) draws every module
-and include from the sources, rebuilt on each push to `main`.
-
-## Download
-
-Each [release](https://github.com/jose-villegas/loupe/releases) has three
-downloads, unsigned, so Windows SmartScreen warns on their first run. Each holds
-a pack of every autana demo scene as a sample, listed on the start panel. They
-need no Python and no compiler; the window needs a Vulkan driver.
-
-| Download | Holds | To run it |
-|---|---|---|
-| `loupe-<version>-windows-portable.zip` | `loupe.exe`, `scenes/`, `LICENSE` | unzip anywhere and run `loupe.exe` |
-| `loupe-<version>-windows-setup.exe` | the same files, installed into Program Files with a Start menu entry and a desktop shortcut; `.apak` files then open in Loupe | run it; uninstall from Windows' installed apps, which removes the shortcuts and the `.apak` association too |
-| `loupe-<version>-linux-x86_64.tar.gz` | `bin/loupe`, and in `share/` the samples, `applications/loupe.desktop` and the icon | run `bin/loupe` where it lands, or copy `bin/` and `share/` into `~/.local` to list Loupe among the desktop's applications |
-
-The Linux build is made on Ubuntu 24.04 with GCC's runtime linked in, so it
-needs only glibc 2.39 or newer, X11 or Wayland, and a Vulkan driver.
-
-The [main build](https://github.com/jose-villegas/loupe/releases/tag/main-build)
-pre-release holds the same downloads built from the latest push to `main`,
-named `main` in place of the version (`loupe-main-windows-portable.zip`), so
-its links stay the same.
-
-About, on the window's menu bar, or `loupe --version`, names the build:
-
-```text
-loupe 0.1.0 (1a2b3c4d5, main build, portable), autana 262e7d0ab
-```
-
-| Part | Says |
+| | |
 |---|---|
-| `0.1.0` | the version |
-| `1a2b3c4d5` | Loupe's commit |
-| `main build` | the channel it was built for: `release` from a version tag, `main build` from `main`, `local build` from anywhere else (`-DLOUPE_CHANNEL=None`, the default) |
-| `portable` | `installed` for the setup's copy, else `portable` |
-| `262e7d0ab` | the autana commit it was built against |
+| ![Sponza's tour selected: its curve and keys over the frame](docs/shots/path-keys.png) | ![Key 3's eye moved: the curve bends to it](docs/shots/key-moved.png) |
+| A camera's path: its curve, its keys and the scrub bar | A key's eye moved: the curve bends to it |
+| ![Through the tour at 18 s, the path as packed](docs/shots/tour-before.png) | ![Through the tour at 18 s, key 3 moved](docs/shots/tour-after.png) |
+| Through the tour at 18 s, on the path the pack was built with | The same frame, the camera flying the edited path |
+| ![The baked meadow selected: the Inspector shows it locked](docs/shots/editor-baked.png) | ![Free view flown back: the whole tour in sight](docs/shots/free-view.png) |
+| A baked renderer, locked where its lighting was traced | Free view, flown back so the whole tour is in sight |
 
-### Updates
+## Quick start
 
-A downloaded Loupe keeps itself current. About's **Updates** picks what it
-follows; each copy starts on its own channel, and a local build never updates.
+Download `loupe-<version>-windows-portable.zip` from the
+[latest release](https://github.com/jose-villegas/loupe/releases), unzip it and
+run `loupe.exe`: the start panel lists a sample of every autana demo scene.
+A setup and a Linux tarball sit beside it ([Download](docs/start/Download.md)).
 
-| Updates | Takes |
-|---|---|
-| Off | nothing |
-| Official releases | the latest release, when its version is higher than this copy's |
-| Main builds | the main build, when it is of another commit than this copy |
-
-Each time the window opens, Loupe asks GitHub once, in the background. A newer
-build is downloaded and checked against GitHub's SHA-256 digest of the file,
-then kept in Loupe's settings folder (`%APPDATA%\autana\loupe` or
-`~/.local/share/autana/loupe`) until the window closes. Then it takes this
-copy's place: a portable copy's files are replaced, the running `loupe` renamed
-aside until the next start; an installed copy runs the new setup silently,
-which asks Windows for permission once. The next start's About says what it was
-updated to. It downloads and unpacks with the system's own `curl` and `tar`,
-nothing ever pops up, and every step is logged to `update.log` in the settings
-folder. Runs with `-o`, `--video` or `--ticks` never update.
-
-## Build
-
-You need GCC (MinGW-w64 on Windows), CMake 3.25 or newer and the Python
-autana's pack tool runs on (`third_party/autana/scripts/lib/python-min-version`);
-without the tests, `-DLOUPE_PACK_TOOL=OFF -DBUILD_TESTING=OFF` builds a Loupe
-that opens `.apak` files only and needs no Python.
-On Linux, also the packages in `tools/ci/linux-packages.txt`, which
-`tools/ci/install-linux-packages.sh` installs. The window draws through Vulkan,
-loaded when it opens, so the build needs no Vulkan SDK.
+To build it instead ([Build](docs/start/Build.md)):
 
 ```bash
 git clone --recurse-submodules https://github.com/jose-villegas/loupe
 cd loupe
 pip install -r tools/ci/requirements.txt
 cmake --workflow --preset default
-```
-
-`cmake --preset default -DAUTANA_DIR=<path>` configures against another autana checkout instead of the submodule.
-
-## Open a scene
-
-```bash
 build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml
 ```
 
-Run without a scene, the window opens on a start panel: the sample packs beside
-`loupe` (`scenes/`, or `../share/loupe/scenes/` when installed), the last 10
-scenes opened, and Open... for any other. A scene picked there opens in this
-window with the scene's own defaults. Scenes, in a
-scene's window, closes the scene and goes back to the panel. The recent list is `recent.txt` in
-`%APPDATA%\autana\loupe` on Windows and `~/.local/share/autana/loupe` on Linux.
+## Documentation
 
-The window shows the engine's frame at the largest whole zoom that fits. Play
-steps one frame per display refresh; the arrows and the scrubber seek through
-checkpoints, so a frame sought is the frame stepping straight there drew. The
-view picker draws the frame on screen again under another debug view.
-
-A view that draws the frame a second time from elsewhere, such as `cull`,
-shows an observer checkbox. While it is on, the timeline pauses and the shown
-frame is drawn again from a camera the person flies, the frame's own camera
-left where its path put it: W, A, S and D move, Q and E go down and up,
-dragging with the right button looks round, and the wheel scales the speed,
-which starts at crossing the scene's box corner to corner in 20 seconds.
-autana's `fly_motion` flies it. Each move costs one engine frame, from a
-checkpoint held just before the shown frame. Unticked, or with another view
-picked, the frame is the straight run's again.
-
-## Edit a scene
-
-A `.scene.toml` opens as docked panels:
-
-| Panel | Shows |
+| Folder | Covers |
 |---|---|
-| Viewport | the frame, the move, rotate and scale handles on the selected object (W, E, R; along its own axes or the world's), and a cube showing which way the camera looks; for a camera on a path, the path, a scrub bar over it and the Free view |
-| Outliner | the scene's objects by parent, each with its kind, and whether it is baked |
-| Inspector | the selected object's position, rotation in degrees and scale as numbers, why it may not move when it may not, a camera path's keys, whether anything is unsaved, then the last save and which bakes it re-keys |
-| Frame debugger | Scenes, the view picker, the observer and the timeline, as above |
-
-A click on a name in the Outliner, or on the frame (the object whose origin
-lies nearest the click), selects an object. A drag of a handle or a field, from
-any panel, is one step of Edit's undo (Ctrl+Z; Ctrl+Y or Ctrl+Shift+Z redoes).
-The frame shows the object where it is now on every frame sought or played;
-each move of a drag draws one engine frame, from a checkpoint held just before
-the shown frame.
-
-```mermaid
-flowchart LR
-  H["Viewport handles"] --> U["one undo stack"]
-  I["Inspector fields"] --> U
-  U --> D["the scene and its paths as read,<br/>with the edits"]
-  D -- "every frame" --> F["the shown frame:<br/>the object where it is now,<br/>an edited path's camera on it"]
-  D -- "Ctrl+S" --> S["scene_edit.py set:<br/>the changed values only"]
-  D -- "Ctrl+S" --> K["scene_edit.py set-keys:<br/>a changed path's keys"]
-  S --> T[".scene.toml"]
-  K --> KT[".keys.toml"]
-  T --> B["bake.py list --missing:<br/>the bakes the save re-keys"]
-  KT --> B
-```
-
-What may move is what autana's
-`third_party/autana/launcher/tools/scene/scene_edit.py` will write: renderers
-that are not baked, such as a skinned one. A baked renderer's lighting was
-traced with it where it sits, so moving it would leave that lighting behind;
-the Inspector shows it locked. Lights and cameras keep their placement; the
-tool places only renderers. The Inspector gives the tool's reason for each:
-on the "Baked: locked" badge's tooltip for a baked renderer, beneath the name
-for the others.
-
-![The baked meadow selected: the Inspector shows it locked](docs/shots/editor-baked.png)
-
-Save (Ctrl+S) writes the moved values into the `.scene.toml` with that tool,
-which keeps the file's comments and layout and changes only those values. Then
-`third_party/autana/launcher/tools/bake/bake.py list --missing` names the bakes
-the saved scene re-keys, in the Inspector; moving a skinned or
-unbaked object re-keys none. A save the tool refuses leaves the file as it was
-and the change unsaved, and the Inspector says why. A pack (`.apak`) has no
-scene file, so it opens without the editor, and so does a build without the
-pack tool.
-
-### Camera paths
-
-A camera whose path is a `.keys.toml` shows that path when selected: the
-curve the camera flies, each key's eye and look_at joined, and a handle on the
-picked point (a click near a point picks it). The Inspector lists the keys and
-edits the picked key's time, eye and look_at; Add key puts one on the curve at
-the shown frame's time, and Delete key removes the picked one. A path that
-loops keeps its ends together. The scrub bar seeks to the frame at the time
-picked on the path. Free view flies the active camera by the observer's
-steering, so the path can be seen from outside.
-
-While a path differs from the one the pack was built with, the camera flies
-the edited path on every frame, and lands back on its clip when the path is
-the pack's again. Save writes each changed path with `scene_edit.py set-keys`,
-which keeps the file's comments and each kept key's lines, then runs the bake
-check. A path a bake reads, such as one a probe fit samples, asks before the
-first edit. A path from a `.glb` clip is shown, not edited.
-
-| | |
-|---|---|
-| ![Sponza's tour selected: its curve and keys over the frame](docs/shots/path-keys.png) | ![Key 3 picked: the handle on its eye, its fields in the Inspector](docs/shots/key-picked.png) |
-| The tour selected: its curve, each key's eye joined to its look_at, the scrub bar and the Inspector's keys | Key 3 picked: the handle on its eye, its row and its time, eye and look_at in the Inspector |
-| ![Free view flown back: the whole tour in sight](docs/shots/free-view.png) | ![Key 3's eye moved: the curve bends to it](docs/shots/key-moved.png) |
-| Free view, flown back from the scene's camera so the whole tour is in sight | Key 3's eye moved: the curve bends to it, and the change is unsaved |
-| ![Through the tour at 18 s, the path as packed](docs/shots/tour-before.png) | ![Through the tour at 18 s, key 3 moved](docs/shots/tour-after.png) |
-| Through the tour at 18 s, on the path the pack was built with | The same frame with key 3's eye moved: the camera flies the edited path |
-| ![Bistro's camera selected: the bake warning](docs/shots/bake-warning.png) | |
-| Bistro's street path, which a bake reads: the Inspector asks before the first edit | |
-
-## Render a scene
-
-With `-o` or `--video`, Loupe writes the frames and exits, without a window:
-
-```bash
-build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml --view meshlets --frames 60 -o sponza.bmp
-```
-
-| Flag | Meaning |
-|---|---|
-| `--object NAME` | draw only this renderer and its children; repeatable |
-| `--camera NAME` | the camera to look through; the scene's first by default |
-| `--view NAME` | `shaded` or a debug view; an unknown name lists them |
-| `--frames N`, `--dt MS` | how many frames, how far apart (30 at 16 ms) |
-| `--set owner.name=value` | a tunable; repeatable |
-| `-o out.bmp`, `--video out.avi` | the last frame, every frame |
-| `--checkpoint-mb MB` | the window's checkpoint memory (1024); past it, every other checkpoint goes |
-| `--ticks N` | closes the window after N ticks, for scripted runs |
-| `--version` | prints the build's version, commit, channel and autana commit (Download), and exits |
-
-The flags other than `--checkpoint-mb`, `--ticks` and `--version` are autana's `third_party/autana/launcher/tools/render/scene_viewer.sh` flags, and the output is the same bytes.
-A `.apak` opens as it is: its folder is the asset dir, its name the scene id.
-A `.scene.toml` run first brings the scene's pack in `build/packs` up to date
-with autana's `third_party/autana/launcher/tools/r3d/build_pack.py`; a build
-with `-DLOUPE_PACK_TOOL=OFF` refuses one, and says so.
-
-## Frames of a camera path, and A | B compares
-
-`--frame N -o out.png` writes frame N of the scene's camera path as a PNG, the
-pixels a run of `--frames N+1` at the same `--dt` writes with `-o`. `--compare REV|DIR` draws the
-path twice: side A is the scene given, side B the same `.scene.toml`'s pack
-built by B's own copy of `third_party/autana/launcher/tools/r3d/build_pack.py`,
-in a git worktree at the revision REV of
-the scene's repository (removed after) or in the checkout DIR. Both sides are
-drawn by this Loupe, one after the other. `--b-args "FLAGS"` gives B its own
-`--object`, `--camera`, `--view` and `--set` flags in place of A's, so
-`--b-args ""` draws B with none.
-
-```bash
-loupe sponza.scene.toml --frame 120 -o f.png
-loupe sponza.scene.toml --compare main --video ab.mp4
-loupe sponza.scene.toml --compare . --b-args "--view meshlets" --frame 120 -o f.png
-```
-
-| Command | Writes |
-|---|---|
-| `--frame N -o out.png` | frame N; with `--compare`, A's to `out.png` and B's to `out-b.png` |
-| `--compare REV\|DIR --video out.mp4` | every frame of the path as A \| B \| difference x8, each frame labelled with its index and time, by autana's `render_compare.py --video`; its numbers per frame go to `out.csv` |
-
-Both time the path alike, so frame N of a video is what `--frame N` writes:
-`--dt` when given, else the scene's own frame time, or the shortest whole
-millisecond at which the path fits one video when it does not at that;
-`--frames` when given, else the whole path. A frame past the path's end, a
-revision that does not exist and a checkout without the scene exit 2 saying
-why. `--compare` needs the pack tool, git, ffmpeg and the Python modules in
-`third_party/autana/launcher/tools/render/requirements.txt`; a build with
-`-DLOUPE_PACK_TOOL=OFF` refuses it, and says so.
-
-## Run a recipe
-
-`loupe-storyboard` runs a recipe on the real window: Dear ImGui's test engine
-gives each step to the panels as a person's clicks, keys and typing, so what
-it shows is what that input does. It is built with `-DLOUPE_STORYBOARD=ON`, as
-the `default` preset is, and never for the downloads (License).
-
-```bash
-build/default/loupe-storyboard --recipe tests/stories/doc_shots/sponza.yaml -o shots --scale 1.5
-```
-
-A recipe is a YAML list of steps. Each step is a map of one `loupe.` key,
-its value the step's arguments, and an optional `name`; any other map is
-refused at its line before the run starts. A step that fails stops the run at
-its line, and `loupe-storyboard` exits 1.
-
-```yaml
-- name: The Sponza scene
-  loupe.open: ../../../third_party/autana/launcher/demo/sponza/sponza.scene.toml --dt 100
-- loupe.click: //Outliner/tour
-- loupe.input: {ref: "//Inspector/eye/$$0", value: "500"}
-- loupe.screenshot: {out: key-moved.png, crop: Viewport}
-```
-
-| Step | Does |
-|---|---|
-| `loupe.open: SCENE [flags]` | opens a scene as `loupe SCENE [flags]` would; SCENE relative to the recipe |
-| `loupe.click: ITEM` | clicks an item: `//Window/label`, ImGui's id path, such as `//Outliner/tour` |
-| `loupe.check: ITEM`, `loupe.uncheck: ITEM` | sets a checkbox, clicking it only when it is not so already |
-| `loupe.input: {ref: ITEM, value: TEXT}` | Ctrl+clicks a field or slider and types TEXT, then Enter; a three-number field's first is `ITEM/$$0` |
-| `loupe.key: CHORD` | presses a key or chord in ImGui's key names, such as `Escape` or `ctrl+z` |
-| `loupe.hold: {key: KEY, ticks: N}` | holds a key for N ticks |
-| `loupe.wait: N` | lets N ticks pass |
-| `loupe.screenshot: OUT.png` or `{out: OUT.png, crop: PANEL}` | moves the mouse off the window, lets 4 ticks settle, and writes the window, or the panel PANEL names, under `-o` |
-
-Every tick stands for 1/30 s, whatever the machine, so a held key moves as far
-anywhere. `--scale` is the panels' scale, 1 when left out.
-
-## Tests
-
-The preset's test step (`ctest --preset default`) builds the packs it opens with `third_party/autana/launcher/tools/r3d/build_pack.py`, then runs:
-
-| Test | Checks |
-|---|---|
-| `parity_*` | `loupe` on the scene's `.apak` (and, with the pack tool, its `.scene.toml`) writes the same bytes as autana's scene viewer for the same arguments |
-| `scene_toml_refused`, `compare_refused` | without the pack tool, a `.scene.toml` exits 1 and `--compare` exits 2, saying why |
-| `wrong_version_refused` | a pack of another format version exits 1 with autana's reason |
-| `reopen_*` | a scene opened again after another closed, in one process, draws what it drew opened first; a pack of the same name from another folder is read afresh, so the window switches scenes in one process |
-| `path_flags` | `--frame`, `--compare` and `--b-args` parse only with what they need, and B takes `--b-args`' flags in place of A's |
-| `path_timing` | a path is timed as described under Frames of a camera path |
-| `frame`, `frame_compare`, `frame_compare_head` | `--frame`'s PNG, alone and for both sides against a folder and against `HEAD`, holds the pixels a straight run to that frame writes; under other `--b-args`, B's differs from A's |
-| `compare_same`, `compare_view` | a compare video's difference is nothing on every frame against the same pack, and something under another `--view`; skipped without ffmpeg, numpy or Pillow |
-| `frame_past_end`, `compare_bad_rev`, `compare_no_scene` | exit 2 with the reason |
-| `run_logged` | a tool loupe runs, from a folder named outside any one Windows code page, gets its arguments and paths intact and its output lands in the log (on Windows, through the UTF-8 code page manifest, `src/windows/utf8.manifest`) |
-| `library` | the start panel's samples, and a recent list kept most recent first, each once, at most 10 |
-| `seek` | a seek back through a checkpoint draws the bytes stepping straight there drew |
-| `thinning_*` | under a checkpoint budget the checkpoints stay within it, their interval doubles, and seeks still draw the straight bytes |
-| `observe` | under `cull`, each observer move draws one frame and the same pose draws the same bytes; turned off, or left by a seek either way, a view pick or closing (the image `-o` writes), the frames are the straight run's |
-| `observer_steer` | the observer starts at the speed that crosses the scene's box in 20 seconds; W, A, S, D, Q and E are its axes unless a text field has the keys, a right drag looks only when it began over the frame, and the wheel counts only over it |
-| `view_switch` | a debug view picked mid-run, and kept through a seek back, draws what it drew when picked from the start |
-| `window_smoke`, `window_start` | the window opens, on a scene and on the start panel, and draws 10 ticks offscreen on Mesa's lavapipe under the Khronos validation layer, with no validation error; skipped where either is missing |
-| `doc_shots_current` | every picture of the window in `docs/shots` holds the pixels the recipes in `tests/stories/doc_shots` draw offscreen on lavapipe, each channel within one level (lavapipe compiles for the CPU it runs on), and none is left that no recipe draws; skipped without lavapipe, and with autana at any commit but the pinned one (the nightly's `main`), whose scenes can draw other pixels |
-| `recipe` | a recipe reads as its steps, each with its line, its `loupe.*` key and its name; a recipe that is no list of maps, or a step that is not one `loupe.*` key and a name (a misspelt key, another key, none, two), is refused at its line |
-| `version` | `--version` names the project version, Loupe's commit, the configured channel and the autana commit |
-| `update` | SHA-256 on the standard's examples; GitHub's saved release answers give each system's download; which offers are newer; the setting; a check stages only a verified newer download and a local build never asks; a running copy, beside its samples and in `bin/`, is swapped for a staged one and says so at its next start |
-| `build_id` | `--version`'s line for each channel, and a copy counts as installed only with the setup's uninstaller beside it |
-| `editor_docs` | one undo stack, and whether anything is unsaved; only unbaked renderers place, each other object with the tool's reason; a placement's matrix turns as autana's `quatf_from_euler` and comes back from it, and a sheared, mirrored or zero-scale one is refused; the handles' matrices round trip and put a point where autana's pinhole does; a save sets only the fields that moved; the read's JSON parses, anything else is refused; the Outliner's tree by parent; a failed place is tried again the next frame |
-| `place` | a placed object draws there on the shown frame at once and on frames sought or stepped to after; after the first, each place draws one engine frame; placed back, the shown frame and every frame are the straight run's; an unknown name is refused |
-| `scene_save` | on a copy of the capybara scene, moving and scaling the capybara adds only its two lines and the read sees them; a baked renderer is refused, saying why, with the file unchanged and the change still unsaved |
-| `camera_paths` | the curve matches `camera_keys.py`'s numbers, open and looped; key edits keep a loop closed, times in order and each key's id; adds and deletes follow their rules; a path that would not build, or holds more keys than a clip counts, is a fault; set-keys gets each kept key by its table in the file |
-| `path_tour`, `path_lion` | on the Sponza pack, the camera stands where the curve puts it at every frame; flown on an edited path, the shown and later frames follow it while frames it does not reach stay the clip's; landed, every frame is the clip's again |
-| `path_editor` | a key drag is one undo step and holds save; adds pick the new key; deletes refuse the first key and a two-key path; a path a bake reads waits for its warning; each camera flies and lands apart, once per change; the scrub's frame for a time |
-| `path_save` | on a copy of the tour's keys with comments added, a moved eye, an added and a deleted key change only their own lines and the comments stay; a path that would not build is refused with the file unchanged; a delete undone after a save saves again with each comment above its key |
-| `include_gate` | only `src/engine/autana.hpp` includes autana's engine headers; autana's packages, below the engine, are open to every file |
-
-CI runs them on Linux and Windows at the pinned autana on every pull request,
-and nightly against autana's `main`, keeping one issue open while that fails.
-
-The pictures of the window in this README, `docs/shots`, are drawn by Loupe
-itself: each recipe in `tests/stories/doc_shots` opens its scene, clicks and
-types its way to the state it shows, and keeps the window, or one panel of it
-(Run a recipe). A change that alters one redraws them all, on Linux with
-lavapipe as CI does (WSL on Windows):
-
-```bash
-cmake --build build/default --target doc_shots
-```
-
-When `doc_shots_current` fails, CI uploads the pictures it drew with the
-renders, so they can be committed from there too. Another Mesa can draw other
-pixels, so a runner image that updates it means one redraw.
-
-## Standards
-
-Loupe is held to autana's code standards by autana's own gates, run from the
-submodule: they check the repository they run in. `.github/workflows/standards.yml`
-runs them, and [autana's C++ style](third_party/autana/docs/c-style/Cpp.md) is
-what they enforce. The build takes its flags, sanitizers and clang-tidy from
-`third_party/autana/scripts/cpp/standards.cmake`, and `CMakePresets.json` builds each:
-
-| Preset | Builds and tests |
-|---|---|
-| `default` | with every warning an error |
-| `sanitize` | under UBSan, and ASan on Linux, without the pack tool |
-| `tidy` | with clang-tidy (`.clang-tidy`) on every C++ file |
-| `release` | optimized, without the pack tool and with every demo scene's pack as a sample, then `cpack`'s downloads into `build/release`; on Windows the setup needs NSIS's `makensis` on `PATH` |
-
-```bash
-cmake --workflow --preset sanitize
-```
-
-The presets use Ninja; `pip install -r tools/ci/requirements.txt` installs it with
-the clang-format and clang-tidy autana pins. To run the gates before each commit,
-and the sanitized tests before each push that changes C++ or CMake:
-
-```bash
-git config core.hooksPath third_party/autana/scripts/git-hooks
-```
-
-`.clang-format` and `.clang-tidy` are generated by
-`third_party/autana/scripts/cpp/style_configs.py`; CI fails when they drift from the pin.
-
-## Release
-
-`project(loupe VERSION ...)` in `CMakeLists.txt` is the one version. Bump it, merge,
-then push the tag `v<version>` on that commit. `.github/workflows/build.yml`
-runs the `release` workflow preset on Windows and Linux, unpacks each download
-into an empty folder and renders every sample in it with nothing on `PATH`
-(`tools/ci/package_smoke.sh`), and on Windows installs the setup silently,
-renders every sample from the installed `loupe.exe`, uninstalls it and checks
-that no file, shortcut or registry key is left (`tools/ci/installer_smoke.sh`).
-It then attaches the downloads to the tag's
-GitHub Release, and refuses a tag that names another version. Every pull
-request and nightly run builds and smoke-tests the downloads the same way,
-without publishing them. A tag `v<version>-rc.1` publishes a pre-release whose
-files and `--version` still name `<version>`.
-
-Every push to `main` builds the same downloads with `-DLOUPE_CHANNEL=Main` and
-puts them on the `main-build` pre-release (`tools/ci/publish_main.sh`): the tag
-moves to the pushed commit, the files are replaced under the same names and the
-notes list the pull requests since the latest release.
+| [Getting started](docs/start/README.md) | the downloads, updates, and building from source |
+| [The editor](docs/editor/README.md) | opening a scene, moving its objects, editing camera paths |
+| [Rendering from the command line](docs/render/README.md) | frames, videos, every flag, A \| B compares |
+| [Developing Loupe](docs/development/README.md) | the architecture, the tests, recipes, the standards, releases |
 
 ## License
 
