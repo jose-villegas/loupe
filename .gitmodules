@@ -41,3 +41,13 @@
 	path = third_party/c4tree
 	url = https://github.com/jose-villegas/c4tree
 	shallow = true
+[submodule "third_party/imgui_test_engine"]
+	path = third_party/imgui_test_engine
+	url = https://github.com/ocornut/imgui_test_engine.git
+	shallow = true
+	branch = v1.93.0
+[submodule "third_party/yaml-cpp"]
+	path = third_party/yaml-cpp
+	url = https://github.com/jbeder/yaml-cpp.git
+	shallow = true
+	branch = yaml-cpp-0.9.0

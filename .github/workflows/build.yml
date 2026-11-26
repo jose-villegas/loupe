@@ -68,7 +68,7 @@ jobs:
         run: tools/ci/install-linux-packages.sh
       - name: Build and test
         run: cmake --workflow --preset default
-      # Also run before a push that changes C++ or CMake (README, Standards).
+      # Also run before a push that changes C++ or CMake (docs/development/Standards.md).
       # Built without the pack tool, so it proves loupe opens .apak files alone.
       - name: Build and test under the sanitizers, without the pack tool
         env:
@@ -118,6 +118,7 @@ jobs:
           name: renders-${{ matrix.runs-on }}
           path: |
             build/*/tests/parity_*
+            build/*/tests/doc_shots/shots
             build/*/packs/*/build_pack.log
             ${{ runner.temp }}/smoke/renders
             ${{ runner.temp }}/installer/smoke/renders

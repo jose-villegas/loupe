@@ -247,6 +247,26 @@ endfunction()
 window_smoke(window_smoke "${sponza}")
 window_smoke(window_start "")
 
+# The docs' pictures of the window, docs/shots: each recipe in
+# stories/doc_shots run offscreen, each picture must hold the pixels committed
+# (doc_shots.cmake). The recipes open .scene.toml files.
+if(LOUPE_STORYBOARD AND LOUPE_PACK_TOOL)
+    add_test(NAME doc_shots_current
+             COMMAND "${CMAKE_COMMAND}" "-DSTORYBOARD=$<TARGET_FILE:loupe-storyboard>"
+                     "-DSAME_IMAGE=$<TARGET_FILE:same_image>" "-DRECIPES=${CMAKE_CURRENT_SOURCE_DIR}/stories/doc_shots"
+                     "-DDOCS=${PROJECT_SOURCE_DIR}/docs/shots" "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/doc_shots" -DCHECK=ON
+                     "-DSOURCE=${PROJECT_SOURCE_DIR}" "-DAUTANA=${AUTANA_DIR}"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/doc_shots.cmake")
+    on_packs(doc_shots_current)
+    set_tests_properties(doc_shots_current PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+endif()
+# A recipe's steps as read: its maps, their lines, which are Loupe's.
+if(LOUPE_STORYBOARD)
+    add_executable(recipe_test recipe_test.cpp)
+    target_link_libraries(recipe_test PRIVATE loupe_core loupe_recipe)
+    add_test(NAME recipe COMMAND recipe_test)
+endif()
+
 # A build's id, and the uninstaller that marks an installed copy (cmake/package.cmake).
 add_executable(build_id_test build_id_test.cpp)
 target_link_libraries(build_id_test PRIVATE loupe_core)

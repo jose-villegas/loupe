@@ -56,6 +56,10 @@ struct Options {
 
 // False with `why` set for a command line it cannot run.
 bool parse_options(int argc, char** argv, Options* options, std::string* why);
+// The same, on the command line's words after the program's name.
+bool parse_args(const std::vector<std::string>& args, Options* options, std::string* why);
+// `text` split at white space.
+std::vector<std::string> words(const std::string& text);
 const char* usage();
 // A whole decimal number from `least` to `most`; false for anything else.
 bool parse_count(const std::string& text, long long least, long long most, long long* value);

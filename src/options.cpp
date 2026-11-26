@@ -65,13 +65,6 @@ const CountFlag COUNT_FLAGS[] = {
      .set = set_count<int, &Options::frame>},
 };
 
-// `text` split at white space.
-std::vector<std::string>
-words(const std::string& text) {
-    std::istringstream in(text);
-    return {std::istream_iterator<std::string>(in), std::istream_iterator<std::string>()};
-}
-
 const CountFlag*
 find_count_flag(const std::string& flag) {
     const auto found = std::ranges::find(COUNT_FLAGS, flag, &CountFlag::name);
@@ -245,10 +238,17 @@ usage() {
            "       loupe --version\n";
 }
 
+// `text` split at white space.
+std::vector<std::string>
+words(const std::string& text) {
+    std::istringstream in(text);
+    return {std::istream_iterator<std::string>(in), std::istream_iterator<std::string>()};
+}
+
 bool
-parse_options(int argc, char** argv, Options* options, std::string* why) {
-    for (int i = 1; i < argc; i++) {
-        const std::string flag = argv[i];
+parse_args(const std::vector<std::string>& args, Options* options, std::string* why) {
+    for (size_t i = 0; i < args.size(); i++) {
+        const std::string& flag = args[i];
         if (flag.empty() || flag[0] != '-') {
             if (!options->scene.empty()) {
                 *why = "one scene file only, not also " + flag;
@@ -261,15 +261,20 @@ parse_options(int argc, char** argv, Options* options, std::string* why) {
             options->version = true;
             continue;
         }
-        if (i + 1 >= argc) {
+        if (i + 1 >= args.size()) {
             *why = flag + " needs a value";
             return false;
         }
-        if (!apply_flag(flag, argv[++i], options, why)) {
+        if (!apply_flag(flag, args[++i], options, why)) {
             return false;
         }
     }
     return window_flags_fit(*options, why) && path_flags_fit(*options, why);
+}
+
+bool
+parse_options(int argc, char** argv, Options* options, std::string* why) {
+    return parse_args(std::vector<std::string>(argv + 1, argv + argc), options, why);
 }
 
 } // namespace loupe

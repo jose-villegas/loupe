@@ -290,6 +290,10 @@ edit_keys(Editor& editor, bool letters) {
     ask.redo = ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Y)
                || ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Z);
     ask.save = ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_S);
+    if (ImGui::IsKeyPressed(ImGuiKey_Escape, false) && !ImGui::GetIO().WantTextInput && !dragging(editor)) {
+        editor.selected.clear();
+        editor.path.key.reset();
+    }
     if (letters && !ImGui::GetIO().WantTextInput) {
         if (ImGui::IsKeyPressed(ImGuiKey_W, false)) {
             editor.handle = Handle::Move;

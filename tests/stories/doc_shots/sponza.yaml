@@ -1,0 +1,36 @@
+# Sponza's tour: its path and keys, the path seen from outside, a key's eye
+# moved, and the frame at 18 s on the path before and after the move.
+- name: The Sponza scene
+  loupe.open: ../../../third_party/autana/launcher/demo/sponza/sponza.scene.toml --dt 100
+- name: The tour selected
+  loupe.click: //Outliner/tour
+- loupe.screenshot: path-keys.png
+- name: Key 3 picked
+  loupe.click: "//Inspector/###key3"
+- loupe.screenshot: key-picked.png
+
+- name: The scene again
+  loupe.open: ../../../third_party/autana/launcher/demo/sponza/sponza.scene.toml --dt 100
+- loupe.click: //Outliner/tour
+- name: Free view, flown back until the whole tour is in sight
+  loupe.check: "//Viewport/Free view"
+- loupe.hold: {key: S, ticks: 60}
+- loupe.screenshot: free-view.png
+- loupe.click: "//Inspector/###key3"
+- name: Key 3's eye moved across the atrium
+  loupe.input: {ref: "//Inspector/eye/$$0", value: "500"}
+- loupe.screenshot: key-moved.png
+
+- name: Through the tour
+  loupe.open: ../../../third_party/autana/launcher/demo/sponza/sponza.scene.toml --camera tour --dt 100
+- loupe.click: //Outliner/tour
+- loupe.click: "//Inspector/###key3"
+- loupe.input: {ref: "//Inspector/eye/$$0", value: "500"}
+- name: The frame 18 s along the path
+  loupe.input: {ref: "//Viewport/##path", value: "18"}
+- name: Nothing selected, so no path is drawn over the frame
+  loupe.key: Escape
+- loupe.screenshot: {out: tour-after.png, crop: Viewport}
+- name: The move undone, the path as packed
+  loupe.key: ctrl+z
+- loupe.screenshot: {out: tour-before.png, crop: Viewport}

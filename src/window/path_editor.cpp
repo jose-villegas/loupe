@@ -448,6 +448,8 @@ draw_path(Editor& editor, const Frames& frames, const FrameRect& frame, const ma
     const std::vector<CameraKey>& keys = shown_keys(editor, editor.selected);
     const PathView on_frame{.parent = *parent, .clip_from_world = mat4f_mul(projection, view), .frame = frame};
     ImDrawList& draw = *ImGui::GetWindowDrawList();
+    // Past the frame's edges the projection shows nothing the frame does.
+    draw.PushClipRect(frame.min, frame.max, true);
     const bool builds = !editor::path_fault(keys);
     if (builds) {
         draw_curve(draw, on_frame, keys);
@@ -457,6 +459,7 @@ draw_path(Editor& editor, const Frames& frames, const FrameRect& frame, const ma
     if (builds) {
         draw_marker(draw, on_frame, keys, editor.path.shown_ms);
     }
+    draw.PopClipRect();
     bool over_handle = false;
     if (pick && may_edit(editor, editor.selected)) {
         point_handle(editor, *pick, keys, *parent, editor::gizmo(view), editor::gizmo(projection));
@@ -486,10 +489,11 @@ bake_warning(Editor& editor) {
 }
 
 // A row per key, its time; a click picks it, the handle on the same point as before.
+// The row's id is its index alone, so it stays one row while its time changes.
 void
 key_rows(Editor& editor, const std::vector<CameraKey>& keys, const std::optional<KeyPick>& pick) {
     for (size_t i = 0; i < keys.size(); i++) {
-        const std::string label = std::format("key {}: t = {:.3f} s##key{}", i, keys[i].t, i);
+        const std::string label = std::format("key {}: t = {:.3f} s###key{}", i, keys[i].t, i);
         if (ImGui::Selectable(label.c_str(), pick && pick->index == i)) {
             editor.path.key =
                 KeyPick{.index = i, .point = pick ? pick->point : KeyPoint::Eye, .camera = editor.selected};
@@ -561,10 +565,11 @@ bool
 draw_free_view_toggle(Editor& editor, const Frames& frames) {
     PathEdit& edit = editor.path;
     bool on = edit.free.on;
-    if (!ImGui::Checkbox("Free view", &on)) {
+    const bool clicked = ImGui::Checkbox("Free view", &on);
+    ImGui::SetItemTooltip("Fly the camera by hand (WASD, right drag) to see its path from outside");
+    if (!clicked) {
         return false;
     }
-    ImGui::SetItemTooltip("Fly the camera by hand (WASD, right drag) to see its path from outside");
     if (on) {
         const auto& objects = editor.docs.scene.objects;
         const auto active = std::ranges::find_if(
