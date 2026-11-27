@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "paths.hpp"
+#include "process.hpp"
 #include "storyboard/recipe.hpp"
 #include "storyboard/runner.hpp"
 #include "window/run_window.hpp"
@@ -30,11 +31,12 @@ constexpr const char CONFIG_DIR[] = "config";
 struct Args {
     std::string recipe, out = ".", lock_token;
     float scale = DEFAULT_SCALE;
+    bool no_console = false;
     std::map<std::string, std::string> names;
 };
 
 const char USAGE[] = "usage: loupe-storyboard --recipe RECIPE.yaml [-o DIR] [--scale S] [--set NAME=VALUE]...\n"
-                     "                        [--lock-token TOKEN]\n";
+                     "                        [--lock-token TOKEN] [--console none]\n";
 
 // A flag and its value into `args`; false for a flag it does not know or a
 // value it cannot take.
@@ -47,6 +49,9 @@ take(Args& args, const std::pair<std::string, std::string>& given) {
         args.out = value;
     } else if (flag == "--lock-token") {
         args.lock_token = value;
+    } else if (flag == "--console") {
+        args.no_console = value == "none";
+        return args.no_console || value == "keep";
     } else if (flag == "--set") {
         const size_t equals = value.find('=');
         if (equals == std::string::npos || equals == 0) {
@@ -85,6 +90,9 @@ main(int argc, char** argv) {
     if (!args) {
         std::fputs(USAGE, stderr);
         return 2;
+    }
+    if (args->no_console) {
+        loupe::leave_console();
     }
     std::string why;
     const std::filesystem::path recipe = loupe::from_utf8(args->recipe);

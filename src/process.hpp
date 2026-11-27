@@ -27,6 +27,12 @@ std::filesystem::path system_program(const std::string& name);
 // when it did not start.
 bool start_unwaited(const std::filesystem::path& program, const std::vector<std::string>& args);
 
+// Leaves this process's console, as Loupe, a GUI program, has none: a console
+// program it starts after gets a console window of its own unless started
+// without one. Its stdout and stderr still reach a pipe or file they were
+// handed. Nothing elsewhere.
+void leave_console();
+
 // A child's exit code, held by its pid from while it runs. On Windows a child
 // started without a console window (SDL's background process) reports 0
 // whatever it exits with; this reads the code it gave. Elsewhere the reported

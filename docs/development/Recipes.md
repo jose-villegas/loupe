@@ -82,5 +82,9 @@ lists the boards, presses View, sees frames keep coming, records a stretch and
 stops:
 
 ```bash
-build/default/loupe-storyboard --recipe tests/stories/attach.yaml --set BOARD=<serial> -o attach
+build/default/loupe-storyboard --recipe tests/stories/attach.yaml --set BOARD=<serial> -o attach --console none
 ```
+
+`--console none` gives up the storyboard's console first, as Loupe, a GUI
+program, has none. On Windows the board's `autana record` would then open a
+console window of its own unless Loupe starts it without one.

@@ -232,6 +232,11 @@ start_unwaited(const fs::path& program, const std::vector<std::string>& args) {
 }
 
 #if defined(_WIN32)
+void
+leave_console() {
+    FreeConsole();
+}
+
 ExitCode::ExitCode(int64_t pid)
     : handle_(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid))) {}
 
@@ -250,6 +255,9 @@ ExitCode::of(int reported) const {
     return static_cast<int>(code);
 }
 #else
+void
+leave_console() {}
+
 ExitCode::ExitCode(int64_t /*pid*/) {}
 
 ExitCode::~ExitCode() = default;
