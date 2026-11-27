@@ -470,7 +470,7 @@ Window::open(const Options& options) {
         return false;
     }
     refusal_.clear();
-    log::info(std::format("opened {} from {}", frames->scene_id(), utf8(options.scene)));
+    log::info(std::format("opened {} from {}", frames->scene_id(), utf8(options.scene.filename())));
     engine_out_.emplace(from_utf8(run.out_bmp + ENGINE_OUT_SUFFIX), ENGINE);
 
     if (!scripted_) {

@@ -52,8 +52,9 @@ class Ring {
     size_t oldest_ = 0;
 };
 
-// A line's level from its words: one that starts with "error", "fatal" or
-// "traceback", or holds ": error", is an error; "warning" so, a warning;
+// A line's level from its words: one that starts with "error", "fatal",
+// "traceback" or an exception's name and a colon (ValueError:), or holds
+// ": error", is an error; "warning" so, a warning;
 // anything else, `otherwise`. For the output of programs, which says no level.
 Level level_of(std::string_view text, Level otherwise);
 

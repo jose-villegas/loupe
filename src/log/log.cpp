@@ -176,8 +176,11 @@ Level
 level_of(std::string_view text, Level otherwise) {
     const size_t first = text.find_first_not_of(" \t");
     const std::string_view words = first == std::string_view::npos ? std::string_view() : text.substr(first);
-    if (starts_with_word(words, "error") || starts_with_word(words, "fatal") || starts_with_word(words, "traceback")
-        || holds(words, ": error")) {
+    const std::string_view head = words.substr(0, words.find(':'));
+    const bool raised = words.find(':') != std::string_view::npos && head.find(' ') == std::string_view::npos
+                        && (head.ends_with("Error") || head.ends_with("Exception"));
+    if (raised || starts_with_word(words, "error") || starts_with_word(words, "fatal")
+        || starts_with_word(words, "traceback") || holds(words, ": error")) {
         return Level::Error;
     }
     if (starts_with_word(words, "warning") || holds(words, ": warning")) {

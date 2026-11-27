@@ -85,6 +85,8 @@ levels_from_words() {
     return check(loupe::log::level_of("Error: no such file", Level::Info) == Level::Error
                      && loupe::log::level_of("  Traceback (most recent call last):", Level::Info) == Level::Error
                      && loupe::log::level_of("scene.toml:3: error: bad key", Level::Info) == Level::Error
+                     && loupe::log::level_of("ModuleNotFoundError: No module named 'x'", Level::Info) == Level::Error
+                     && loupe::log::level_of("no Error: here", Level::Info) == Level::Info
                      && loupe::log::level_of("WARNING: no bake", Level::Info) == Level::Warning
                      && loupe::log::level_of("x.cpp:1: warning: unused", Level::Info) == Level::Warning
                      && loupe::log::level_of("built 3 meshes", Level::Info) == Level::Info

@@ -244,15 +244,6 @@ if(LOUPE_STORYBOARD AND LOUPE_PACK_TOOL)
     on_packs(doc_shots_current)
     set_tests_properties(doc_shots_current PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
 endif()
-# The Console's recipe, offscreen: the line a scene's opening logs is shown (tests/stories/console).
-if(LOUPE_STORYBOARD AND LOUPE_PACK_TOOL)
-    add_test(NAME console_recipe
-             COMMAND "${CMAKE_COMMAND}" "-DSTORYBOARD=$<TARGET_FILE:loupe-storyboard>"
-                     "-DRECIPE=${CMAKE_CURRENT_SOURCE_DIR}/stories/console/console.yaml"
-                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/console_recipe" -P "${CMAKE_CURRENT_SOURCE_DIR}/recipe_run.cmake")
-    on_packs(console_recipe)
-    set_tests_properties(console_recipe PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
-endif()
 # A recipe's steps as read: its maps, their lines, which are Loupe's.
 if(LOUPE_STORYBOARD)
     add_executable(recipe_test recipe_test.cpp)

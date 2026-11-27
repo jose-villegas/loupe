@@ -31,7 +31,9 @@ picked, the frame is the straight run's again.
 Window > Console (Ctrl+Shift+C) shows what Loupe and what it runs said: its
 own messages, the engine's output, the tools it starts (`build_pack.py`,
 `bake.py`, `git`), the update check, and anything written to stderr. It docks
-beside the frame debugger, or floats over the start panel.
+under the viewport, or floats over the start panel.
+
+![The Console filtered to the line a scene's opening logs](../shots/console.png)
 
 | Control | Does |
 |---|---|
