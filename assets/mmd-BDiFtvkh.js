@@ -228,6 +228,7 @@ graph TB
     LoupeLoupeC_window.M_path_editor@{ shape: rectangle, label: "path_editor" }
     LoupeLoupeC_window.M_gpu@{ shape: rectangle, label: "gpu" }
     LoupeLoupeC_window.M_panels@{ shape: rectangle, label: "panels" }
+    LoupeLoupeC_window.M_fonts@{ shape: rectangle, label: "fonts" }
   end
   LoupeLoupeC_update@{ shape: rectangle, label: "update" }
   LoupeLoupeC_engine@{ shape: rectangle, label: "engine" }
@@ -237,6 +238,7 @@ graph TB
   LoupeLoupeC_window.M_editor -.-> LoupeLoupeC_window.M_path_editor
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_editor
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_files
+  LoupeLoupeC_window.M_gpu -.-> LoupeLoupeC_window.M_fonts
   LoupeLoupeC_window.M_frame_texture -.-> LoupeLoupeC_window.M_gpu
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_frame_texture
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_observer

@@ -390,6 +390,9 @@ LoupeLoupeC_window: {
   M_panels: {
     label: "panels"
   }
+  M_fonts: {
+    label: "fonts"
+  }
 }
 LoupeLoupeC_update: {
   label: "update"
@@ -406,6 +409,7 @@ LoupeLoupeC_storyboard -> LoupeLoupeC_window.M_run_window
 LoupeLoupeC_window.M_editor -> LoupeLoupeC_window.M_path_editor
 LoupeLoupeC_window.M_run_window -> LoupeLoupeC_window.M_editor
 LoupeLoupeC_window.M_run_window -> LoupeLoupeC_window.M_files
+LoupeLoupeC_window.M_gpu -> LoupeLoupeC_window.M_fonts
 LoupeLoupeC_window.M_frame_texture -> LoupeLoupeC_window.M_gpu
 LoupeLoupeC_window.M_run_window -> LoupeLoupeC_window.M_frame_texture
 LoupeLoupeC_window.M_run_window -> LoupeLoupeC_window.M_observer
