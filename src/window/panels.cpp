@@ -67,31 +67,37 @@ scene_list(const char* heading, const std::vector<std::filesystem::path>& scenes
     ImGui::PopID();
 }
 
+// The menu bar's menus; whether About was clicked.
+bool
+draw_menu_bar(EditMenu& edit, bool* console) {
+    if (!ImGui::BeginMenuBar()) {
+        return false;
+    }
+    if (edit.shown && ImGui::BeginMenu("Edit")) {
+        edit.undo = ImGui::MenuItem("Undo", "Ctrl+Z", false, edit.can_undo);
+        edit.redo = ImGui::MenuItem("Redo", "Ctrl+Y", false, edit.can_redo);
+        ImGui::Separator();
+        edit.save = ImGui::MenuItem("Save", "Ctrl+S", false, edit.can_save);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Window")) {
+        ImGui::MenuItem("Console", "Ctrl+Shift+C", console);
+        ImGui::EndMenu();
+    }
+    const bool about = ImGui::MenuItem(ABOUT);
+    ImGui::EndMenuBar();
+    return about;
+}
+
 } // namespace
 
 bool
 draw_menu(About& about, EditMenu& edit, bool* console) {
-    bool open = false;
     if (!ImGui::GetIO().WantTextInput && ImGui::Shortcut(CONSOLE_KEYS, ImGuiInputFlags_RouteGlobal)) {
         *console = !*console;
     }
-    if (ImGui::BeginMenuBar()) {
-        if (edit.shown && ImGui::BeginMenu("Edit")) {
-            edit.undo = ImGui::MenuItem("Undo", "Ctrl+Z", false, edit.can_undo);
-            edit.redo = ImGui::MenuItem("Redo", "Ctrl+Y", false, edit.can_redo);
-            ImGui::Separator();
-            edit.save = ImGui::MenuItem("Save", "Ctrl+S", false, edit.can_save);
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Window")) {
-            ImGui::MenuItem("Console", "Ctrl+Shift+C", console);
-            ImGui::EndMenu();
-        }
-        open = ImGui::MenuItem(ABOUT);
-        ImGui::EndMenuBar();
-    }
     // Opened outside the menu bar, whose ID scope the modal is not in.
-    if (open) {
+    if (draw_menu_bar(edit, console)) {
         ImGui::OpenPopup(ABOUT);
     }
     bool changed = false;
