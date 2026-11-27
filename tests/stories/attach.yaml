@@ -29,10 +29,10 @@
 - loupe.screenshot: live.png
 
 - name: Record pressed
-  loupe.click: "//Frame debugger/Record"
+  loupe.click: "//Frame debugger/board/Record"
 - loupe.wait: {until: [{loupe.saving: ~, eq: saving}, {loupe.saved_frames: ~, gt: 30}], timeout_s: 30}
 - name: Recording stopped
-  loupe.click: "//Frame debugger/Stop recording"
+  loupe.click: "//Frame debugger/board/Stop recording"
 - loupe.wait: {until: [{loupe.saving: ~, eq: "off"}], timeout_s: 10}
   check: [{loupe.recording: ~, match: "\\.framerec$"}, {loupe.recording_bytes: ~, gt: 0}]
 
