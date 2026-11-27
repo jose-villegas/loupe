@@ -141,10 +141,10 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${icon_png}")
 file(READ "${icon_png}" icon_bytes HEX)
 string(REGEX REPLACE "(..)" "0x\\1," icon_bytes "${icon_bytes}")
 file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/generated/window/icon_png.inc" CONTENT "${icon_bytes}\n")
-# The panels' typeface: ImGui's own, or a Latin Modern face from assets/fonts
-# (GUST Font License), built in as the icon is.
-set(LOUPE_UI_FONT "imgui" CACHE STRING "The panels' typeface: imgui, lmroman10-regular or lmsans10-regular")
-set_property(CACHE LOUPE_UI_FONT PROPERTY STRINGS imgui lmroman10-regular lmsans10-regular)
+# The panels' typeface: Latin Modern Sans from assets/fonts (GUST Font
+# License), built in as the icon is, or ImGui's own with -DLOUPE_UI_FONT=imgui.
+set(LOUPE_UI_FONT "lmsans10-regular" CACHE STRING "The panels' typeface: lmsans10-regular, or imgui for ImGui's own")
+set_property(CACHE LOUPE_UI_FONT PROPERTY STRINGS lmsans10-regular imgui)
 if(NOT LOUPE_UI_FONT STREQUAL "imgui")
     set(ui_font "${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/${LOUPE_UI_FONT}.otf")
     set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ui_font}")

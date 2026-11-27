@@ -56,5 +56,5 @@ GPL-3.0, as autana. A build with `-DLOUPE_STORYBOARD=ON`, as the `default`
 preset is, links [Dear ImGui Test Engine](https://github.com/ocornut/imgui_test_engine),
 under its own licence, into every program it builds, `loupe` too; the downloads
 are built without it (the `release` preset).
-The panels' typeface, Latin Modern, is under the
+The panels' typeface, Latin Modern Sans, is under the
 [GUST Font License](assets/fonts/GUST-FONT-LICENSE.txt).
