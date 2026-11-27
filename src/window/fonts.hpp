@@ -6,7 +6,7 @@
 
 namespace loupe::window {
 
-enum class FontRole : std::uint8_t { Text, Mono };
+enum class FontRole : uint8_t { Text, Mono };
 
 // Adds both roles' faces to ImGui's atlas, Text first as the default: after
 // each ImGui::CreateContext. Without LOUPE_LATIN_MODERN, ImGui's own font

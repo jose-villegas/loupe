@@ -24,6 +24,7 @@
 extern char** environ;
 #endif
 
+#include "log/log.hpp"
 #include "paths.hpp"
 
 namespace fs = std::filesystem;
@@ -66,21 +67,25 @@ command_line(const std::vector<std::string>& args) {
     return line;
 }
 
+// How often a waiting run_logged() reads its program's output into the log.
+constexpr DWORD OUTPUT_POLL_MS = 50;
+
 // Starts `args` with `startup`, its handles inherited; the process, or none.
 std::optional<PROCESS_INFORMATION>
 start(const std::vector<std::string>& args, STARTUPINFOA& startup) {
     std::string line = command_line(args);
     startup.cb = sizeof startup;
     PROCESS_INFORMATION process = {};
-    if (!CreateProcessA(args[0].c_str(), line.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &startup,
-                        &process)) {
+    // Loupe is a GUI program: a console program it starts would get a console window of its own.
+    if (!CreateProcessA(args[0].c_str(), line.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW, nullptr, nullptr,
+                        &startup, &process)) {
         return std::nullopt;
     }
     CloseHandle(process.hThread);
     return process;
 }
 #else
-// How often a waiting run_logged() looks for a stop request.
+// How often a waiting run_logged() looks for a stop request and reads its program's output into the log.
 constexpr auto STOP_POLL = std::chrono::milliseconds(50);
 #endif
 
@@ -106,6 +111,7 @@ run_logged(const std::vector<std::string>& args, const fs::path& log, const std:
     if (file == INVALID_HANDLE_VALUE) {
         return false;
     }
+    log::Tail output(log, utf8(log.stem()));
     STARTUPINFOA startup = {};
     startup.dwFlags = STARTF_USESTDHANDLES;
     startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
@@ -115,12 +121,15 @@ run_logged(const std::vector<std::string>& args, const fs::path& log, const std:
     if (const std::optional<PROCESS_INFORMATION> process = start(args, startup)) {
         {
             const std::stop_callback end(stop, [&process] { TerminateProcess(process->hProcess, 1); });
-            WaitForSingleObject(process->hProcess, INFINITE);
+            while (WaitForSingleObject(process->hProcess, OUTPUT_POLL_MS) == WAIT_TIMEOUT) {
+                output.poll();
+            }
         }
         GetExitCodeProcess(process->hProcess, &status);
         CloseHandle(process->hProcess);
     }
     CloseHandle(file);
+    output.poll(true);
     return status == 0;
 #else
     std::vector<char*> argv = argv_of(args);
@@ -136,6 +145,7 @@ run_logged(const std::vector<std::string>& args, const fs::path& log, const std:
         return false;
     }
     // Polled, not killed from the stopping thread: a pid already waited for may be another process's.
+    log::Tail output(log, utf8(log.stem()));
     pid_t waited = 0;
     while ((waited = waitpid(pid, &status, WNOHANG)) == 0) {
         if (stop.stop_requested()) {
@@ -143,8 +153,10 @@ run_logged(const std::vector<std::string>& args, const fs::path& log, const std:
             waited = waitpid(pid, &status, 0);
             break;
         }
+        output.poll();
         std::this_thread::sleep_for(STOP_POLL);
     }
+    output.poll(true);
     return waited == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
 #endif
 }

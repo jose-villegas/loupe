@@ -8,6 +8,7 @@ A `.scene.toml` opens as docked panels:
 | Outliner | the scene's objects by parent, each with its kind, and whether it is baked |
 | Inspector | the selected object's position, rotation in degrees and scale as numbers, why it may not move when it may not, a camera path's keys, whether anything is unsaved, then the last save and which bakes it re-keys |
 | Frame debugger | Scenes, a live board's controls ([View a board](../board/View-a-Board.md)), the view picker, the observer and the timeline, as [Open a scene](Open-a-Scene.md) describes |
+| Console | what Loupe and the programs it runs said, from Window > Console, as [Open a scene](Open-a-Scene.md#console) describes |
 
 A click on a name in the Outliner, or on the frame (the object whose origin
 lies nearest the click), selects an object. A drag of a handle or a field, from

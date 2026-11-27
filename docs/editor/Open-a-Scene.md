@@ -26,3 +26,27 @@ which starts at crossing the scene's box corner to corner in 20 seconds.
 autana's `fly_motion` flies it. Each move costs one engine frame, from a
 checkpoint held just before the shown frame. Unticked, or with another view
 picked, the frame is the straight run's again.
+
+## Console
+
+Window > Console (Ctrl+Shift+C) shows what Loupe and what it runs said: its
+own messages, the engine's output, the tools it starts (`build_pack.py`,
+`bake.py`, `git`), the update check, and anything written to stderr. It docks
+under the viewport, or floats over the start panel.
+
+![The Console filtered to the line a scene's opening logs](../shots/console.png)
+
+| Control | Does |
+|---|---|
+| Filter | keeps the lines whose text or source holds it; `a,b` keeps either, `-a` drops `a` |
+| Clear | empties the panel; the log file keeps every line |
+| Copy | puts the lines shown on the clipboard; a line's right-click menu copies that one |
+| Time | shows each line's time of day |
+
+Warnings are yellow, errors red. At the bottom the panel follows new lines;
+scrolled up, it stays put. It keeps the last 10,000 lines. The window also
+writes every line to `loupe.log` in the settings folder
+(`%APPDATA%\autana\loupe` or `~/.local/share/autana/loupe`), the last run's
+kept as `loupe-prev.log`. On Windows `loupe` opens no console window; run from
+a terminal, its errors, usage and `--version` still print there, after the
+prompt, since the terminal does not wait for a window program.

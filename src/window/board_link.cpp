@@ -1,13 +1,14 @@
 #include "window/board_link.hpp"
 
 #include <array>
-#include <cstdio>
 #include <exception>
+#include <format>
 #include <fstream>
 #include <utility>
 
 #include <SDL3/SDL.h>
 
+#include "log/log.hpp"
 #include "paths.hpp"
 #include "process.hpp"
 
@@ -74,7 +75,7 @@ BoardLink::start(const std::vector<std::string>& command, const fs::path& log, s
             raw->read_pipes(stop);
         } catch (const std::exception& failure) {
             // No memory for the bytes: the stream stops here.
-            std::fprintf(stderr, "loupe: the board link stopped reading: %s\n", failure.what());
+            log::error(std::format("the board link stopped reading: {}", failure.what()));
         }
     });
     return link;

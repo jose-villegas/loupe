@@ -230,6 +230,11 @@ if(LOUPE_PACK_TOOL)
     set_tests_properties(path_save PROPERTIES FIXTURES_REQUIRED path_save_copy)
 endif()
 
+# The log's ring, sink, file, tails and stderr capture, and the Console's lines.
+add_executable(log_test log_test.cpp)
+target_link_libraries(log_test PRIVATE loupe_core loupe_window)
+add_test(NAME log COMMAND log_test "${CMAKE_CURRENT_BINARY_DIR}/log")
+
 add_executable(library_test library_test.cpp)
 target_link_libraries(library_test PRIVATE loupe_core)
 add_test(NAME library COMMAND library_test "${CMAKE_CURRENT_BINARY_DIR}/library")

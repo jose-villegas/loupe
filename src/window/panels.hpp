@@ -93,8 +93,10 @@ struct EditMenu {
     bool undo = false, redo = false, save = false;
 };
 
-// The menu bar: Edit, then About. True when the viewer picked another `about.follow`.
-bool draw_menu(About& about, EditMenu& edit);
+// The menu bar: Edit, Window, whose Console item (Ctrl+Shift+C) shows or hides
+// the Console as `console` says, then About. True when the viewer picked another `about.follow`.
+bool draw_menu(About& about, EditMenu& edit, bool* console);
+
 // The window without a scene: the samples, the recent scenes and Open...;
 // `refusal` says why the last scene picked did not open.
 void draw_start(const Library& library, const std::string& refusal, Start& start);

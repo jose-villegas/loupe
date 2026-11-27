@@ -36,6 +36,9 @@ counts_line(const Frames::StreamState& stream) {
     return std::format("{} frames, {} dropped", stream.frames, stream.dropped);
 }
 
+// Shows or hides the Console, as in Unity.
+constexpr ImGuiKeyChord CONSOLE_KEYS = ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_C;
+
 // The field rows' frames: this share of the style's padding, so they sit
 // tighter than buttons and a short panel still fits each value.
 constexpr float FIELD_PADDING = 0.5F;
@@ -114,6 +117,28 @@ spinner() {
     return SPIN[static_cast<size_t>(step) % SPIN.size()];
 }
 
+// The menu bar's menus; whether About was clicked.
+bool
+draw_menu_bar(EditMenu& edit, bool* console) {
+    if (!ImGui::BeginMenuBar()) {
+        return false;
+    }
+    if (edit.shown && ImGui::BeginMenu("Edit")) {
+        edit.undo = ImGui::MenuItem("Undo", "Ctrl+Z", false, edit.can_undo);
+        edit.redo = ImGui::MenuItem("Redo", "Ctrl+Y", false, edit.can_redo);
+        ImGui::Separator();
+        edit.save = ImGui::MenuItem("Save", "Ctrl+S", false, edit.can_save);
+        ImGui::EndMenu();
+    }
+    if (ImGui::BeginMenu("Window")) {
+        ImGui::MenuItem("Console", "Ctrl+Shift+C", console);
+        ImGui::EndMenu();
+    }
+    const bool about = ImGui::MenuItem(ABOUT);
+    ImGui::EndMenuBar();
+    return about;
+}
+
 } // namespace
 
 BoardRows
@@ -126,21 +151,12 @@ board_rows(const BoardList& list) {
 }
 
 bool
-draw_menu(About& about, EditMenu& edit) {
-    bool open = false;
-    if (ImGui::BeginMenuBar()) {
-        if (edit.shown && ImGui::BeginMenu("Edit")) {
-            edit.undo = ImGui::MenuItem("Undo", "Ctrl+Z", false, edit.can_undo);
-            edit.redo = ImGui::MenuItem("Redo", "Ctrl+Y", false, edit.can_redo);
-            ImGui::Separator();
-            edit.save = ImGui::MenuItem("Save", "Ctrl+S", false, edit.can_save);
-            ImGui::EndMenu();
-        }
-        open = ImGui::MenuItem(ABOUT);
-        ImGui::EndMenuBar();
+draw_menu(About& about, EditMenu& edit, bool* console) {
+    if (!ImGui::GetIO().WantTextInput && ImGui::Shortcut(CONSOLE_KEYS, ImGuiInputFlags_RouteGlobal)) {
+        *console = !*console;
     }
     // Opened outside the menu bar, whose ID scope the modal is not in.
-    if (open) {
+    if (draw_menu_bar(edit, console)) {
         ImGui::OpenPopup(ABOUT);
     }
     bool changed = false;

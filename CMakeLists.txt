@@ -73,6 +73,7 @@ add_library(loupe_core OBJECT
     src/engine/frames.cpp
     src/engine/path_curve.cpp
     src/library.cpp
+    src/log/log.cpp
     src/options.cpp
     src/pack.cpp
     src/paths.cpp
@@ -146,6 +147,7 @@ set_property(SOURCE src/pack.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_FIRM
 # The window: SDL3, Vulkan through volk, Dear ImGui (third_party/CMakeLists.txt).
 # Only runs that write no file open it, so those need no GPU.
 add_library(loupe_window OBJECT
+    src/window/console.cpp
     src/window/editor.cpp
     src/window/files.cpp
     src/window/flow.cpp
@@ -186,6 +188,10 @@ if(TARGET firmware_packs)
     add_dependencies(loupe firmware_packs)
 endif()
 target_link_libraries(loupe PRIVATE loupe_core loupe_path loupe_window)
+# A GUI program on Windows, so no console window opens beside it; started from
+# a terminal, it writes there (log::attach_terminal). loupe-storyboard and the
+# tests stay console programs.
+set_target_properties(loupe PROPERTIES WIN32_EXECUTABLE ON)
 
 # loupe-storyboard: a recipe's loupe.* steps, run on the real window through
 # the test engine (src/storyboard/).
