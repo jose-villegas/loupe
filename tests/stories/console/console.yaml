@@ -1,0 +1,12 @@
+# The Console: opened from its shortcut beside the frame debugger, it shows
+# the line Loupe logs when a scene opens, which the filter keeps and Copy copies.
+- name: The capybara scene
+  loupe.open: ../../../third_party/autana/launcher/demo/capybara/capybara.scene.toml --dt 100
+- name: The Console, from its shortcut
+  loupe.key: ctrl+shift+c
+- loupe.screenshot: console.png
+- loupe.input: {ref: "//Console/Filter", value: "opened"}
+- loupe.click: //Console/Copy
+- name: The opening line shown
+  loupe.clipboard: "[loupe] opened capybara"
+- loupe.screenshot: console-filtered.png

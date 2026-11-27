@@ -8,7 +8,6 @@
 
 #include <array>
 #include <cstdint>
-#include <cstdio>
 #include <cstdlib>
 #include <format>
 #include <optional>
@@ -20,6 +19,7 @@
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_vulkan.h"
 #include "imgui_internal.h"
+#include "log/log.hpp"
 
 namespace loupe::window {
 
@@ -43,7 +43,7 @@ void
 set_icon(SDL_Window* window) {
     SDL_Surface* icon = SDL_LoadPNG_IO(SDL_IOFromConstMem(ICON_PNG, sizeof ICON_PNG), true);
     if (icon == nullptr || !SDL_SetWindowIcon(window, icon)) {
-        std::fprintf(stderr, "loupe: no window icon: %s\n", SDL_GetError());
+        log::warn(std::format("no window icon: {}", SDL_GetError()));
     }
     SDL_DestroySurface(icon);
 }
@@ -92,7 +92,7 @@ image_barrier(VkCommandBuffer commands, VkImage image, const LayoutStep& step) {
 void
 check(VkResult result) {
     if (result < 0) {
-        std::fprintf(stderr, "loupe: Vulkan error %d\n", static_cast<int>(result));
+        log::error(std::format("Vulkan error {}", static_cast<int>(result)));
         std::abort();
     }
 }

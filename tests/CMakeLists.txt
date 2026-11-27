@@ -209,6 +209,11 @@ if(LOUPE_PACK_TOOL)
     set_tests_properties(path_save PROPERTIES FIXTURES_REQUIRED path_save_copy)
 endif()
 
+# The log's ring, sink, file, tails and stderr capture, and the Console's lines.
+add_executable(log_test log_test.cpp)
+target_link_libraries(log_test PRIVATE loupe_core loupe_window)
+add_test(NAME log COMMAND log_test "${CMAKE_CURRENT_BINARY_DIR}/log")
+
 add_executable(library_test library_test.cpp)
 target_link_libraries(library_test PRIVATE loupe_core)
 add_test(NAME library COMMAND library_test "${CMAKE_CURRENT_BINARY_DIR}/library")
@@ -238,6 +243,15 @@ if(LOUPE_STORYBOARD AND LOUPE_PACK_TOOL)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/doc_shots.cmake")
     on_packs(doc_shots_current)
     set_tests_properties(doc_shots_current PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+endif()
+# The Console's recipe, offscreen: the line a scene's opening logs is shown (tests/stories/console).
+if(LOUPE_STORYBOARD AND LOUPE_PACK_TOOL)
+    add_test(NAME console_recipe
+             COMMAND "${CMAKE_COMMAND}" "-DSTORYBOARD=$<TARGET_FILE:loupe-storyboard>"
+                     "-DRECIPE=${CMAKE_CURRENT_SOURCE_DIR}/stories/console/console.yaml"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/console_recipe" -P "${CMAKE_CURRENT_SOURCE_DIR}/recipe_run.cmake")
+    on_packs(console_recipe)
+    set_tests_properties(console_recipe PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
 endif()
 # A recipe's steps as read: its maps, their lines, which are Loupe's.
 if(LOUPE_STORYBOARD)

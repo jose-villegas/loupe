@@ -228,11 +228,26 @@ hold(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
     return true;
 }
 
+bool
+clipboard(ImGuiTestContext* /*ctx*/, const nlohmann::json& value, std::string* why) {
+    const std::string wanted = value.is_string() ? value.get<std::string>() : "";
+    if (wanted.empty()) {
+        *why = "loupe.clipboard needs the text the clipboard should hold";
+        return false;
+    }
+    const char* held = ImGui::GetClipboardText();
+    if (held == nullptr || std::string_view(held).find(wanted) == std::string_view::npos) {
+        *why = std::format("the clipboard holds no \"{}\": \"{}\"", wanted, held == nullptr ? "" : held);
+        return false;
+    }
+    return true;
+}
+
 constexpr std::array INPUT_STEPS = {
     InputStep{.key = "loupe.wait", .run = wait},   InputStep{.key = "loupe.click", .run = click},
     InputStep{.key = "loupe.check", .run = check}, InputStep{.key = "loupe.uncheck", .run = uncheck},
     InputStep{.key = "loupe.input", .run = input}, InputStep{.key = "loupe.key", .run = key},
-    InputStep{.key = "loupe.hold", .run = hold},
+    InputStep{.key = "loupe.hold", .run = hold},   InputStep{.key = "loupe.clipboard", .run = clipboard},
 };
 
 } // namespace

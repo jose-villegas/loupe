@@ -12,6 +12,8 @@ namespace loupe::window {
 namespace {
 
 constexpr const char ABOUT[] = "About";
+// Shows or hides the Console, as in Unity.
+constexpr ImGuiKeyChord CONSOLE_KEYS = ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_C;
 
 // One selectable row per scene under `heading`, labelled by `label`; a click picks it.
 template <typename Label>
@@ -35,14 +37,21 @@ scene_list(const char* heading, const std::vector<std::filesystem::path>& scenes
 } // namespace
 
 bool
-draw_menu(About& about, EditMenu& edit) {
+draw_menu(About& about, EditMenu& edit, bool* console) {
     bool open = false;
+    if (ImGui::Shortcut(CONSOLE_KEYS, ImGuiInputFlags_RouteGlobal)) {
+        *console = !*console;
+    }
     if (ImGui::BeginMenuBar()) {
         if (edit.shown && ImGui::BeginMenu("Edit")) {
             edit.undo = ImGui::MenuItem("Undo", "Ctrl+Z", false, edit.can_undo);
             edit.redo = ImGui::MenuItem("Redo", "Ctrl+Y", false, edit.can_redo);
             ImGui::Separator();
             edit.save = ImGui::MenuItem("Save", "Ctrl+S", false, edit.can_save);
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Window")) {
+            ImGui::MenuItem("Console", "Ctrl+Shift+C", console);
             ImGui::EndMenu();
         }
         open = ImGui::MenuItem(ABOUT);

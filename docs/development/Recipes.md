@@ -32,6 +32,7 @@ its line, and `loupe-storyboard` exits 1.
 | `loupe.key: CHORD` | presses a key or chord in ImGui's key names, such as `Escape` or `ctrl+z` |
 | `loupe.hold: {key: KEY, ticks: N}` | holds a key for N ticks |
 | `loupe.wait: N` | lets N ticks pass |
+| `loupe.clipboard: TEXT` | fails unless the clipboard holds TEXT, as the Console's Copy leaves it |
 | `loupe.screenshot: OUT.png` or `{out: OUT.png, crop: PANEL}` | moves the mouse off the window, lets 4 ticks settle, and writes the window, or the panel PANEL names, under `-o` |
 
 Every tick stands for 1/30 s, whatever the machine, so a held key moves as far

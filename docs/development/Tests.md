@@ -13,7 +13,9 @@ The preset's test step (`ctest --preset default`) builds the packs it opens with
 | `frame`, `frame_compare`, `frame_compare_head` | `--frame`'s PNG, alone and for both sides against a folder and against `HEAD`, holds the pixels a straight run to that frame writes; under other `--b-args`, B's differs from A's |
 | `compare_same`, `compare_view` | a compare video's difference is nothing on every frame against the same pack, and something under another `--view`; skipped without ffmpeg, numpy or Pillow |
 | `frame_past_end`, `compare_bad_rev`, `compare_no_scene` | exit 2 with the reason |
-| `run_logged` | a tool loupe runs, from a folder named outside any one Windows code page, gets its arguments and paths intact and its output lands in the log (on Windows, through the UTF-8 code page manifest, `src/windows/utf8.manifest`) |
+| `run_logged` | a tool loupe runs, from a folder named outside any one Windows code page, gets its arguments and paths intact and its output lands in the log and Loupe's (on Windows, through the UTF-8 code page manifest, `src/windows/utf8.manifest`) |
+| `log` | the log keeps its latest lines in order and hands the Console only those after the last it took; only Loupe's own lines and stderr's echo to stderr; its file holds the lines from before it opened, the last run's set aside; a level is read from a program's words; a growing file is read by whole lines; what stderr gets while captured reaches the log |
+| `console_recipe` | `tests/stories/console`, offscreen on lavapipe: the Console opens from its shortcut and shows, filtered and copied, the line a scene's opening logs; skipped without lavapipe |
 | `library` | the start panel's samples, and a recent list kept most recent first, each once, at most 10 |
 | `seek` | a seek back through a checkpoint draws the bytes stepping straight there drew |
 | `thinning_*` | under a checkpoint budget the checkpoints stay within it, their interval doubles, and seeks still draw the straight bytes |

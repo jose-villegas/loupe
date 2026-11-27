@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "engine/frames.hpp"
+#include "log/log.hpp"
 #include "pack.hpp"
 #include "paths.hpp"
 #include "scratch.hpp"
@@ -72,7 +73,7 @@ write_frame(const std::string& side, Options options, int index, const fs::path&
         return stop(failed, FAILED, std::format("{}: cannot write {}: {}", side, utf8(out), SDL_GetError()));
     }
     if (!frames->close()) {
-        std::fprintf(stderr, "loupe: %s's run failed after frame %d; autana said why above\n", side.c_str(), index);
+        log::error(std::format("{}'s run failed after frame {}; autana said why above", side, index));
     }
     std::printf("%s\n", utf8(out).c_str());
     return true;
@@ -135,7 +136,7 @@ time_path(const Side& a, const Options& given, const fs::path& work, PathTiming*
     }
     *timing = path_timing(path, given);
     if (!given.dt_ms && timing->dt_ms != path.own_dt_ms) {
-        std::fprintf(stderr, "loupe: the %u ms path fits one video at --dt %u\n", path.path_ms, timing->dt_ms);
+        log::info(std::format("the {} ms path fits one video at --dt {}", path.path_ms, timing->dt_ms));
     }
     return true;
 }
@@ -177,8 +178,8 @@ class Work {
         if (!repo_.empty()
             && !loupe::git({"-C", utf8(repo_), "worktree", "remove", "--force", utf8(tree())},
                            dir() / "worktree-remove.log", &why)) {
-            std::fprintf(stderr, "loupe: B's worktree %s was not removed (git worktree prune clears it): %s\n",
-                         utf8(tree()).c_str(), why.c_str());
+            log::warn(
+                std::format("B's worktree {} was not removed (git worktree prune clears it): {}", utf8(tree()), why));
         }
     }
 
@@ -259,7 +260,7 @@ pack_at(const fs::path& scene, const std::string& rev_or_dir, Work& work, Stop* 
         (void)stop(failed, REFUSED, std::format("{} has no {}", rev_or_dir, relative.generic_string()));
         return std::nullopt;
     }
-    std::fprintf(stderr, "loupe: building B's pack in %s\n", utf8(root).c_str());
+    log::info(std::format("building B's pack in {}", utf8(root)));
     const PackBuild build = {.checkout = root, .scene = b_scene, .folder = work.dir() / "b_pack"};
     std::string why;
     if (!build_pack(build, &why)) {
@@ -292,8 +293,7 @@ compare_video(const std::vector<Side>& sides, const PathTiming& timing, const fs
     for (const auto& [name, side] : {std::pair{"a", &sides[0]}, std::pair{"b", &sides[1]}}) {
         Options run = side_run(*side, timing, work.dir() / std::format("{}.bmp", name));
         run.out_video = utf8(work.dir() / std::format("{}.avi", name));
-        std::fprintf(stderr, "loupe: drawing %s, %d frames at --dt %u\n", side->label.c_str(), timing.frames,
-                     timing.dt_ms);
+        log::info(std::format("drawing {}, {} frames at --dt {}", side->label, timing.frames, timing.dt_ms));
         std::string why;
         if (!render(run, &why) && !fs::is_regular_file(run.out_video)) {
             return stop(failed, FAILED, std::format("{}: {}", side->label, why));
@@ -332,7 +332,7 @@ int
 run_path(const Options& options) {
     Stop failed;
     const auto said = [&failed] {
-        std::fprintf(stderr, "loupe: %s\n", failed.why.c_str());
+        log::error(failed.why);
         return failed.code;
     };
     Work work;

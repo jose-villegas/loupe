@@ -12,6 +12,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "log/log.hpp"
 #include "options.hpp"
 #include "paths.hpp"
 #include "process.hpp"
@@ -27,6 +28,8 @@ namespace {
 constexpr const char SETTINGS_FILE[] = "settings.txt";
 constexpr const char FOLLOW_KEY[] = "updates=";
 constexpr const char LOG_FILE[] = "update.log";
+// Where its lines come from in Loupe's log.
+constexpr const char LOG_SOURCE[] = "update";
 constexpr const char UPDATE_DIR[] = "update";
 constexpr const char API[] = "https://api.github.com/repos/" LOUPE_REPO;
 constexpr const char JSON_TYPE[] = "application/vnd.github+json";
@@ -630,6 +633,7 @@ settle(const Copy& copy) {
 
 void
 log(const Copy& copy, const std::string& line) {
+    loupe::log::sink().write(loupe::log::Level::Info, LOG_SOURCE, line);
     if (copy.config.empty()) {
         return;
     }

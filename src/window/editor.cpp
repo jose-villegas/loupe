@@ -3,13 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <cstdio>
 #include <memory>
 #include <utility>
 #include <vector>
 
 #include "editor/placement.hpp"
 #include "engine/engine_frame.hpp"
+#include "log/log.hpp"
 #include "paths.hpp"
 
 namespace loupe::window {
@@ -259,7 +259,7 @@ open_editor(const std::filesystem::path& scene, std::string* why) {
     std::string unread;
     if (!load_paths(editor, scratch->path(), &unread)) {
         editor.status = "Paths not read: " + unread;
-        std::fprintf(stderr, "loupe: %s\n", editor.status.c_str());
+        log::error(editor.status);
     }
     editor.scratch = std::move(scratch);
     return editor;
@@ -308,14 +308,14 @@ apply(Editor& editor, const EditAsk& ask) {
     const std::filesystem::path folder = editor.scratch->path();
     if (!editor::save_scene(editor.docs.scene, folder, &why)) {
         editor.status = "Not saved: " + why;
-        std::fprintf(stderr, "loupe: %s\n", editor.status.c_str());
+        log::error(editor.status);
         return;
     }
     editor.status = "Saved " + utf8(editor.docs.scene.toml.filename());
     if (!save_paths(editor, folder, &why)) {
         // The scene is written: its bake check runs, and the paths left unsaved say why.
         editor.status += "; a camera path not saved: " + why;
-        std::fprintf(stderr, "loupe: %s\n", editor.status.c_str());
+        log::error(editor.status);
     }
     editor.checked.reset();
     editor.checking.start(editor.docs.scene.toml, folder);

@@ -2,9 +2,9 @@
 
 #include <algorithm>
 #include <climits>
-#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <iterator>
 #include <map>
 #include <optional>
@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "engine/autana.hpp"
+#include "log/log.hpp"
 #include "pack.hpp"
 #include "paths.hpp"
 
@@ -88,8 +89,7 @@ struct Frames::State {
         }
         if (kept_bytes > budget && !said_over) {
             said_over = true;
-            std::fprintf(stderr, "loupe: one checkpoint holds %zu bytes, over the %zu-byte budget\n", kept_bytes,
-                         budget);
+            log::warn(std::format("one checkpoint holds {} bytes, over the {}-byte budget", kept_bytes, budget));
         }
     }
 };
@@ -278,7 +278,7 @@ Frames::advance(uint32_t dt_ms) {
             s.kept_bytes += render_host_checkpoint_bytes(checkpoint);
             s.thin();
         } else {
-            std::fprintf(stderr, "loupe: no checkpoint before frame %d; seeks back past it will fail\n", s.index);
+            log::warn(std::format("no checkpoint before frame {}; seeks back past it will fail", s.index));
         }
     }
     for (const auto& [name, local] : s.placed) {
@@ -392,7 +392,7 @@ Frames::redraw_held() {
         step_to(shown - 1);
         s.held = render_host_save();
         if (s.held == nullptr) {
-            std::fprintf(stderr, "loupe: no checkpoint before frame %d to redraw it from\n", shown);
+            log::error(std::format("no checkpoint before frame {} to redraw it from", shown));
             step_to(shown);
             return false;
         }

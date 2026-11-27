@@ -3,7 +3,7 @@
 // is downloaded, checked against GitHub's SHA-256 digest and staged in
 // <config>/update/. When the window closes, the staged build takes this copy's
 // place, so the next start is the new one. A local build (Channel::None)
-// never asks. Every step is logged to <config>/update.log; nothing pops up.
+// never asks. Every step is logged to <config>/update.log and the Console; nothing pops up.
 #pragma once
 
 #include <cstdint>
@@ -80,7 +80,7 @@ bool apply_staged(const Copy& copy, Follow follow, std::string* why);
 // At start: removes what the last swap set aside; "Updated to <version> (<commit>)"
 // when `copy` is a build swapped in since the last start.
 std::optional<std::string> settle(const Copy& copy);
-// `line`, timestamped, appended to <config>/update.log.
+// `line`, timestamped, appended to <config>/update.log, and in Loupe's log.
 void log(const Copy& copy, const std::string& line);
 
 } // namespace loupe::update
