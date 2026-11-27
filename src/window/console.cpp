@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "window/fonts.hpp"
+
 namespace loupe::window {
 
 namespace {
@@ -72,6 +74,7 @@ draw_lines(const Console& console, const std::vector<int>& rows) {
         return;
     }
     const bool at_bottom = ImGui::GetScrollY() >= ImGui::GetScrollMaxY();
+    const FontScope mono(FontRole::Mono);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 0));
     ImGuiListClipper clipper;
     clipper.Begin(static_cast<int>(rows.size()));

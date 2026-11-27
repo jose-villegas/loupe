@@ -1,4 +1,4 @@
-// The Console panel: the log's lines (log/log.hpp), newest at the bottom,
+// The Console panel: the log's lines (log/log.hpp) in the mono face, newest at the bottom,
 // each with its time, level and source, warnings and errors in their colours.
 // A filter keeps the lines holding its words, Clear empties the panel (not
 // the log file), Copy puts the lines shown on the clipboard, and a line's
