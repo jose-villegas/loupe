@@ -32,6 +32,7 @@ graph TB
     LoupeLoupe.C_window@{ shape: rectangle, label: "window" }
     LoupeLoupe.C_editor@{ shape: rectangle, label: "editor" }
     LoupeLoupe.C_engine@{ shape: rectangle, label: "engine" }
+    LoupeLoupe.C_log@{ shape: rectangle, label: "log" }
     LoupeLoupe.C_update@{ shape: rectangle, label: "update" }
     LoupeLoupe.C_src@{ shape: rectangle, label: "src" }
   end
@@ -39,6 +40,7 @@ graph TB
   LoupeLoupe.C_window -.-> LoupeLoupe.C_editor
   LoupeLoupe.C_engine -.-> LoupeLoupe.C_src
   LoupeLoupe.C_window -.-> LoupeLoupe.C_engine
+  LoupeLoupe.C_window -.-> LoupeLoupe.C_log
   LoupeLoupe.C_path -.-> LoupeLoupe.C_src
   LoupeLoupe.C_src -.-> LoupeLoupe.C_path
   LoupeLoupe.C_src -.-> LoupeLoupe.C_window
@@ -58,16 +60,23 @@ graph TB
     LoupeLoupe.C_update@{ shape: rectangle, label: "update" }
     LoupeLoupe.C_engine@{ shape: rectangle, label: "engine" }
     LoupeLoupe.C_src@{ shape: rectangle, label: "src" }
+    LoupeLoupe.C_log@{ shape: rectangle, label: "log" }
   end
   LoupeLoupe.C_editor -.-> LoupeLoupe.C_engine
   LoupeLoupe.C_editor -.-> LoupeLoupe.C_src
   LoupeLoupe.C_tests -.-> LoupeLoupe.C_editor
   LoupeLoupe.C_window -.-> LoupeLoupe.C_editor
+  LoupeLoupe.C_engine -.-> LoupeLoupe.C_log
   LoupeLoupe.C_engine -.-> LoupeLoupe.C_src
   LoupeLoupe.C_path -.-> LoupeLoupe.C_engine
   LoupeLoupe.C_src -.-> LoupeLoupe.C_engine
   LoupeLoupe.C_tests -.-> LoupeLoupe.C_engine
   LoupeLoupe.C_window -.-> LoupeLoupe.C_engine
+  LoupeLoupe.C_path -.-> LoupeLoupe.C_log
+  LoupeLoupe.C_src -.-> LoupeLoupe.C_log
+  LoupeLoupe.C_tests -.-> LoupeLoupe.C_log
+  LoupeLoupe.C_update -.-> LoupeLoupe.C_log
+  LoupeLoupe.C_window -.-> LoupeLoupe.C_log
   LoupeLoupe.C_path -.-> LoupeLoupe.C_src
   LoupeLoupe.C_src -.-> LoupeLoupe.C_path
   LoupeLoupe.C_tests -.-> LoupeLoupe.C_path
@@ -116,6 +125,7 @@ graph TB
     LoupeLoupeC_engine.M_autana@{ shape: rectangle, label: "autana" }
     LoupeLoupeC_engine.M_pose@{ shape: rectangle, label: "pose" }
   end
+  LoupeLoupeC_log@{ shape: rectangle, label: "log" }
   LoupeLoupeC_editor -.-> LoupeLoupeC_engine.M_frames
   LoupeLoupeC_editor -.-> LoupeLoupeC_engine.M_path_curve
   LoupeLoupeC_path -.-> LoupeLoupeC_engine.M_frames
@@ -127,7 +137,25 @@ graph TB
   LoupeLoupeC_engine.M_engine_frame -.-> LoupeLoupeC_engine.M_pose
   LoupeLoupeC_engine.M_frames -.-> LoupeLoupeC_engine.M_pose
   LoupeLoupeC_engine.M_path_curve -.-> LoupeLoupeC_engine.M_pose
+  LoupeLoupeC_engine.M_frames -.-> LoupeLoupeC_log
   LoupeLoupeC_engine.M_frames -.-> LoupeLoupeC_src
+`;case`c_log`:return`---
+title: "log"
+---
+graph TB
+  LoupeLoupeC_engine@{ shape: rectangle, label: "engine" }
+  LoupeLoupeC_path@{ shape: rectangle, label: "path" }
+  LoupeLoupeC_src@{ shape: rectangle, label: "src" }
+  LoupeLoupeC_update@{ shape: rectangle, label: "update" }
+  LoupeLoupeC_window@{ shape: rectangle, label: "window" }
+  subgraph LoupeLoupeC_log["\`log\`"]
+    LoupeLoupeC_log.M_log@{ shape: rectangle, label: "log" }
+  end
+  LoupeLoupeC_engine -.-> LoupeLoupeC_log.M_log
+  LoupeLoupeC_path -.-> LoupeLoupeC_log.M_log
+  LoupeLoupeC_src -.-> LoupeLoupeC_log.M_log
+  LoupeLoupeC_update -.-> LoupeLoupeC_log.M_log
+  LoupeLoupeC_window -.-> LoupeLoupeC_log.M_log
 `;case`c_path`:return`---
 title: "path"
 ---
@@ -137,8 +165,10 @@ graph TB
     LoupeLoupeC_path.M_path@{ shape: rectangle, label: "path" }
   end
   LoupeLoupeC_engine@{ shape: rectangle, label: "engine" }
+  LoupeLoupeC_log@{ shape: rectangle, label: "log" }
   LoupeLoupeC_src -.-> LoupeLoupeC_path.M_path
   LoupeLoupeC_path.M_path -.-> LoupeLoupeC_engine
+  LoupeLoupeC_path.M_path -.-> LoupeLoupeC_log
   LoupeLoupeC_path.M_path -.-> LoupeLoupeC_src
 `;case`c_src`:return`---
 title: "src"
@@ -161,6 +191,7 @@ graph TB
   end
   LoupeLoupeC_path@{ shape: rectangle, label: "path" }
   LoupeLoupeC_window@{ shape: rectangle, label: "window" }
+  LoupeLoupeC_log@{ shape: rectangle, label: "log" }
   LoupeLoupeC_editor -.-> LoupeLoupeC_src.M_tools
   LoupeLoupeC_engine -.-> LoupeLoupeC_src.M_options
   LoupeLoupeC_path -.-> LoupeLoupeC_src.M_pack
@@ -180,6 +211,7 @@ graph TB
   LoupeLoupeC_src.M_main -.-> LoupeLoupeC_path
   LoupeLoupeC_src.M_main -.-> LoupeLoupeC_window
   LoupeLoupeC_src.M_pack -.-> LoupeLoupeC_engine
+  LoupeLoupeC_src.M_process -.-> LoupeLoupeC_log
 `;case`c_storyboard`:return`---
 title: "storyboard"
 ---
@@ -209,9 +241,11 @@ graph TB
     LoupeLoupeC_update.M_update@{ shape: rectangle, label: "update" }
     LoupeLoupeC_update.M_sha256@{ shape: rectangle, label: "sha256" }
   end
+  LoupeLoupeC_log@{ shape: rectangle, label: "log" }
   LoupeLoupeC_src@{ shape: rectangle, label: "src" }
   LoupeLoupeC_window -.-> LoupeLoupeC_update.M_update
   LoupeLoupeC_update.M_update -.-> LoupeLoupeC_update.M_sha256
+  LoupeLoupeC_update.M_update -.-> LoupeLoupeC_log
   LoupeLoupeC_update.M_update -.-> LoupeLoupeC_src
 `;case`c_window`:return`---
 title: "window"
@@ -221,6 +255,7 @@ graph TB
   LoupeLoupeC_storyboard@{ shape: rectangle, label: "storyboard" }
   subgraph LoupeLoupeC_window["\`window\`"]
     LoupeLoupeC_window.M_run_window@{ shape: rectangle, label: "run_window" }
+    LoupeLoupeC_window.M_console@{ shape: rectangle, label: "console" }
     LoupeLoupeC_window.M_editor@{ shape: rectangle, label: "editor" }
     LoupeLoupeC_window.M_files@{ shape: rectangle, label: "files" }
     LoupeLoupeC_window.M_frame_texture@{ shape: rectangle, label: "frame_texture" }
@@ -233,8 +268,11 @@ graph TB
   LoupeLoupeC_update@{ shape: rectangle, label: "update" }
   LoupeLoupeC_engine@{ shape: rectangle, label: "engine" }
   LoupeLoupeC_editor@{ shape: rectangle, label: "editor" }
+  LoupeLoupeC_log@{ shape: rectangle, label: "log" }
   LoupeLoupeC_src -.-> LoupeLoupeC_window.M_run_window
   LoupeLoupeC_storyboard -.-> LoupeLoupeC_window.M_run_window
+  LoupeLoupeC_window.M_console -.-> LoupeLoupeC_window.M_fonts
+  LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_console
   LoupeLoupeC_window.M_editor -.-> LoupeLoupeC_window.M_path_editor
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_editor
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_files
@@ -243,8 +281,10 @@ graph TB
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_frame_texture
   LoupeLoupeC_window.M_run_window -.-> LoupeLoupeC_window.M_observer
   LoupeLoupeC_window.M_path_editor -.-> LoupeLoupeC_window.M_panels
+  LoupeLoupeC_window.M_console -.-> LoupeLoupeC_log
   LoupeLoupeC_window.M_files -.-> LoupeLoupeC_src
   LoupeLoupeC_window.M_frame_texture -.-> LoupeLoupeC_engine
+  LoupeLoupeC_window.M_gpu -.-> LoupeLoupeC_log
   LoupeLoupeC_window.M_observer -.-> LoupeLoupeC_engine
   LoupeLoupeC_window.M_panels -.-> LoupeLoupeC_src
   LoupeLoupeC_window.M_path_editor -.-> LoupeLoupeC_editor

@@ -60,6 +60,9 @@ LoupeLoupe: {
   C_engine: {
     label: "engine"
   }
+  C_log: {
+    label: "log"
+  }
   C_update: {
     label: "update"
   }
@@ -72,6 +75,7 @@ LoupeLoupe.C_editor -> LoupeLoupe.C_src
 LoupeLoupe.C_window -> LoupeLoupe.C_editor
 LoupeLoupe.C_engine -> LoupeLoupe.C_src
 LoupeLoupe.C_window -> LoupeLoupe.C_engine
+LoupeLoupe.C_window -> LoupeLoupe.C_log
 LoupeLoupe.C_path -> LoupeLoupe.C_src
 LoupeLoupe.C_src -> LoupeLoupe.C_path
 LoupeLoupe.C_src -> LoupeLoupe.C_window
@@ -107,17 +111,26 @@ LoupeLoupe: {
   C_src: {
     label: "src"
   }
+  C_log: {
+    label: "log"
+  }
 }
 
 LoupeLoupe.C_editor -> LoupeLoupe.C_engine
 LoupeLoupe.C_editor -> LoupeLoupe.C_src
 LoupeLoupe.C_tests -> LoupeLoupe.C_editor
 LoupeLoupe.C_window -> LoupeLoupe.C_editor
+LoupeLoupe.C_engine -> LoupeLoupe.C_log
 LoupeLoupe.C_engine -> LoupeLoupe.C_src
 LoupeLoupe.C_path -> LoupeLoupe.C_engine
 LoupeLoupe.C_src -> LoupeLoupe.C_engine
 LoupeLoupe.C_tests -> LoupeLoupe.C_engine
 LoupeLoupe.C_window -> LoupeLoupe.C_engine
+LoupeLoupe.C_path -> LoupeLoupe.C_log
+LoupeLoupe.C_src -> LoupeLoupe.C_log
+LoupeLoupe.C_tests -> LoupeLoupe.C_log
+LoupeLoupe.C_update -> LoupeLoupe.C_log
+LoupeLoupe.C_window -> LoupeLoupe.C_log
 LoupeLoupe.C_path -> LoupeLoupe.C_src
 LoupeLoupe.C_src -> LoupeLoupe.C_path
 LoupeLoupe.C_tests -> LoupeLoupe.C_path
@@ -199,6 +212,9 @@ LoupeLoupeC_engine: {
     label: "pose"
   }
 }
+LoupeLoupeC_log: {
+  label: "log"
+}
 
 LoupeLoupeC_editor -> LoupeLoupeC_engine.M_frames
 LoupeLoupeC_editor -> LoupeLoupeC_engine.M_path_curve
@@ -211,7 +227,38 @@ LoupeLoupeC_engine.M_path_curve -> LoupeLoupeC_engine.M_autana
 LoupeLoupeC_engine.M_engine_frame -> LoupeLoupeC_engine.M_pose
 LoupeLoupeC_engine.M_frames -> LoupeLoupeC_engine.M_pose
 LoupeLoupeC_engine.M_path_curve -> LoupeLoupeC_engine.M_pose
+LoupeLoupeC_engine.M_frames -> LoupeLoupeC_log
 LoupeLoupeC_engine.M_frames -> LoupeLoupeC_src
+`;case`c_log`:return`direction: down
+
+LoupeLoupeC_engine: {
+  label: "engine"
+}
+LoupeLoupeC_path: {
+  label: "path"
+}
+LoupeLoupeC_src: {
+  label: "src"
+}
+LoupeLoupeC_update: {
+  label: "update"
+}
+LoupeLoupeC_window: {
+  label: "window"
+}
+LoupeLoupeC_log: {
+  label: "log"
+
+  M_log: {
+    label: "log"
+  }
+}
+
+LoupeLoupeC_engine -> LoupeLoupeC_log.M_log
+LoupeLoupeC_path -> LoupeLoupeC_log.M_log
+LoupeLoupeC_src -> LoupeLoupeC_log.M_log
+LoupeLoupeC_update -> LoupeLoupeC_log.M_log
+LoupeLoupeC_window -> LoupeLoupeC_log.M_log
 `;case`c_path`:return`direction: down
 
 LoupeLoupeC_src: {
@@ -227,9 +274,13 @@ LoupeLoupeC_path: {
 LoupeLoupeC_engine: {
   label: "engine"
 }
+LoupeLoupeC_log: {
+  label: "log"
+}
 
 LoupeLoupeC_src -> LoupeLoupeC_path.M_path
 LoupeLoupeC_path.M_path -> LoupeLoupeC_engine
+LoupeLoupeC_path.M_path -> LoupeLoupeC_log
 LoupeLoupeC_path.M_path -> LoupeLoupeC_src
 `;case`c_src`:return`direction: down
 
@@ -282,6 +333,9 @@ LoupeLoupeC_path: {
 LoupeLoupeC_window: {
   label: "window"
 }
+LoupeLoupeC_log: {
+  label: "log"
+}
 
 LoupeLoupeC_editor -> LoupeLoupeC_src.M_tools
 LoupeLoupeC_engine -> LoupeLoupeC_src.M_options
@@ -302,6 +356,7 @@ LoupeLoupeC_src.M_tools -> LoupeLoupeC_src.M_process
 LoupeLoupeC_src.M_main -> LoupeLoupeC_path
 LoupeLoupeC_src.M_main -> LoupeLoupeC_window
 LoupeLoupeC_src.M_pack -> LoupeLoupeC_engine
+LoupeLoupeC_src.M_process -> LoupeLoupeC_log
 `;case`c_storyboard`:return`direction: down
 
 LoupeLoupeC_storyboard: {
@@ -348,12 +403,16 @@ LoupeLoupeC_update: {
     label: "sha256"
   }
 }
+LoupeLoupeC_log: {
+  label: "log"
+}
 LoupeLoupeC_src: {
   label: "src"
 }
 
 LoupeLoupeC_window -> LoupeLoupeC_update.M_update
 LoupeLoupeC_update.M_update -> LoupeLoupeC_update.M_sha256
+LoupeLoupeC_update.M_update -> LoupeLoupeC_log
 LoupeLoupeC_update.M_update -> LoupeLoupeC_src
 `;case`c_window`:return`direction: down
 
@@ -368,6 +427,9 @@ LoupeLoupeC_window: {
 
   M_run_window: {
     label: "run_window"
+  }
+  M_console: {
+    label: "console"
   }
   M_editor: {
     label: "editor"
@@ -403,9 +465,14 @@ LoupeLoupeC_engine: {
 LoupeLoupeC_editor: {
   label: "editor"
 }
+LoupeLoupeC_log: {
+  label: "log"
+}
 
 LoupeLoupeC_src -> LoupeLoupeC_window.M_run_window
 LoupeLoupeC_storyboard -> LoupeLoupeC_window.M_run_window
+LoupeLoupeC_window.M_console -> LoupeLoupeC_window.M_fonts
+LoupeLoupeC_window.M_run_window -> LoupeLoupeC_window.M_console
 LoupeLoupeC_window.M_editor -> LoupeLoupeC_window.M_path_editor
 LoupeLoupeC_window.M_run_window -> LoupeLoupeC_window.M_editor
 LoupeLoupeC_window.M_run_window -> LoupeLoupeC_window.M_files
@@ -414,8 +481,10 @@ LoupeLoupeC_window.M_frame_texture -> LoupeLoupeC_window.M_gpu
 LoupeLoupeC_window.M_run_window -> LoupeLoupeC_window.M_frame_texture
 LoupeLoupeC_window.M_run_window -> LoupeLoupeC_window.M_observer
 LoupeLoupeC_window.M_path_editor -> LoupeLoupeC_window.M_panels
+LoupeLoupeC_window.M_console -> LoupeLoupeC_log
 LoupeLoupeC_window.M_files -> LoupeLoupeC_src
 LoupeLoupeC_window.M_frame_texture -> LoupeLoupeC_engine
+LoupeLoupeC_window.M_gpu -> LoupeLoupeC_log
 LoupeLoupeC_window.M_observer -> LoupeLoupeC_engine
 LoupeLoupeC_window.M_panels -> LoupeLoupeC_src
 LoupeLoupeC_window.M_path_editor -> LoupeLoupeC_editor
