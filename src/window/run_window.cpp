@@ -125,12 +125,12 @@ ready_recording(const ReadyJob& job) {
     return reserved;
 }
 
-// Where a recording from `board` is kept: <config>/recordings/<board>-<local time>.framerec,
-// the board's serial without its colons, which a Windows file name cannot hold.
-// A second recording within the same second takes -2, -3, ... rather than overwrite.
+// Where a recording from board `id` is kept: <config>/recordings/<board>-<local time>.framerec,
+// <board> being board_file_stem(id). A second recording within the same second
+// takes -2, -3, ... rather than overwrite.
 std::filesystem::path
-recording_file(const std::filesystem::path& config, std::string board) {
-    std::erase(board, ':');
+recording_file(const std::filesystem::path& config, const std::string& id) {
+    const std::string board = board_file_stem(id);
     const auto now = std::chrono::zoned_time(
         std::chrono::current_zone(), std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now()));
     const std::string stem = std::format("{}-{:%Y%m%d-%H%M%S}", board, now);
@@ -718,7 +718,7 @@ Window::attach(const window::Reserved& reserved) {
     std::unique_ptr<Frames> frames;
     std::unique_ptr<window::BoardLink> link;
     if (!folders_.config.empty() && !scratch_.path().empty()) {
-        const std::filesystem::path log = folders_.config / "logs" / std::format("{}.log", board);
+        const std::filesystem::path log = folders_.config / "logs" / std::format("{}.log", board_file_stem(board));
         Options live;
         live.out_bmp = utf8(scratch_.path() / "frame.bmp");
         frames = open_recording(live, reserved.packs, board, &why);

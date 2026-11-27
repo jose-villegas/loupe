@@ -38,11 +38,8 @@ BoardLink::start(const std::vector<std::string>& command, const fs::path& log, s
                  std::chrono::milliseconds end_within) {
     std::error_code error;
     fs::create_directories(log.parent_path(), error);
-    std::unique_ptr<BoardLink> link(new BoardLink());
-    link->log_ = log;
-    link->end_within_ = end_within;
-    if (!std::ofstream(link->log_)) {
-        *why = "cannot write " + utf8(link->log_);
+    if (!std::ofstream(log)) {
+        *why = "cannot write " + utf8(log);
         return nullptr;
     }
     std::vector<char*> argv = argv_of(command);
@@ -54,12 +51,17 @@ BoardLink::start(const std::vector<std::string>& command, const fs::path& log, s
     // not readable by anyone else on Windows, so its lines could not be
     // followed while the child runs.
     SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDERR_NUMBER, SDL_PROCESS_STDIO_APP);
-    link->process_ = SDL_CreateProcessWithProperties(props);
+    SDL_Process* process = SDL_CreateProcessWithProperties(props);
     SDL_DestroyProperties(props);
-    if (link->process_ == nullptr) {
+    if (process == nullptr) {
         *why = std::string("cannot start autana record: ") + SDL_GetError();
         return nullptr;
     }
+    // Made only once its child runs: the destructor waits for a child to end.
+    std::unique_ptr<BoardLink> link(new BoardLink());
+    link->process_ = process;
+    link->log_ = log;
+    link->end_within_ = end_within;
     link->reader_ = std::jthread([raw = link.get()](const std::stop_token& stop) {
         try {
             raw->read_pipes(stop);

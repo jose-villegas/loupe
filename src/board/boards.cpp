@@ -39,6 +39,12 @@ is_token(std::string_view line) {
 
 } // namespace
 
+std::string
+board_file_stem(std::string id) {
+    std::erase(id, ':');
+    return id;
+}
+
 std::vector<std::string>
 autana_command(const std::vector<std::string>& args) {
 #if defined(_WIN32)

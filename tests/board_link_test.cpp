@@ -1,6 +1,7 @@
 // A board link against a fake `autana record`: every stream byte arrives
 // through take(), stderr goes to the log, console lines reach the child's stdin, and
-// stop() ends it; a child that never ends is let go within its bound.
+// stop() ends it; a child that never ends is let go within its bound, and a
+// link that cannot start says so at once. A board's serial names its log.
 // parse_boards reads `autana devices --json`'s shape.
 #include <chrono>
 #include <cstdint>
@@ -28,6 +29,11 @@ constexpr auto POLL = std::chrono::milliseconds(10);
 // The bound a hung child is given, and how long letting it go may take in all.
 constexpr auto HUNG_BOUND = std::chrono::milliseconds(500);
 constexpr auto HUNG_LET_GO = std::chrono::seconds(10);
+// How long a link that cannot start may take to say so.
+constexpr auto REFUSED_WITHIN = std::chrono::seconds(1);
+// A board's serial as autana lists it, and its file stem.
+constexpr const char SERIAL[] = "90:70:69:FE:A3:08";
+constexpr const char SERIAL_STEM[] = "907069FEA308";
 // What fake_record.cpp writes last.
 constexpr const char DONE[] = "fake_record: done";
 // `autana devices --json`'s shape after a note on stderr: a board plugged in
@@ -148,6 +154,36 @@ hung_is_let_go(const fs::path& fake, const fs::path& folder) {
     return expect(std::chrono::steady_clock::now() - began < HUNG_LET_GO, "a child that never ends is let go");
 }
 
+// A log that cannot be written refuses the link at once, with no child to
+// wait for: the window waited the whole END_WITHIN for one that never ran.
+bool
+unwritable_log_refused_at_once(const fs::path& fake, const fs::path& folder) {
+    const fs::path not_a_folder = folder / "not-a-folder";
+    std::ofstream(not_a_folder) << "a file";
+    std::string why;
+    const auto began = std::chrono::steady_clock::now();
+    const std::unique_ptr<loupe::window::BoardLink> link = loupe::window::BoardLink::start(
+        {loupe::utf8(fake), loupe::utf8(folder / "payload.bin")}, not_a_folder / "board.log", &why);
+    const auto took = std::chrono::steady_clock::now() - began;
+    return expect(link == nullptr && !why.empty() && took < REFUSED_WITHIN,
+                  "a log that cannot be written refuses the link at once");
+}
+
+// A board's serial names its log: the colons go, and the link starts with it.
+bool
+serial_names_a_log(const fs::path& fake, const fs::path& folder) {
+    const std::string stem = loupe::board_file_stem(SERIAL);
+    bool ok = expect(stem == SERIAL_STEM, "a serial's file stem drops its colons");
+    std::string why;
+    std::unique_ptr<loupe::window::BoardLink> link = loupe::window::BoardLink::start(
+        {loupe::utf8(fake), loupe::utf8(folder / "payload.bin")}, folder / (stem + ".log"), &why, HUNG_BOUND);
+    ok &= expect(link != nullptr, "a link logs to its board's file stem");
+    if (link == nullptr) {
+        std::fprintf(stderr, "%s: %s\n", TEST, why.c_str());
+    }
+    return ok;
+}
+
 } // namespace
 
 int
@@ -170,5 +206,7 @@ main(int argc, char** argv) {
     ok &= token_found();
     ok &= ends_on_stop(fake, folder, payload);
     ok &= hung_is_let_go(fake, folder);
+    ok &= unwritable_log_refused_at_once(fake, folder);
+    ok &= serial_names_a_log(fake, folder);
     return ok ? 0 : 1;
 }

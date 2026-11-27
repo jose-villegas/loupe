@@ -27,6 +27,9 @@ struct BoardList {
     std::string why;
 };
 
+// `id` as a file name holds it: without the colons of a serial, which a
+// Windows file name cannot hold.
+std::string board_file_stem(std::string id);
 // The command line that runs autana with `args`: through cmd.exe on Windows,
 // where autana is a .cmd; autana from PATH elsewhere.
 std::vector<std::string> autana_command(const std::vector<std::string>& args);
