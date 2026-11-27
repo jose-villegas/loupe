@@ -43,7 +43,6 @@ constexpr const char INSPECTOR[] = "Inspector";
 constexpr const char DEBUGGER[] = "Frame debugger";
 // The scratch frame autana's close writes (Window::scratch_), and the suffix
 // of the engine's stdout beside it, which the log reads as ENGINE's lines.
-
 constexpr const char FRAME_BMP[] = "frame.bmp";
 constexpr const char ENGINE_OUT_SUFFIX[] = ".console";
 constexpr const char ENGINE[] = "autana";
@@ -435,9 +434,9 @@ Window::finish() {
     std::string why;
     const update::Follow follow = update::follow(copy_);
     if (updates_ && follow != update::Follow::Off) {
-        update::log(copy_, update::apply_staged(copy_, follow, &why) ? "swapped the staged build in"
-                           : why.empty()                             ? "nothing staged"
-                                                                     : why);
+        update::log(update::apply_staged(copy_, follow, &why) ? "swapped the staged build in"
+                    : why.empty()                             ? "nothing staged"
+                                                              : why);
     }
     return ok_;
 }

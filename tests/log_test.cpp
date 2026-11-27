@@ -87,6 +87,9 @@ levels_from_words() {
                      && loupe::log::level_of("scene.toml:3: error: bad key", Level::Info) == Level::Error
                      && loupe::log::level_of("ModuleNotFoundError: No module named 'x'", Level::Info) == Level::Error
                      && loupe::log::level_of("no Error: here", Level::Info) == Level::Info
+                     && loupe::log::level_of("errors: 0", Level::Info) == Level::Info
+                     && loupe::log::level_of("x.py:3: UserWarning: old", Level::Info) == Level::Warning
+                     && loupe::log::level_of("UserWarning: old", Level::Info) == Level::Warning
                      && loupe::log::level_of("WARNING: no bake", Level::Info) == Level::Warning
                      && loupe::log::level_of("x.cpp:1: warning: unused", Level::Info) == Level::Warning
                      && loupe::log::level_of("built 3 meshes", Level::Info) == Level::Info

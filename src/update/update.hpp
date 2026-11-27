@@ -3,7 +3,7 @@
 // is downloaded, checked against GitHub's SHA-256 digest and staged in
 // <config>/update/. When the window closes, the staged build takes this copy's
 // place, so the next start is the new one. A local build (Channel::None)
-// never asks. Every step is logged to <config>/update.log and the Console; nothing pops up.
+// never asks. Every step is logged to the Console and <config>/loupe.log; nothing pops up.
 #pragma once
 
 #include <cstdint>
@@ -64,7 +64,7 @@ Fetch curl(const std::filesystem::path& log, const std::stop_token& stop = {});
 
 // One check of `follow`'s channel through `fetch`; stages a newer, verified
 // build, and clears the stage when nothing is newer. What it did, as one line
-// for update.log.
+// for the log.
 std::string check(const Copy& copy, Follow follow, const Fetch& fetch);
 // check() through curl on its own thread, logged; no thread for a local
 // build, Off, or no settings folder. Stopping the thread ends its download.
@@ -80,7 +80,7 @@ bool apply_staged(const Copy& copy, Follow follow, std::string* why);
 // At start: removes what the last swap set aside; "Updated to <version> (<commit>)"
 // when `copy` is a build swapped in since the last start.
 std::optional<std::string> settle(const Copy& copy);
-// `line`, timestamped, appended to <config>/update.log, and in Loupe's log.
-void log(const Copy& copy, const std::string& line);
+// `line` in Loupe's log, from "update".
+void log(const std::string& line);
 
 } // namespace loupe::update

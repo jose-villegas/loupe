@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <future>
 #include <mutex>
 #include <string>
 #include <string_view>
@@ -52,9 +53,10 @@ class Ring {
     size_t oldest_ = 0;
 };
 
-// A line's level from its words: one that starts with "error", "fatal",
-// "traceback" or an exception's name and a colon (ValueError:), or holds
-// ": error", is an error; "warning" so, a warning;
+// A line's level from its words, each a whole word: one that starts with
+// "error", "fatal" or "traceback", holds ": error" or a field that is an
+// exception's name (ValueError:), is an error; "warning" or a warning's name
+// (UserWarning:) so, a warning;
 // anything else, `otherwise`. For the output of programs, which says no level.
 Level level_of(std::string_view text, Level otherwise);
 
@@ -113,8 +115,8 @@ class Tail {
 
 // While it lives, what anything in the process writes to stderr, the
 // engine's C and the libraries too, goes to `to` as lines from STDERR, and
-// `to` echoes to the stderr there was before: `saved_`. A reader thread
-// reads the pipe's end `read_`; `echo_` is what the sink echoed to before.
+// `to` echoes to the stderr there was before, `saved_`; `echo_` is what it
+// echoed to before. A reader thread reads the pipe until `done_`.
 class StderrCapture {
   public:
     explicit StderrCapture(Sink& to = sink());
@@ -128,9 +130,9 @@ class StderrCapture {
     Sink& to_;
     int fd_ = -1;
     int saved_ = -1;
-    int read_ = -1;
     int echo_ = -1;
     std::thread reader_;
+    std::future<void> done_;
 };
 
 // A program started from a terminal on Windows, which shows a GUI program no

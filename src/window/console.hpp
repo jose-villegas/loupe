@@ -6,7 +6,10 @@
 // scrolled to the bottom, and stays where it is while scrolled up.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 #include "imgui.h"
 #include "log/log.hpp"
@@ -16,13 +19,18 @@ namespace loupe::window {
 // The panel's name, which docks it.
 constexpr const char CONSOLE[] = "Console";
 
-// The panel's lines, pulled from the sink after `seen`, and its settings.
+// The panel's lines, pulled from the sink after `seen`, its settings, and the
+// rows its filter passed, for the lines up to `rows_seen` under `rows_filter`.
 struct Console {
     log::Ring lines{log::KEPT_LINES};
     uint64_t seen = 0;
     ImGuiTextFilter filter;
     bool times = true;
     bool open = false;
+    std::vector<int> rows;
+    uint64_t rows_seen = UINT64_MAX;
+    size_t rows_kept = 0;
+    std::string rows_filter;
 };
 
 // Takes the lines the sink holds after `console.seen`.

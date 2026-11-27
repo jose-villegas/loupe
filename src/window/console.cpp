@@ -31,20 +31,28 @@ local_time(std::time_t at) {
     return out;
 }
 
-// The indexes of `console`'s lines its filter passes.
-std::vector<int>
-passed(const Console& console) {
-    std::vector<int> out;
+// `console.rows`: the indexes of its lines its filter passes, each line's
+// source and text as one, found again only when the lines or the filter changed.
+void
+filter_rows(Console& console) {
+    const std::string filter = console.filter.InputBuf;
+    if (console.rows_seen == console.seen && console.rows_filter == filter
+        && console.rows_kept == console.lines.size()) {
+        return;
+    }
+    console.rows.clear();
     for (size_t i = 0; i < console.lines.size(); i++) {
         const log::Line& line = console.lines[i];
-        if (console.filter.PassFilter(line.text.c_str()) || console.filter.PassFilter(line.source.c_str())) {
-            out.push_back(static_cast<int>(i));
+        if (console.filter.PassFilter(std::format("[{}] {}", line.source, line.text).c_str())) {
+            console.rows.push_back(static_cast<int>(i));
         }
     }
-    return out;
+    console.rows_seen = console.seen;
+    console.rows_filter = filter;
+    console.rows_kept = console.lines.size();
 }
 
-// One line as a selectable row, in its level's colour, its right-click menu copying it.
+// One line in its level's colour, its right-click menu copying it.
 void
 draw_line(const log::Line& line, bool times) {
     const std::string text = shown_line(line, times);
@@ -53,7 +61,8 @@ draw_line(const log::Line& line, bool times) {
         ImGui::PushStyleColor(ImGuiCol_Text, line.level == log::Level::Error ? ERROR_COLOUR : WARNING_COLOUR);
     }
     ImGui::PushID(static_cast<int>(line.seq));
-    ImGui::Selectable(text.c_str());
+    // Text, not a label: a line's own "##" would hide what follows it.
+    ImGui::TextUnformatted(text.c_str());
     if (ImGui::BeginPopupContextItem("line")) {
         if (ImGui::MenuItem("Copy line")) {
             ImGui::SetClipboardText(text.c_str());
@@ -74,16 +83,19 @@ draw_lines(const Console& console, const std::vector<int>& rows) {
         return;
     }
     const bool at_bottom = ImGui::GetScrollY() >= ImGui::GetScrollMaxY();
-    const FontScope mono(FontRole::Mono);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 0));
-    ImGuiListClipper clipper;
-    clipper.Begin(static_cast<int>(rows.size()));
-    while (clipper.Step()) {
-        for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
-            draw_line(console.lines[static_cast<size_t>(rows[static_cast<size_t>(row)])], console.times);
+    {
+        // Ended before EndChild, which checks the font stack is as Begin found it.
+        const FontScope mono(FontRole::Mono);
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 0));
+        ImGuiListClipper clipper;
+        clipper.Begin(static_cast<int>(rows.size()));
+        while (clipper.Step()) {
+            for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
+                draw_line(console.lines[static_cast<size_t>(rows[static_cast<size_t>(row)])], console.times);
+            }
         }
+        ImGui::PopStyleVar();
     }
-    ImGui::PopStyleVar();
     if (at_bottom) {
         ImGui::SetScrollHereY(1.0F);
     }
@@ -122,16 +134,16 @@ draw_console(Console& console) {
     constexpr const char FILTER[] = "Filter";
     ImGui::SetNextItemWidth(-(ImGui::CalcTextSize(FILTER).x + ImGui::GetStyle().ItemInnerSpacing.x));
     console.filter.Draw(FILTER);
-    const std::vector<int> rows = passed(console);
+    filter_rows(console);
     if (copy) {
         std::string text;
-        for (const int row : rows) {
+        for (const int row : console.rows) {
             text += shown_line(console.lines[static_cast<size_t>(row)], console.times) + '\n';
         }
         ImGui::SetClipboardText(text.c_str());
     }
     ImGui::Separator();
-    draw_lines(console, rows);
+    draw_lines(console, console.rows);
 }
 
 } // namespace loupe::window

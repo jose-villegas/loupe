@@ -40,7 +40,7 @@ scene_list(const char* heading, const std::vector<std::filesystem::path>& scenes
 bool
 draw_menu(About& about, EditMenu& edit, bool* console) {
     bool open = false;
-    if (ImGui::Shortcut(CONSOLE_KEYS, ImGuiInputFlags_RouteGlobal)) {
+    if (!ImGui::GetIO().WantTextInput && ImGui::Shortcut(CONSOLE_KEYS, ImGuiInputFlags_RouteGlobal)) {
         *console = !*console;
     }
     if (ImGui::BeginMenuBar()) {

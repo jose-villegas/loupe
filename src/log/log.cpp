@@ -5,6 +5,8 @@
 #include <cctype>
 #include <cstdio>
 #include <format>
+#include <future>
+#include <initializer_list>
 #include <system_error>
 #include <utility>
 
@@ -60,7 +62,7 @@ open_pipe(std::array<int, 2>& ends) {
     return _pipe(ends.data(), PIPE_BYTES, _O_BINARY | _O_NOINHERIT) == 0;
 }
 
-// stderr as dup2() left it is inherited; Loupe's programs get their own.
+// What dup() and dup2() made is inherited; Loupe's programs get their own stderr.
 void
 keep_from_programs(int fd) {
     SetHandleInformation(reinterpret_cast<HANDLE>(_get_osfhandle(fd)), HANDLE_FLAG_INHERIT, 0);
@@ -103,21 +105,39 @@ open_pipe(std::array<int, 2>& ends) {
 }
 
 void
-keep_from_programs(int /*fd*/) {}
+keep_from_programs(int fd) {
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+}
 #endif
 
+std::string
+lowered(std::string_view text) {
+    std::string lower(text);
+    std::ranges::transform(lower, lower.begin(), [](char c) { return std::tolower(static_cast<unsigned char>(c)); });
+    return lower;
+}
+
+// Whether `words` stands in `lower` at `at`, no letter running on after it.
 bool
-starts_with_word(std::string_view text, std::string_view word) {
-    return text.size() >= word.size() && std::ranges::equal(text.substr(0, word.size()), word, [](char a, char b) {
-               return std::tolower(static_cast<unsigned char>(a)) == b;
-           });
+word_at(std::string_view lower, size_t at, std::string_view words) {
+    const size_t end = at + words.size();
+    return lower.substr(at, words.size()) == words
+           && (end >= lower.size() || std::isalpha(static_cast<unsigned char>(lower[end])) == 0);
 }
 
 bool
-holds(std::string_view text, std::string_view words) {
-    std::string lower(text);
-    std::ranges::transform(lower, lower.begin(), [](char c) { return std::tolower(static_cast<unsigned char>(c)); });
-    return lower.find(words) != std::string::npos;
+starts_with_word(std::string_view lower, std::string_view word) {
+    return word_at(lower, 0, word);
+}
+
+bool
+holds(std::string_view lower, std::string_view words) {
+    for (size_t at = lower.find(words); at != std::string_view::npos; at = lower.find(words, at + 1)) {
+        if (word_at(lower, at, words)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 char
@@ -172,18 +192,33 @@ Ring::operator[](size_t i) const {
     return lines_[(oldest_ + i) % lines_.size()];
 }
 
+// Whether a colon-ended field of `words` is one name ending in one of `ends`
+// (ValueError: in "x.py:3: ValueError: bad").
+bool
+names_one_of(std::string_view words, std::initializer_list<std::string_view> ends) {
+    size_t start = 0;
+    for (size_t colon = words.find(':'); colon != std::string_view::npos; colon = words.find(':', start)) {
+        std::string_view field = words.substr(start, colon - start);
+        field.remove_prefix(std::min(field.find_first_not_of(' '), field.size()));
+        const bool named = !field.empty() && field.find(' ') == std::string_view::npos;
+        if (named && std::ranges::any_of(ends, [field](std::string_view end) { return field.ends_with(end); })) {
+            return true;
+        }
+        start = colon + 1;
+    }
+    return false;
+}
+
 Level
 level_of(std::string_view text, Level otherwise) {
     const size_t first = text.find_first_not_of(" \t");
     const std::string_view words = first == std::string_view::npos ? std::string_view() : text.substr(first);
-    const std::string_view head = words.substr(0, words.find(':'));
-    const bool raised = words.find(':') != std::string_view::npos && head.find(' ') == std::string_view::npos
-                        && (head.ends_with("Error") || head.ends_with("Exception"));
-    if (raised || starts_with_word(words, "error") || starts_with_word(words, "fatal")
-        || starts_with_word(words, "traceback") || holds(words, ": error")) {
+    const std::string lower = lowered(words);
+    if (names_one_of(words, {"Error", "Exception"}) || starts_with_word(lower, "error")
+        || starts_with_word(lower, "fatal") || starts_with_word(lower, "traceback") || holds(lower, ": error")) {
         return Level::Error;
     }
-    if (starts_with_word(words, "warning") || holds(words, ": warning")) {
+    if (names_one_of(words, {"Warning"}) || starts_with_word(lower, "warning") || holds(lower, ": warning")) {
         return Level::Warning;
     }
     return otherwise;
@@ -342,33 +377,43 @@ StderrCapture::StderrCapture(Sink& to) : to_(to), fd_(fileno(stderr)) {
     }
     close_fd(ends[1]);
     keep_from_programs(fd_);
-    read_ = ends[0];
+    keep_from_programs(saved_);
     echo_ = to_.echo();
     to_.echo_to(saved_);
-    reader_ = std::thread([this] {
+    std::promise<void> read_all;
+    done_ = read_all.get_future();
+    reader_ = std::thread([read = ends[0], &to = to_, read_all = std::move(read_all)]() mutable {
         constexpr size_t CHUNK = 4096;
         std::array<char, CHUNK> bytes{};
         std::string partial;
-        for (long long got = 0; (got = read_fd(read_, bytes.data(), bytes.size())) > 0;) {
+        for (long long got = 0; (got = read_fd(read, bytes.data(), bytes.size())) > 0;) {
             split_lines(partial, std::string_view(bytes.data(), static_cast<size_t>(got)),
-                        [this](std::string_view line) { to_.write(level_of(line, Level::Warning), STDERR, line); });
+                        [&to](std::string_view line) { to.write(level_of(line, Level::Warning), STDERR, line); });
         }
         if (!partial.empty()) {
-            to_.write(level_of(partial, Level::Warning), STDERR, partial);
+            to.write(level_of(partial, Level::Warning), STDERR, partial);
         }
+        close_fd(read);
+        read_all.set_value();
     });
 }
 
-// stderr put back closes the pipe's last writing end, so the reader reads to its end and returns.
+// stderr put back closes the pipe's last writing end, so the reader reads to
+// its end and returns; a program still holding a copy would keep it reading,
+// so it is waited for READER_WAIT at most, then left to end with the process.
 StderrCapture::~StderrCapture() {
     if (saved_ < 0) {
         return;
     }
+    constexpr auto READER_WAIT = std::chrono::seconds(1);
     std::fflush(stderr);
     dup2_fd(saved_, fd_);
-    reader_.join();
     to_.echo_to(echo_);
-    close_fd(read_);
+    if (done_.wait_for(READER_WAIT) == std::future_status::ready) {
+        reader_.join();
+    } else {
+        reader_.detach();
+    }
     close_fd(saved_);
 }
 
