@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdio>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -116,11 +117,17 @@ pick(Editor& editor, const Frames& frames, const mat4f_t& clip_from_world, const
 // One inspector row per placement field, dragged or typed. A change moves the drag; letting go ends it.
 void
 placement_rows(Editor& editor, const editor::Object& object) {
-    const FontScope mono(FontRole::Mono);
+    std::array<const char*, editor::PLACEMENT_FIELDS.size()> labels = {};
+    for (size_t i = 0; i < labels.size(); i++) {
+        labels[i] = editor::PLACEMENT_FIELDS[i].name;
+    }
+    const float column = field_column(labels);
     for (size_t i = 0; i < editor::PLACEMENT_FIELDS.size(); i++) {
         const editor::PlacementField& field = editor::PLACEMENT_FIELDS[i];
         editor::Placement placement = shown_placement(editor, object);
-        if (ImGui::DragFloat3(field.name, (placement.*field.values).data(), FIELD_SPEEDS[i], 0.0F, 0.0F, "%.4g")) {
+        const std::string id = field_label(field.name, column);
+        const FontScope mono(FontRole::Mono);
+        if (ImGui::DragFloat3(id.c_str(), (placement.*field.values).data(), FIELD_SPEEDS[i], 0.0F, 0.0F, "%.4g")) {
             drag_to(editor, object, placement);
         }
         if (ImGui::IsItemDeactivatedAfterEdit()) {

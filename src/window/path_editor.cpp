@@ -1,10 +1,12 @@
 #include "window/path_editor.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <format>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "editor/doc.hpp"
@@ -170,18 +172,23 @@ key_fields(Editor& editor, const KeyPick& pick, const std::vector<CameraKey>& ke
     CameraKey key = keys[pick.index];
     bool changed = false;
     bool ended = false;
+    const std::array<const char*, 3> labels = {"t (s)", "eye", "look_at"};
+    const float column = field_column(labels);
+    ImGui::BeginDisabled(pick.index == 0);
+    std::string id = field_label(labels[0], column);
     {
         const FontScope mono(FontRole::Mono);
-        ImGui::BeginDisabled(pick.index == 0);
-        if (ImGui::DragFloat("t (s)", &key.t, TIME_SPEED, 0.0F, 0.0F, "%.3f")) {
+        if (ImGui::DragFloat(id.c_str(), &key.t, TIME_SPEED, 0.0F, 0.0F, "%.3f")) {
             key.t = editor::clamp_time(keys, pick.index, key.t);
             changed = true;
         }
-        ended = ImGui::IsItemDeactivatedAfterEdit();
-        ImGui::EndDisabled();
-        changed |= ImGui::DragFloat3("eye", key.eye.data(), POINT_SPEED, 0.0F, 0.0F, "%.4g");
-        ended |= ImGui::IsItemDeactivatedAfterEdit();
-        changed |= ImGui::DragFloat3("look_at", key.look_at.data(), POINT_SPEED, 0.0F, 0.0F, "%.4g");
+    }
+    ended = ImGui::IsItemDeactivatedAfterEdit();
+    ImGui::EndDisabled();
+    for (const auto& [label, point] : {std::pair{labels[1], &key.eye}, std::pair{labels[2], &key.look_at}}) {
+        id = field_label(label, column);
+        const FontScope mono(FontRole::Mono);
+        changed |= ImGui::DragFloat3(id.c_str(), point->data(), POINT_SPEED, 0.0F, 0.0F, "%.4g");
         ended |= ImGui::IsItemDeactivatedAfterEdit();
     }
     if (changed) {

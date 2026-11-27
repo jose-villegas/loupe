@@ -18,14 +18,14 @@
 - loupe.screenshot: free-view.png
 - loupe.click: "//Inspector/###key3"
 - name: Key 3's eye moved across the atrium
-  loupe.input: {ref: "//Inspector/eye/$$0", value: "500"}
+  loupe.input: {ref: "//Inspector/##eye/$$0", value: "500"}
 - loupe.screenshot: key-moved.png
 
 - name: Through the tour
   loupe.open: ../../../third_party/autana/launcher/demo/sponza/sponza.scene.toml --camera tour --dt 100
 - loupe.click: //Outliner/tour
 - loupe.click: "//Inspector/###key3"
-- loupe.input: {ref: "//Inspector/eye/$$0", value: "500"}
+- loupe.input: {ref: "//Inspector/##eye/$$0", value: "500"}
 - name: The frame 18 s along the path
   loupe.input: {ref: "//Viewport/##path", value: "18"}
 - name: Nothing selected, so no path is drawn over the frame

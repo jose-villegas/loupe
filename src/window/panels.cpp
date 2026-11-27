@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cstddef>
+#include <string>
 
 #include "imgui.h"
 #include "paths.hpp"
@@ -156,6 +157,29 @@ draw_frame(const FrameTexture& texture) {
     ImGui::Image(texture.ref(), size);
     list->AddCallback(ImGui::GetPlatformIO().DrawCallback_SetSamplerLinear, nullptr);
     return {.min = ImGui::GetItemRectMin(), .max = ImGui::GetItemRectMax()};
+}
+
+float
+field_column(std::span<const char* const> labels) {
+    const FontScope text(FontRole::Text);
+    float widest = 0.0F;
+    for (const char* label : labels) {
+        widest = std::max(widest, ImGui::CalcTextSize(label).x);
+    }
+    return widest + ImGui::GetStyle().ItemSpacing.x;
+}
+
+std::string
+field_label(const char* label, float column) {
+    const float start = ImGui::GetCursorPosX();
+    {
+        const FontScope text(FontRole::Text);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+    }
+    ImGui::SameLine(start + column);
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    return std::string("##") + label;
 }
 
 void
