@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <future>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -160,6 +161,16 @@ struct WaitFor {
 WaitLine waiting_for_frames(const BoardLink::Status& status, const Frames::StreamState& stream, const WaitFor& wait);
 // `line` wrapped to the room left in the window, centred top to bottom.
 void draw_waiting(const WaitLine& line);
+
+// Field rows, as an inspector lays them out: a label, then its values. The
+// labels share one column, so every row's values start at the same x.
+// The column's width for these rows: the widest of `labels`, and a gap.
+float field_column(std::span<const char* const> labels);
+// One row: `label` in the Text face, then `values` in Mono, dragged or typed,
+// each left-aligned in a frame tighter than a button's, the frames
+// sharing the rest of the panel's width. Laid out and named as
+// DragFloatN(label) lays out and names its values. True when a value changed.
+bool field_row(const char* label, float column, std::span<float> values, float speed, const char* format);
 
 // Where draw_frame put the frame, in screen pixels.
 struct FrameRect {
