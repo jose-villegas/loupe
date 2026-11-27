@@ -6,8 +6,8 @@ namespace loupe::window {
 
 enum class FontRole { Text, Mono };
 
-// Adds both roles' faces to ImGui's atlas, Text first as the default: once,
-// after ImGui::CreateContext. Without LOUPE_LATIN_MODERN, ImGui's own font
+// Adds both roles' faces to ImGui's atlas, Text first as the default: after
+// each ImGui::CreateContext. Without LOUPE_LATIN_MODERN, ImGui's own font
 // draws both.
 void load_fonts();
 

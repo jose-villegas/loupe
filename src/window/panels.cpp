@@ -56,7 +56,7 @@ draw_menu(About& about, EditMenu& edit) {
     bool changed = false;
     if (ImGui::BeginPopupModal(ABOUT, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         {
-            // The version line carries the commit's hash.
+            // Both lines carry a commit's hash.
             const FontScope mono(FontRole::Mono);
             ImGui::TextUnformatted(about.version.c_str());
             if (!about.updated.empty()) {

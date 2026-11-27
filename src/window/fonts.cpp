@@ -18,33 +18,30 @@ constexpr unsigned char MONO_OTF[] = {
 // this is above ImGui's own 13 to keep the text as tall.
 constexpr float PIXELS = 17.0F;
 
-ImFont*
+void
 add(const unsigned char* otf, int size) {
     ImFontConfig config;
     config.FontDataOwnedByAtlas = false;
     // ImGui only reads the bytes; it takes them as writable.
-    return ImGui::GetIO().Fonts->AddFontFromMemoryTTF(const_cast<unsigned char*>(otf), size, PIXELS, &config);
+    ImGui::GetIO().Fonts->AddFontFromMemoryTTF(const_cast<unsigned char*>(otf), size, PIXELS, &config);
 }
 #endif
 
-// The Mono role's face; null without one of its own, and the default face draws it.
-ImFont* mono = nullptr;
-
 } // namespace
 
+// The atlas holds the faces in FontRole's order; a role without its own face draws in the first.
 void
 load_fonts() {
 #if LOUPE_LATIN_MODERN
     add(SANS_OTF, sizeof SANS_OTF);
-    mono = add(MONO_OTF, sizeof MONO_OTF);
-#else
-    mono = nullptr;
+    add(MONO_OTF, sizeof MONO_OTF);
 #endif
 }
 
 FontScope::FontScope(FontRole role) {
-    ImFont* const text = ImGui::GetIO().Fonts->Fonts[0];
-    ImGui::PushFont(role == FontRole::Mono && mono != nullptr ? mono : text, 0.0F);
+    const ImVector<ImFont*>& fonts = ImGui::GetIO().Fonts->Fonts;
+    const int i = static_cast<int>(role);
+    ImGui::PushFont(fonts[i < fonts.Size ? i : 0], 0.0F);
 }
 
 FontScope::~FontScope() { ImGui::PopFont(); }
