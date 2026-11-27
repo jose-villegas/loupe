@@ -19,6 +19,10 @@
 
 struct SDL_Process;
 
+namespace loupe {
+class ExitCode;
+} // namespace loupe
+
 namespace loupe::window {
 
 // The line autana record writes once the board has started recording (its
@@ -94,6 +98,7 @@ class BoardLink {
     std::string partial_; // the reader's: a stderr line not ended yet
     bool stopped_ = false;
     std::optional<int> exit_;
+    std::unique_ptr<ExitCode> exit_code_; // the code the child gave, where SDL does not say
     std::jthread reader_;
 };
 

@@ -219,4 +219,33 @@ start_unwaited(const fs::path& program, const std::vector<std::string>& args) {
 #endif
 }
 
+#if defined(_WIN32)
+ExitCode::ExitCode(int64_t pid)
+    : handle_(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid))) {}
+
+ExitCode::~ExitCode() {
+    if (handle_ != nullptr) {
+        CloseHandle(handle_);
+    }
+}
+
+int
+ExitCode::of(int reported) const {
+    DWORD code = 0;
+    if (handle_ == nullptr || !GetExitCodeProcess(handle_, &code) || code == STILL_ACTIVE) {
+        return reported;
+    }
+    return static_cast<int>(code);
+}
+#else
+ExitCode::ExitCode(int64_t /*pid*/) {}
+
+ExitCode::~ExitCode() = default;
+
+int
+ExitCode::of(int reported) const {
+    return reported;
+}
+#endif
+
 } // namespace loupe

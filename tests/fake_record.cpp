@@ -1,6 +1,8 @@
 // A stand-in for `autana record`: says on stderr that the board records,
 // writes PAYLOAD's bytes to stdout in pieces, echoes each stdin line to stderr, and ends once stdin closes, as autana
 // stops when its stdin ends. With --hang it never ends, as a stuck autana.
+// With --report it says on stderr whether it has a console window of its
+// own, and exits REPORT_EXIT.
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -15,6 +17,7 @@
 #if defined(_WIN32)
 #include <fcntl.h>
 #include <io.h>
+#include <windows.h>
 #endif
 
 namespace {
@@ -27,14 +30,32 @@ constexpr const char BEGAN[] = "FRAMEREC_BEGIN ring=98304 keyframe_every=30";
 constexpr const char DONE[] = "fake_record: done";
 constexpr std::string_view HANG = "--hang";
 constexpr auto HANG_NAP = std::chrono::seconds(1);
+constexpr std::string_view REPORT = "--report";
+// What --report exits with: no failure autana itself gives.
+constexpr int REPORT_EXIT = 3;
+
+// Whether this process has a console window: on Windows, one a console
+// program started from a program with none would open on the desktop.
+bool
+console_window() {
+#if defined(_WIN32)
+    return GetConsoleWindow() != nullptr;
+#else
+    return false;
+#endif
+}
 
 } // namespace
 
 int
 main(int argc, char** argv) {
+    if (argc == 2 && argv[1] == REPORT) {
+        std::fprintf(stderr, "fake_record: console window %s\n", console_window() ? "yes" : "no");
+        return REPORT_EXIT;
+    }
     const bool hang = argc == 3 && argv[2] == HANG;
     if (argc != 2 && !hang) {
-        std::fprintf(stderr, "usage: fake_record PAYLOAD [--hang]\n");
+        std::fprintf(stderr, "usage: fake_record PAYLOAD [--hang] | --report\n");
         return 2;
     }
 #if defined(_WIN32)

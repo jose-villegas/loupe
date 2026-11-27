@@ -1,7 +1,8 @@
 // A board link against a fake `autana record`: every stream byte arrives
 // through take(), stderr goes to the log, console lines reach the child's stdin, and
 // stop() ends it; a child that never ends is let go within its bound, and a
-// link that cannot start says so at once. A board's serial names its log.
+// link that cannot start says so at once. A board's serial names its log. The
+// child gets no console window of its own, and its exit code comes back.
 // parse_boards reads `autana devices --json`'s shape.
 #include <chrono>
 #include <cstdint>
@@ -11,6 +12,10 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 #include "board/boards.hpp"
 #include "paths.hpp"
@@ -36,6 +41,9 @@ constexpr const char SERIAL[] = "90:70:69:FE:A3:08";
 constexpr const char SERIAL_STEM[] = "907069FEA308";
 // What fake_record.cpp writes last.
 constexpr const char DONE[] = "fake_record: done";
+// What fake_record.cpp --report writes and exits with when it has no console window.
+constexpr const char NO_WINDOW[] = "fake_record: console window no";
+constexpr int REPORT_EXIT = 3;
 // `autana devices --json`'s shape after a note on stderr: a board plugged in
 // here, one on another host, one held.
 constexpr const char DEVICES[] =
@@ -186,6 +194,36 @@ serial_names_a_log(const fs::path& fake, const fs::path& folder) {
     return ok;
 }
 
+// The child runs with no console window of its own, which Windows would open
+// on the desktop for a console program started from a GUI one; and its exit
+// code is the one it gave.
+bool
+no_console_window(const fs::path& fake, const fs::path& folder) {
+#if defined(_WIN32)
+    // As Loupe, a GUI program: no console for the child to share. Its output
+    // still reaches ctest, which reads it from a pipe.
+    FreeConsole();
+#endif
+    std::string why;
+    const std::unique_ptr<loupe::window::BoardLink> link =
+        loupe::window::BoardLink::start({loupe::utf8(fake), "--report"}, folder / "report.log", &why);
+    if (link == nullptr) {
+        std::fprintf(stderr, "%s: %s\n", TEST, why.c_str());
+        return false;
+    }
+    const auto deadline = std::chrono::steady_clock::now() + END_WITHIN;
+    loupe::window::BoardLink::Status status = link->status();
+    while (status.running && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(POLL);
+        status = link->status();
+    }
+    std::fprintf(stderr, "%s: the child said \"%s\", exit %d\n", TEST, status.last_line.c_str(),
+                 status.exit.value_or(-1));
+    bool ok = expect(status.last_line == NO_WINDOW, "the child has no console window");
+    ok &= expect(status.exit == REPORT_EXIT, "the child's exit code comes back");
+    return ok;
+}
+
 } // namespace
 
 int
@@ -210,5 +248,6 @@ main(int argc, char** argv) {
     ok &= hung_is_let_go(fake, folder);
     ok &= unwritable_log_refused_at_once(fake, folder);
     ok &= serial_names_a_log(fake, folder);
+    ok &= no_console_window(fake, folder);
     return ok ? 0 : 1;
 }

@@ -51,6 +51,11 @@ BoardLink::start(const std::vector<std::string>& command, const fs::path& log, s
     // not readable by anyone else on Windows, so its lines could not be
     // followed while the child runs.
     SDL_SetNumberProperty(props, SDL_PROP_PROCESS_CREATE_STDERR_NUMBER, SDL_PROCESS_STDIO_APP);
+#if defined(_WIN32)
+    // No console window of its own on the desktop (CREATE_NO_WINDOW): Loupe
+    // has no console to share. SDL then reports its exit code as 0; exit_code_ reads it.
+    SDL_SetBooleanProperty(props, SDL_PROP_PROCESS_CREATE_BACKGROUND_BOOLEAN, true);
+#endif
     SDL_Process* process = SDL_CreateProcessWithProperties(props);
     SDL_DestroyProperties(props);
     if (process == nullptr) {
@@ -62,6 +67,8 @@ BoardLink::start(const std::vector<std::string>& command, const fs::path& log, s
     link->process_ = process;
     link->log_ = log;
     link->end_within_ = end_within;
+    link->exit_code_ = std::make_unique<ExitCode>(
+        SDL_GetNumberProperty(SDL_GetProcessProperties(process), SDL_PROP_PROCESS_PID_NUMBER, 0));
     link->reader_ = std::jthread([raw = link.get()](const std::stop_token& stop) {
         try {
             raw->read_pipes(stop);
@@ -178,7 +185,7 @@ BoardLink::Status
 BoardLink::status() {
     int code = 0;
     if (!exit_ && SDL_WaitProcess(process_, false, &code)) {
-        exit_ = code;
+        exit_ = exit_code_->of(code);
     }
     const bool running = !exit_ || !drained_;
     const std::scoped_lock lock(mutex_);
