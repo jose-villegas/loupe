@@ -231,41 +231,64 @@ start_unwaited(const fs::path& program, const std::vector<std::string>& args) {
 #endif
 }
 
+namespace {
+
+// A handle on process `pid`, from which its exit code can be read once it
+// ends; none where there is no such handle.
+void*
+open_child(int64_t pid) {
 #if defined(_WIN32)
-void
-leave_console() {
-    FreeConsole();
+    return OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid));
+#else
+    (void)pid;
+    return nullptr;
+#endif
 }
 
-ExitCode::ExitCode(int64_t pid)
-    : handle_(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid))) {}
+void
+close_child(void* handle) {
+#if defined(_WIN32)
+    CloseHandle(handle);
+#else
+    (void)handle;
+#endif
+}
+
+// The exit code `handle`'s process gave; none while it runs or when it cannot be read.
+std::optional<int>
+child_code(void* handle) {
+#if defined(_WIN32)
+    DWORD code = 0;
+    if (!GetExitCodeProcess(handle, &code) || code == STILL_ACTIVE) {
+        return std::nullopt;
+    }
+    return static_cast<int>(code);
+#else
+    (void)handle;
+    return std::nullopt;
+#endif
+}
+
+} // namespace
+
+void
+leave_console() {
+#if defined(_WIN32)
+    FreeConsole();
+#endif
+}
+
+ExitCode::ExitCode(int64_t pid) : handle_(open_child(pid)) {}
 
 ExitCode::~ExitCode() {
     if (handle_ != nullptr) {
-        CloseHandle(handle_);
+        close_child(handle_);
     }
 }
 
 int
 ExitCode::of(int reported) const {
-    DWORD code = 0;
-    if (handle_ == nullptr || !GetExitCodeProcess(handle_, &code) || code == STILL_ACTIVE) {
-        return reported;
-    }
-    return static_cast<int>(code);
+    return handle_ == nullptr ? reported : child_code(handle_).value_or(reported);
 }
-#else
-void
-leave_console() {}
-
-ExitCode::ExitCode(int64_t /*pid*/) {}
-
-ExitCode::~ExitCode() = default;
-
-int
-ExitCode::of(int reported) const {
-    return reported;
-}
-#endif
 
 } // namespace loupe
