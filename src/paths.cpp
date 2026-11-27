@@ -1,12 +1,25 @@
 #include "paths.hpp"
 
+#include <chrono>
 #include <fstream>
 #include <sstream>
 #include <system_error>
+#include <thread>
 
 namespace fs = std::filesystem;
 
 namespace loupe {
+
+namespace {
+
+// How long write_lines retries replacing its file. On Windows another
+// process (a virus scanner, the search indexer) can hold a file just written
+// for a moment, and replacing it then fails with access denied; Node's
+// graceful-fs retries such renames the same way.
+constexpr auto REPLACE_RETRY_FOR = std::chrono::seconds(1);
+constexpr auto REPLACE_RETRY_EVERY = std::chrono::milliseconds(10);
+
+} // namespace
 
 std::string
 utf8(const fs::path& path) {
@@ -55,7 +68,12 @@ write_lines(const std::filesystem::path& file, const std::vector<std::string>& l
             return false;
         }
     }
+    const auto give_up = std::chrono::steady_clock::now() + REPLACE_RETRY_FOR;
     fs::rename(temp, file, error);
+    while (error && std::chrono::steady_clock::now() < give_up) {
+        std::this_thread::sleep_for(REPLACE_RETRY_EVERY);
+        fs::rename(temp, file, error);
+    }
     return !error;
 }
 
