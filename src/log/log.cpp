@@ -192,6 +192,8 @@ Ring::operator[](size_t i) const {
     return lines_[(oldest_ + i) % lines_.size()];
 }
 
+namespace {
+
 // Whether a colon-ended field of `words` is one name ending in one of `ends`
 // (ValueError: in "x.py:3: ValueError: bad").
 bool
@@ -208,6 +210,8 @@ names_one_of(std::string_view words, std::initializer_list<std::string_view> end
     }
     return false;
 }
+
+} // namespace
 
 Level
 level_of(std::string_view text, Level otherwise) {
@@ -230,23 +234,36 @@ file_line(const Line& line) {
                        letter(line.level), line.source, line.text);
 }
 
-Sink::Sink(size_t capacity, int echo) : ring_(capacity), echo_(echo) {}
+Sink::Sink(size_t capacity, int echo) // NOLINT(bugprone-easily-swappable-parameters): a count, then a descriptor
+    : ring_(capacity), echo_(echo) {}
 
+// The echo is written once the lock is let go, so a terminal that blocks
+// (a selection held in it, a full pipe) holds up no other writer.
 void
-Sink::write(Level level, std::string_view source, std::string_view text) {
+Sink::write(Level level, std::string_view source, // NOLINT(bugprone-easily-swappable-parameters): who, then what
+            std::string_view text) {
     const auto now = std::chrono::system_clock::now();
     std::string rest(text);
     if (!rest.ends_with('\n')) {
         rest += '\n';
     }
-    const std::scoped_lock hold(lock_);
-    std::string partial;
-    split_lines(partial, rest, [&](std::string_view part) {
-        put(Line{.time = now, .level = level, .source = std::string(source), .text = std::string(part), .seq = 0});
-    });
+    std::string echoed;
+    int echo = -1;
+    {
+        const std::scoped_lock hold(lock_);
+        echo = echo_;
+        std::string partial;
+        split_lines(partial, rest, [&](std::string_view part) {
+            echoed += put(
+                Line{.time = now, .level = level, .source = std::string(source), .text = std::string(part), .seq = 0});
+        });
+    }
+    if (echo >= 0 && !echoed.empty()) {
+        write_fd(echo, echoed);
+    }
 }
 
-void
+std::string
 Sink::put(const Line& line) {
     Line kept = line;
     kept.seq = ++last_;
@@ -254,10 +271,12 @@ Sink::put(const Line& line) {
         file_ << file_line(kept) << '\n';
         file_.flush();
     }
-    if (echo_ >= 0 && (kept.source == LOUPE || kept.source == STDERR)) {
-        write_fd(echo_, kept.source == LOUPE ? std::format("loupe: {}\n", kept.text) : kept.text + '\n');
+    std::string echoed;
+    if (kept.source == LOUPE || kept.source == STDERR) {
+        echoed = kept.source == LOUPE ? std::format("loupe: {}\n", kept.text) : kept.text + '\n';
     }
     ring_.push(std::move(kept));
+    return echoed;
 }
 
 uint64_t
@@ -376,7 +395,10 @@ StderrCapture::StderrCapture(Sink& to) : to_(to), fd_(fileno(stderr)) {
         return;
     }
     close_fd(ends[1]);
+#ifdef _WIN32
+    // Elsewhere programs keep stderr, as they always had it.
     keep_from_programs(fd_);
+#endif
     keep_from_programs(saved_);
     echo_ = to_.echo();
     to_.echo_to(saved_);
@@ -388,10 +410,10 @@ StderrCapture::StderrCapture(Sink& to) : to_(to), fd_(fileno(stderr)) {
         std::string partial;
         for (long long got = 0; (got = read_fd(read, bytes.data(), bytes.size())) > 0;) {
             split_lines(partial, std::string_view(bytes.data(), static_cast<size_t>(got)),
-                        [&to](std::string_view line) { to.write(level_of(line, Level::Warning), STDERR, line); });
+                        [&to](std::string_view line) { to.write(level_of(line, Level::Info), STDERR, line); });
         }
         if (!partial.empty()) {
-            to.write(level_of(partial, Level::Warning), STDERR, partial);
+            to.write(level_of(partial, Level::Info), STDERR, partial);
         }
         close_fd(read);
         read_all.set_value();

@@ -20,16 +20,15 @@ namespace loupe::window {
 constexpr const char CONSOLE[] = "Console";
 
 // The panel's lines, pulled from the sink after `seen`, its settings, and the
-// rows its filter passed, for the lines up to `rows_seen` under `rows_filter`.
+// seqs of the lines its filter passed, up to `rows_seen`, under `rows_filter`.
 struct Console {
     log::Ring lines{log::KEPT_LINES};
     uint64_t seen = 0;
     ImGuiTextFilter filter;
     bool times = true;
     bool open = false;
-    std::vector<int> rows;
-    uint64_t rows_seen = UINT64_MAX;
-    size_t rows_kept = 0;
+    std::vector<uint64_t> rows;
+    uint64_t rows_seen = 0;
     std::string rows_filter;
 };
 

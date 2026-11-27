@@ -5,7 +5,6 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -26,8 +25,10 @@ struct Checks {
 // The bytes of the file at `path`; empty when it does not read.
 inline std::string
 read_file(const std::filesystem::path& path) {
-    std::ifstream in(path, std::ios::binary);
-    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
+    const std::ifstream in(path, std::ios::binary);
+    std::ostringstream bytes;
+    bytes << in.rdbuf();
+    return bytes.str();
 }
 
 // `text`'s lines, without their ends.

@@ -47,4 +47,5 @@ scrolled up, it stays put. It keeps the last 10,000 lines. The window also
 writes every line to `loupe.log` in the settings folder
 (`%APPDATA%\autana\loupe` or `~/.local/share/autana/loupe`), the last run's
 kept as `loupe-prev.log`. On Windows `loupe` opens no console window; run from
-a terminal, its errors, usage and `--version` still print there.
+a terminal, its errors, usage and `--version` still print there, after the
+prompt, since the terminal does not wait for a window program.

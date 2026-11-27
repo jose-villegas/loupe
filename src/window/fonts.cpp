@@ -19,9 +19,11 @@ constexpr unsigned char MONO_OTF[] = {
 constexpr float PIXELS = 17.0F;
 
 void
-add(const unsigned char* otf, int size) {
+add(const unsigned char* otf, int size, bool whole_pixels) {
     ImFontConfig config;
     config.FontDataOwnedByAtlas = false;
+    // A monospaced face's columns on whole pixels, as a terminal's cells.
+    config.PixelSnapH = whole_pixels;
     // ImGui only reads the bytes; it takes them as writable.
     ImGui::GetIO().Fonts->AddFontFromMemoryTTF(const_cast<unsigned char*>(otf), size, PIXELS, &config);
 }
@@ -33,8 +35,8 @@ add(const unsigned char* otf, int size) {
 void
 load_fonts() {
 #if LOUPE_LATIN_MODERN
-    add(SANS_OTF, sizeof SANS_OTF);
-    add(MONO_OTF, sizeof MONO_OTF);
+    add(SANS_OTF, sizeof SANS_OTF, false);
+    add(MONO_OTF, sizeof MONO_OTF, true);
 #endif
 }
 

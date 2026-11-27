@@ -78,7 +78,8 @@ class Sink {
     int echo() const;
 
   private:
-    void put(const Line& line);
+    // Keeps `line`; what is to be echoed of it.
+    std::string put(const Line& line);
 
     mutable std::mutex lock_;
     Ring ring_;
@@ -116,7 +117,8 @@ class Tail {
 // While it lives, what anything in the process writes to stderr, the
 // engine's C and the libraries too, goes to `to` as lines from STDERR, and
 // `to` echoes to the stderr there was before, `saved_`; `echo_` is what it
-// echoed to before. A reader thread reads the pipe until `done_`.
+// echoed to before. A reader thread reads the pipe until `done_`; one left
+// running past the capture writes to `to`, so `to` must outlive it, as sink() does.
 class StderrCapture {
   public:
     explicit StderrCapture(Sink& to = sink());

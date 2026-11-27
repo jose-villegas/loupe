@@ -1,5 +1,6 @@
 #include "window/console.hpp"
 
+#include <algorithm>
 #include <ctime>
 #include <format>
 #include <string>
@@ -31,25 +32,37 @@ local_time(std::time_t at) {
     return out;
 }
 
-// `console.rows`: the indexes of its lines its filter passes, each line's
-// source and text as one, found again only when the lines or the filter changed.
+// `console.rows`: the seqs of the lines its filter passes, each line's source
+// and text as one. A line is filtered once, when it comes; the rows of lines
+// the ring let go leave from the front; a new filter filters every line again.
 void
 filter_rows(Console& console) {
     const std::string filter = console.filter.InputBuf;
-    if (console.rows_seen == console.seen && console.rows_filter == filter
-        && console.rows_kept == console.lines.size()) {
+    if (console.rows_filter != filter) {
+        console.rows.clear();
+        console.rows_seen = 0;
+        console.rows_filter = filter;
+    }
+    if (console.lines.size() == 0) {
+        console.rows.clear();
         return;
     }
-    console.rows.clear();
-    for (size_t i = 0; i < console.lines.size(); i++) {
+    const uint64_t first = console.lines[0].seq;
+    console.rows.erase(console.rows.begin(), std::ranges::lower_bound(console.rows, first));
+    const bool all = !console.filter.IsActive();
+    for (size_t i = console.rows_seen < first ? 0 : console.rows_seen - first + 1; i < console.lines.size(); i++) {
         const log::Line& line = console.lines[i];
-        if (console.filter.PassFilter(std::format("[{}] {}", line.source, line.text).c_str())) {
-            console.rows.push_back(static_cast<int>(i));
+        if (all || console.filter.PassFilter(std::format("[{}] {}", line.source, line.text).c_str())) {
+            console.rows.push_back(line.seq);
         }
     }
-    console.rows_seen = console.seen;
-    console.rows_filter = filter;
-    console.rows_kept = console.lines.size();
+    console.rows_seen = console.lines[console.lines.size() - 1].seq;
+}
+
+// The kept line numbered `seq`: the lines' seqs run on without a gap.
+const log::Line&
+line_of(const Console& console, uint64_t seq) {
+    return console.lines[static_cast<size_t>(seq - console.lines[0].seq)];
 }
 
 // One line in its level's colour, its right-click menu copying it.
@@ -77,7 +90,7 @@ draw_line(const log::Line& line, bool times) {
 
 // The filtered lines in a scrolling child, following new ones while scrolled to the bottom.
 void
-draw_lines(const Console& console, const std::vector<int>& rows) {
+draw_lines(const Console& console) {
     if (!ImGui::BeginChild("lines", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar)) {
         ImGui::EndChild();
         return;
@@ -88,10 +101,10 @@ draw_lines(const Console& console, const std::vector<int>& rows) {
         const FontScope mono(FontRole::Mono);
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(ImGui::GetStyle().ItemSpacing.x, 0));
         ImGuiListClipper clipper;
-        clipper.Begin(static_cast<int>(rows.size()));
+        clipper.Begin(static_cast<int>(console.rows.size()));
         while (clipper.Step()) {
             for (int row = clipper.DisplayStart; row < clipper.DisplayEnd; row++) {
-                draw_line(console.lines[static_cast<size_t>(rows[static_cast<size_t>(row)])], console.times);
+                draw_line(line_of(console, console.rows[static_cast<size_t>(row)]), console.times);
             }
         }
         ImGui::PopStyleVar();
@@ -137,13 +150,13 @@ draw_console(Console& console) {
     filter_rows(console);
     if (copy) {
         std::string text;
-        for (const int row : console.rows) {
-            text += shown_line(console.lines[static_cast<size_t>(row)], console.times) + '\n';
+        for (const uint64_t row : console.rows) {
+            text += shown_line(line_of(console, row), console.times) + '\n';
         }
         ImGui::SetClipboardText(text.c_str());
     }
     ImGui::Separator();
-    draw_lines(console, console.rows);
+    draw_lines(console);
 }
 
 } // namespace loupe::window
