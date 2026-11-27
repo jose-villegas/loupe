@@ -147,6 +147,7 @@ observed_fields(const Observed& observed) {
     return {{"screen", observed.screen},
             {"refusal", observed.refusal},
             {"boards", observed.boards},
+            {"busy", observed.busy},
             {"phase", observed.phase},
             {"frames", observed.frames},
             {"frame_age_s", observed.frame_age_s},

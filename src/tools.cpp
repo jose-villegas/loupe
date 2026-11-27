@@ -64,6 +64,16 @@ autana_dir() {
     return AUTANA_DIR;
 }
 
+std::vector<std::string>
+autana_cli(const std::vector<std::string>& args) {
+    if (!builds_packs()) {
+        return {};
+    }
+    std::vector<std::string> line = {PYTHON, utf8(autana_dir() / "scripts" / "autana" / "autana.py")};
+    line.insert(line.end(), args.begin(), args.end());
+    return line;
+}
+
 fs::path
 pack_cache() {
     return PACK_CACHE;

@@ -55,6 +55,8 @@ constexpr const char ENGINE_OUT_SUFFIX[] = ".console";
 constexpr const char ENGINE[] = "autana";
 // Where an unscripted window keeps its log, in the settings folder.
 constexpr const char LOG_FILE[] = "loupe.log";
+// The last board listing, kept in the settings folder to show at once next time.
+constexpr const char BOARDS_FILE[] = "boards.json";
 // The Console's size when it first opens over the start panel, undocked.
 constexpr ImVec2 CONSOLE_SIZE(720, 280);
 // Each side panel's share of the window: outliner, inspector, frame debugger.
@@ -582,6 +584,12 @@ Window::Window(window::Gpu& gpu, const Options& options, bool scripted, const st
       updates_(!scripted_ && copy_.id.built_for != Channel::None && !copy_.config.empty()),
       library_(library(folders_)) {
     attach_.lock_token = lock_token;
+    // The last listing at once, a new one under way: the pool can take seconds to answer.
+    if (!scripted_ && !copy_.config.empty()) {
+        attach_.list = kept_boards(copy_.config / BOARDS_FILE);
+        attach_.listed = !attach_.list.boards.empty();
+        attach_.refresh = true;
+    }
     if (!scripted_ && !copy_.config.empty() && !log::sink().open_file(copy_.config / LOG_FILE)) {
         log::warn(std::format("cannot write the log in {}", utf8(copy_.config / LOG_FILE)));
     }
@@ -669,6 +677,9 @@ Window::observe() const {
     seen.refusal = refusal_;
     for (const Board& board : attach_.list.boards) {
         seen.boards.push_back(board.id);
+        if (!board.busy.empty()) {
+            seen.busy.push_back(std::format("{} {}", board.id, board.busy));
+        }
     }
     if (!shown_ || !shown_->link) {
         return seen;
@@ -746,13 +757,17 @@ Window::leave() {
 void
 Window::list_boards() {
     if (attach_.refresh && !attach_.listing.valid()) {
-        attach_.listing = std::async(std::launch::async, loupe::list_boards, scratch_.path() / "devices.log");
+        attach_.listing =
+            std::async(std::launch::async, [log = scratch_.path() / "devices.log"] { return loupe::list_boards(log); });
         attach_.listing_since = std::chrono::steady_clock::now();
         attach_.refresh = false;
     }
     if (attach_.listing.valid() && attach_.listing.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
         attach_.list = attach_.listing.get();
         attach_.listed = true;
+        if (!copy_.config.empty() && !keep_boards(attach_.list, copy_.config / BOARDS_FILE)) {
+            log::warn(std::format("cannot keep the boards in {}", utf8(copy_.config / BOARDS_FILE)));
+        }
     }
 }
 

@@ -3,9 +3,10 @@
 # ${BOARD} live, sees frames keep coming, records a stretch, stops, and goes
 # back to the scenes once the board's stream has drained.
 #
-# It needs the board, so it runs where the board is free to it, with the
-# board's development firmware built from the autana Loupe pins:
-#   loupe-storyboard --recipe tests/stories/attach.yaml --set BOARD=<serial> -o DIR
+# It needs the board, so it runs inside a command's hold on it, such as a
+# board job's, with the board's development firmware built from the autana
+# Loupe pins; the panel names that holder beside View:
+#   loupe-storyboard --recipe tests/stories/attach.yaml --set BOARD=<serial> --lock-token TOKEN -o DIR
 - name: The board in render_lab
   loupe.autana: [open, Render Lab]
 - name: Sponza asked for
@@ -19,6 +20,7 @@
 - name: The boards listed
   loupe.click: "//loupe/List boards"
 - loupe.wait: {until: [{loupe.boards: ~, match: "${BOARD}"}], timeout_s: 60}
+  check: [{loupe.busy: ~, match: "${BOARD} held by [^ ]"}]
 - name: View pressed
   loupe.click: "//loupe/${BOARD}/View"
 - name: The live view's first frame

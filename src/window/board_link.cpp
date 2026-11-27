@@ -37,6 +37,10 @@ read_some(SDL_IOStream* pipe, std::array<uint8_t, READ_BYTES>& buffer, size_t* c
 std::unique_ptr<BoardLink>
 BoardLink::start(const std::vector<std::string>& command, const fs::path& log, std::string* why,
                  std::chrono::milliseconds end_within) {
+    if (command.empty()) {
+        *why = "this loupe was built without the pack tool, so has no autana to record with";
+        return nullptr;
+    }
     std::error_code error;
     fs::create_directories(log.parent_path(), error);
     if (!std::ofstream(log)) {

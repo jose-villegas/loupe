@@ -157,6 +157,7 @@ add_library(loupe_window OBJECT
     src/window/observer.cpp
     src/window/panels.cpp
     src/window/path_editor.cpp
+    src/window/spinner.cpp
     src/window/board_link.cpp
     src/window/run_window.cpp)
 target_link_libraries(loupe_window PUBLIC loupe_core imgui imguizmo)

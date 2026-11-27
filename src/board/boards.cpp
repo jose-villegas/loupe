@@ -1,6 +1,9 @@
 #include "board/boards.hpp"
 
 #include <algorithm>
+#include <ctime>
+#include <format>
+#include <fstream>
 #include <sstream>
 #include <string_view>
 
@@ -8,6 +11,7 @@
 
 #include "paths.hpp"
 #include "process.hpp"
+#include "tools.hpp"
 
 namespace loupe {
 
@@ -18,6 +22,8 @@ constexpr std::string_view FREE_STATE = "unlocked";
 constexpr std::string_view PERSON_STATE = "human";
 // How the JSON line of `autana devices --json` opens.
 constexpr std::string_view JSON_OPENS = R"({"boards")";
+// Why a build without the pack tool lists no boards: it has no autana of its own.
+constexpr std::string_view NO_AUTANA = "this loupe was built without the pack tool, so has no autana of its own";
 // A lock token: a UUID's hex digits, lower case (autana's device_lock.py).
 constexpr size_t TOKEN_DIGITS = 32;
 // The note `lock hand` renews a reservation with when it had none.
@@ -29,6 +35,42 @@ holder_of(std::string_view state) {
         return Holder::Nobody;
     }
     return state == PERSON_STATE ? Holder::Person : Holder::Command;
+}
+
+// The clock time, here, of the epoch seconds `when`, as HH:MM.
+std::string
+clock_time(double when) {
+    const auto seconds = static_cast<std::time_t>(when);
+    std::tm local{};
+#if defined(_WIN32)
+    localtime_s(&local, &seconds);
+#else
+    localtime_r(&seconds, &local);
+#endif
+    return std::format("{:02}:{:02}", local.tm_hour, local.tm_min);
+}
+
+// Who holds a board a command holds, and when the pool expects it free: the
+// owner's program (its "user@host:program:pid" past the host) and its
+// purpose, from `item`'s holder.
+std::string
+busy_text(const nlohmann::json& item) {
+    const nlohmann::json& holder = item.at("holder");
+    std::string who = holder.is_string() ? holder.get<std::string>() : "";
+    if (holder.is_object()) {
+        const std::string owner = holder.value("owner", "");
+        const size_t host_end = owner.find(':');
+        who = host_end == std::string::npos ? owner
+                                            : owner.substr(host_end + 1, owner.find(':', host_end + 1) - host_end - 1);
+        if (const std::string purpose = holder.value("purpose", ""); !purpose.empty()) {
+            who += ": " + purpose;
+        }
+    }
+    std::string text = who.empty() ? "held" : "held by " + who;
+    if (const auto free = item.find("estimated_free"); free != item.end() && free->is_number()) {
+        text += ", free ~" + clock_time(free->get<double>());
+    }
+    return text;
 }
 
 bool
@@ -47,13 +89,7 @@ board_file_stem(std::string id) {
 
 std::vector<std::string>
 autana_command(const std::vector<std::string>& args) {
-#if defined(_WIN32)
-    std::vector<std::string> command = {utf8(system_program("cmd")), "/d", "/c", "autana"};
-#else
-    std::vector<std::string> command = {"autana"};
-#endif
-    command.insert(command.end(), args.begin(), args.end());
-    return command;
+    return autana_cli(args);
 }
 
 BoardList
@@ -67,7 +103,7 @@ parse_boards(const std::string& output) {
     }
     const nlohmann::json parsed = nlohmann::json::parse(json, nullptr, false);
     if (parsed.is_discarded() || !parsed.contains("boards") || !parsed["boards"].is_array()) {
-        return {.boards = {}, .why = "autana devices --json gave no boards: " + output};
+        return {.boards = {}, .why = "autana devices --json gave no boards: " + output, .json = {}};
     }
     BoardList list;
     try {
@@ -79,21 +115,57 @@ parse_boards(const std::string& output) {
                 {.id = item.at("board").get<std::string>(),
                  .port = port.is_null() ? std::string() : port.get<std::string>(),
                  .holder = who,
-                 .note = who == Holder::Person && holder.is_object() ? holder.value("purpose", "") : ""});
+                 .note = who == Holder::Person && holder.is_object() ? holder.value("purpose", "") : "",
+                 .busy = who == Holder::Command ? busy_text(item) : ""});
         }
     } catch (const nlohmann::json::exception& error) {
         return {.boards = {},
-                .why = std::string("autana devices --json gave a board without its fields: ") + error.what()};
+                .why = std::string("autana devices --json gave a board without its fields: ") + error.what(),
+                .json = {}};
     }
+    list.json = json;
     return list;
 }
 
 BoardList
-list_boards(const std::filesystem::path& log) {
-    if (!run_logged(autana_command({"devices", "--json"}), log)) {
-        return {.boards = {}, .why = "autana devices failed: " + read_text(log)};
+list_boards(const std::filesystem::path& log, const Run& run) {
+    const std::vector<std::string> command = autana_command({"devices", "--json"});
+    if (command.empty()) {
+        return {.boards = {}, .why = std::string(NO_AUTANA), .json = {}};
+    }
+    if (!run(command, log)) {
+        return {.boards = {}, .why = "autana devices failed: " + read_text(log), .json = {}};
     }
     return parse_boards(read_text(log));
+}
+
+BoardList
+list_boards(const std::filesystem::path& log) {
+    return list_boards(log, [](const std::vector<std::string>& args, const std::filesystem::path& file) {
+        return run_logged(args, file);
+    });
+}
+
+BoardList
+kept_boards(const std::filesystem::path& file) {
+    std::error_code error;
+    if (!std::filesystem::exists(file, error)) {
+        return {};
+    }
+    BoardList list = parse_boards(read_text(file));
+    return list.why.empty() ? list : BoardList{};
+}
+
+bool
+keep_boards(const BoardList& list, const std::filesystem::path& file) {
+    if (list.json.empty()) {
+        return true;
+    }
+    std::error_code error;
+    std::filesystem::create_directories(file.parent_path(), error);
+    std::ofstream out(file, std::ios::binary);
+    out << list.json << '\n';
+    return static_cast<bool>(out);
 }
 
 bool

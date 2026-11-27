@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -14,30 +15,42 @@ namespace loupe {
 enum class Holder : uint8_t { Nobody, Person, Command };
 
 // One board the board pool knows: its serial, its port when plugged in here,
-// who has it, and a person's reservation's note.
+// who has it, a person's reservation's note, and for a command's hold who
+// holds it and when the pool expects it free, such as "held by board-job:
+// autana lock run, free ~23:37".
 struct Board {
     std::string id, port;
     Holder holder = Holder::Command;
-    std::string note;
+    std::string note, busy;
 };
 
-// What one listing found: the boards, or none with `why` set.
+// What one listing found: the boards, or none with `why` set; `json` is the
+// line they were read from, kept to show them at once next time.
 struct BoardList {
     std::vector<Board> boards;
-    std::string why;
+    std::string why, json;
 };
+
+// Runs a command line, its output into a log; true when it exits 0. run_logged's shape.
+using Run = std::function<bool(const std::vector<std::string>&, const std::filesystem::path&)>;
 
 // `id` as a file name holds it: without the colons of a serial, which a
 // Windows file name cannot hold.
 std::string board_file_stem(std::string id);
-// The command line that runs autana with `args`: through cmd.exe on Windows,
-// where autana is a .cmd; autana from PATH elsewhere.
+// The command line that runs autana with `args`: the pinned autana's, as
+// autana_cli() (tools.hpp) gives it; empty without the pack tool.
 std::vector<std::string> autana_command(const std::vector<std::string>& args);
 // The boards in `autana devices --json`'s output, which may hold its stderr
 // notes too: the JSON is the line that opens with {"boards".
 BoardList parse_boards(const std::string& output);
-// The pool's boards, from `autana devices --json`, its output into `log`.
+// The pool's boards, from one `autana devices --json` run by `run`, its output into `log`.
+BoardList list_boards(const std::filesystem::path& log, const Run& run);
 BoardList list_boards(const std::filesystem::path& log);
+// The boards a listing kept in `file`, to show before a new one comes; none
+// when there is no such file.
+BoardList kept_boards(const std::filesystem::path& file);
+// Keeps `list`'s boards in `file` when it found any; false when it could not write.
+bool keep_boards(const BoardList& list, const std::filesystem::path& file);
 // Whether `board` is plugged in here: autana gave its port. The pool also
 // lists boards only seen here before, or named by a lapsed lock, with none.
 bool plugged_here(const Board& board);

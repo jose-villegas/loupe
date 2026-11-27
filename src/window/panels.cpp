@@ -15,6 +15,7 @@
 #include "paths.hpp"
 #include "window/flow.hpp"
 #include "window/fonts.hpp"
+#include "window/spinner.hpp"
 
 namespace loupe::window {
 
@@ -89,7 +90,7 @@ scene_list(const char* heading, const std::vector<std::filesystem::path>& scenes
 }
 
 // After a board's port, who has it: a person records inside their own
-// reservation; a command's hold keeps Record off.
+// reservation; a command's hold keeps Record off, and says whose it is.
 std::string
 holder_text(const Board& board) {
     switch (board.holder) {
@@ -97,24 +98,13 @@ holder_text(const Board& board) {
         case Holder::Person: return board.note.empty() ? "  (reserved)" : std::format("  (reserved: {})", board.note);
         case Holder::Command: break;
     }
-    return "  (held)";
+    return board.busy.empty() ? "  (held)" : std::format("  ({})", board.busy);
 }
 
 // Whole seconds since `since`, for a waiting step's line.
 int64_t
 seconds_since(std::chrono::steady_clock::time_point since) {
     return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - since).count();
-}
-
-// A step of a wait's spinner, turning every SPIN_MS: a wait that moves.
-constexpr std::string_view SPIN = "|/-\\";
-constexpr int64_t SPIN_MS = 125;
-
-char
-spinner() {
-    const auto now = std::chrono::steady_clock::now().time_since_epoch();
-    const int64_t step = std::chrono::duration_cast<std::chrono::milliseconds>(now).count() / SPIN_MS;
-    return SPIN[static_cast<size_t>(step) % SPIN.size()];
 }
 
 // The menu bar's menus; whether About was clicked.
@@ -211,10 +201,10 @@ draw_attach(Attach& attach) {
     attach.refresh = ImGui::Button(attach.listed ? "List again" : "List boards");
     ImGui::EndDisabled();
     if (listing) {
-        const std::string asking =
-            std::format("{} asking the board pool ({} s)", spinner(), seconds_since(attach.listing_since));
-        flow(text_width(asking.c_str()));
-        hint(asking.c_str());
+        const std::string asking = std::format("{} ({} s)", attach.listed ? "refreshing" : "asking the board pool",
+                                               seconds_since(attach.listing_since));
+        flow(spinner_text_width(asking.c_str()));
+        spinner_text(asking.c_str(), true);
     }
     if (!attach.list.why.empty()) {
         ImGui::TextWrapped("%s", attach.list.why.c_str());
@@ -230,6 +220,9 @@ draw_attach(Attach& attach) {
             attach.view = board->id;
         }
         ImGui::EndDisabled();
+        if (!board->busy.empty() && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+            ImGui::SetTooltip("%s", board->busy.c_str());
+        }
         const std::string where = std::format("{}  {}{}", board->id, board->port, holder_text(*board));
         flow(text_width(where.c_str()));
         ImGui::TextWrapped("%s", where.c_str());
@@ -244,7 +237,7 @@ draw_attach(Attach& attach) {
         ImGui::TreePop();
     }
     if (reserving) {
-        hint(std::format("{} readying the live view ({} s)", spinner(), seconds_since(attach.reserving_since)).c_str());
+        spinner_text(std::format("readying the live view ({} s)", seconds_since(attach.reserving_since)).c_str(), true);
     }
 }
 
@@ -434,15 +427,16 @@ void
 draw_waiting(const WaitLine& line) {
     // A step still under way turns; an end or a refusal stands still.
     const bool going = line.phase != Waiting::Ended && line.phase != Waiting::Refused;
-    const std::string text = going ? std::format("{} {}", spinner(), line.text) : line.text;
     const ImVec2 room = ImGui::GetContentRegionAvail();
     const ImVec2 at = ImGui::GetCursorPos();
-    const float wrap = room.x;
-    const ImVec2 size = ImGui::CalcTextSize(text.c_str(), nullptr, false, wrap);
+    const float label_x = going ? spinner_layout(ImGui::GetTextLineHeight()).label_x : 0.0F;
+    const ImVec2 size = ImGui::CalcTextSize(line.text.c_str(), nullptr, false, room.x - label_x);
     ImGui::SetCursorPos(ImVec2(at.x, at.y + std::max(0.0F, (room.y - size.y) / 2)));
-    ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + wrap);
-    ImGui::TextUnformatted(text.c_str());
-    ImGui::PopTextWrapPos();
+    if (going) {
+        spinner_text(line.text.c_str(), false);
+    } else {
+        ImGui::TextWrapped("%s", line.text.c_str());
+    }
 }
 
 FrameRect

@@ -3,13 +3,15 @@
 // stop() ends it; a child that never ends is let go within its bound, and a
 // link that cannot start says so at once. A board's serial names its log. The
 // child gets no console window of its own, and its exit code comes back.
-// parse_boards reads `autana devices --json`'s shape.
+// parse_boards reads `autana devices --json`'s shape, naming who holds a board
+// a command holds; a listing is one autana call, and the last one kept reads back.
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -19,6 +21,7 @@
 
 #include "board/boards.hpp"
 #include "paths.hpp"
+#include "tools.hpp"
 #include "window/board_link.hpp"
 
 namespace fs = std::filesystem;
@@ -51,7 +54,8 @@ constexpr const char DEVICES[] =
     R"({"boards": [)"
     R"({"board": "90:70:69:FE:A3:08", "port": "COM5", "state": "unlocked", "holder": null}, )"
     R"({"board": "44:BD:8D:78:20:E8", "port": null, "state": "unlocked", "holder": null}, )"
-    R"({"board": "AA:BB:CC:DD:EE:FF", "port": "COM7", "state": "held", "holder": "someone"}, )"
+    R"({"board": "AA:BB:CC:DD:EE:FF", "port": "COM7", "state": "held", )"
+    R"("holder": {"owner": "sam@bench:board-job:8552", "purpose": "autana lock run"}, "estimated_free": 0}, )"
     R"({"board": "90:70:69:FE:A3:09", "port": "COM9", "state": "human", )"
     R"("holder": {"owner": "sam@bench:39780", "purpose": "checking the panel"}}]})"
     "\n";
@@ -82,6 +86,9 @@ boards_parse() {
     ok &= expect(boards[1].port.empty() && !loupe::recordable(boards[1]), "a board on another host has no port");
     ok &= expect(boards[2].holder == Holder::Command && !loupe::recordable(boards[2]),
                  "a board a command holds does not record");
+    ok &= expect(boards[2].busy.starts_with("held by board-job: autana lock run, free ~"),
+                 "it says which program holds it, for what, and when it should be free");
+    ok &= expect(boards[0].busy.empty() && boards[3].busy.empty(), "a free or reserved board is not busy");
     ok &= expect(loupe::recordable(boards[2], true) && !loupe::recordable(boards[1], true),
                  "inside that command's hold it records, still only plugged in here");
     ok &= expect(boards[3].holder == Holder::Person && boards[3].note == "checking the panel"
@@ -89,6 +96,41 @@ boards_parse() {
                  "a person's reserved board records inside the reservation, its note kept");
     const loupe::BoardList broken = loupe::parse_boards(R"({"boards": [{"port": null}]})");
     ok &= expect(broken.boards.empty() && !broken.why.empty(), "a board without its fields is refused");
+    return ok;
+}
+
+// A listing runs autana once, `devices --json`, whatever the boards; what it
+// found is kept and reads back, and nothing kept reads as no boards.
+bool
+one_call_a_listing(const fs::path& folder) {
+    int calls = 0;
+    std::vector<std::string> ran;
+    const loupe::Run fake = [&](const std::vector<std::string>& args, const fs::path& log) {
+        ++calls;
+        ran = args;
+        std::ofstream(log, std::ios::binary) << DEVICES;
+        return true;
+    };
+    const loupe::BoardList list = loupe::list_boards(folder / "devices.log", fake);
+    if (!loupe::builds_packs()) {
+        return expect(calls == 0 && list.boards.empty() && !list.why.empty(),
+                      "without the pack tool there is no autana to ask, and the list says so");
+    }
+    bool ok = expect(calls == 1 && list.boards.size() == BOARDS, "four boards come from one autana call");
+    ok &= expect(ran.size() >= 4 && ran[ran.size() - 2] == "devices" && ran.back() == "--json",
+                 "the call is autana devices --json");
+    // The pinned checkout's CLI on an absolute Python: no autana from PATH.
+    const fs::path cli = loupe::autana_dir() / "scripts" / "autana" / "autana.py";
+    ok &= expect(ran.size() >= 2 && fs::path(ran[0]).is_absolute() && fs::path(ran[1]) == cli && fs::exists(cli),
+                 "it runs the pinned autana's CLI, never one on PATH");
+    const fs::path kept = folder / "kept" / "boards.json";
+    std::error_code error;
+    fs::remove(kept, error);
+    ok &= expect(loupe::kept_boards(kept).boards.empty(), "nothing kept yet reads as no boards");
+    ok &= expect(loupe::keep_boards(list, kept), "the listing is kept");
+    const loupe::BoardList back = loupe::kept_boards(kept);
+    ok &= expect(back.boards.size() == BOARDS && back.boards[2].busy == list.boards[2].busy,
+                 "the kept listing reads back, holders and all");
     return ok;
 }
 
@@ -244,6 +286,7 @@ main(int argc, char** argv) {
 
     bool ok = boards_parse();
     ok &= token_found();
+    ok &= one_call_a_listing(folder);
     ok &= ends_on_stop(fake, folder, payload);
     ok &= hung_is_let_go(fake, folder);
     ok &= unwritable_log_refused_at_once(fake, folder);

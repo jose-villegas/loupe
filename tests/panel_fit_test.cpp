@@ -414,16 +414,19 @@ main(int argc, char** argv) {
 
     loupe::window::Attach attach;
     attach.listed = true;
-    attach.list.boards = {{.id = "907069FEA308", .port = "COM5", .holder = loupe::Holder::Nobody, .note = ""},
-                          {.id = "A0B1C2D3E4F5",
-                           .port = "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit-if00",
-                           .holder = loupe::Holder::Command,
-                           .note = ""},
-                          {.id = "0123456789AB", .port = "", .holder = loupe::Holder::Nobody, .note = ""},
-                          {.id = "907069FEA309",
-                           .port = "COM9",
-                           .holder = loupe::Holder::Person,
-                           .note = "checking the panel after the reflash"}};
+    attach.list.boards = {
+        {.id = "907069FEA308", .port = "COM5", .holder = loupe::Holder::Nobody, .note = "", .busy = ""},
+        {.id = "A0B1C2D3E4F5",
+         .port = "/dev/serial/by-id/usb-Espressif_USB_JTAG_serial_debug_unit-if00",
+         .holder = loupe::Holder::Command,
+         .note = "",
+         .busy = "held by board-job: autana lock run, free ~23:37"},
+        {.id = "0123456789AB", .port = "", .holder = loupe::Holder::Nobody, .note = "", .busy = ""},
+        {.id = "907069FEA309",
+         .port = "COM9",
+         .holder = loupe::Holder::Person,
+         .note = "checking the panel after the reflash",
+         .busy = ""}};
     const loupe::window::BoardRows rows = loupe::window::board_rows(attach.list);
     (void)expect(rows.here.size() == 3 && rows.elsewhere.size() == 1 && rows.elsewhere[0]->id == "0123456789AB",
                  "the boards plugged in here are listed, a board with no port goes under not plugged in here");

@@ -38,7 +38,7 @@ how long it took. `${NAME}` in a step takes the value of `--set NAME=VALUE`.
 | `loupe.wait: N` | lets N ticks pass |
 | `loupe.wait: {until: CHECKS, timeout_s: S}` | waits until the checks hold, failing after S s by the clock |
 | `loupe.wait: {while: CHECKS, for_s: S}` | waits S s by the clock, failing on the first tick a check does not hold |
-| `loupe.autana: ARGS` or `{args: ARGS, until: REGEX, timeout_s: S}` | runs `autana ARGS`, the autana on PATH that Record also runs, inside `--lock-token`'s lock when given; with `until`, again each second until what it printed matches, for S s (60 when left out). ARGS split at spaces, or a list of words. Its output goes to `autana-N.log` under `-o`, and a run that does not exit 0 fails the step |
+| `loupe.autana: ARGS` or `{args: ARGS, until: REGEX, timeout_s: S}` | runs `autana ARGS`, the pinned autana (`third_party/autana`) that the board list and Record also run, never one on PATH, inside `--lock-token`'s lock when given; with `until`, again each second until what it printed matches, for S s (60 when left out). ARGS split at spaces, or a list of words. Its output goes to `autana-N.log` under `-o`, and a run that does not exit 0 fails the step |
 | `loupe.clipboard: TEXT` | fails unless the clipboard contains TEXT, as the Console's Copy leaves it |
 | `loupe.screenshot: OUT.png` or `{out: OUT.png, crop: PANEL}` | moves the mouse off the window, lets 4 ticks settle, and writes the window, or the panel PANEL names, under `-o` |
 
@@ -62,6 +62,7 @@ the step has drawn; `loupe.wait` takes the same list. Each is one
 | `screen` | `start`, `scene` or `live` |
 | `refusal` | what the start panel says did not open, empty when nothing |
 | `boards` | the boards listed, their serials joined by a space |
+| `busy` | each listed board a command holds: its serial, who holds it and when the pool expects it free |
 | `phase` | where a live view's wait stands: `Starting`, `Autana`, `Linked`, `Reading`, `Shown`, `Ended` or `Refused` |
 | `frames` | the live stream's frames so far |
 | `frame_age_s` | seconds since the live stream's last new frame |
@@ -75,14 +76,14 @@ expression found anywhere in it.
 
 ## A board's live view
 
-`tests/stories/attach.yaml` drives a board end to end, so it runs only where
-the board is free to it, with the board's development firmware built from the
-autana Loupe pins. Its `loupe.autana` steps put the board on a scene, then it
+`tests/stories/attach.yaml` drives a board end to end, so it runs inside a
+command's hold on the board, such as a board job's, given with `--lock-token`,
+and with the board's development firmware built from the autana Loupe pins. Its `loupe.autana` steps put the board on a scene, then it
 lists the boards, presses View, sees frames keep coming, records a stretch and
 stops:
 
 ```bash
-build/default/loupe-storyboard --recipe tests/stories/attach.yaml --set BOARD=<serial> -o attach --console none
+build/default/loupe-storyboard --recipe tests/stories/attach.yaml --set BOARD=<serial> --lock-token TOKEN -o attach --console none
 ```
 
 `--console none` gives up the storyboard's console first, as Loupe, a GUI

@@ -141,6 +141,9 @@ target_link_libraries(observer_test PRIVATE loupe_core loupe_window)
 add_test(NAME observer_steer COMMAND observer_test)
 
 # The panels drawn headless at several widths fit them, and are kept as BMPs to look at.
+add_executable(spinner_test spinner_test.cpp)
+target_link_libraries(spinner_test PRIVATE loupe_core loupe_window)
+add_test(NAME spinner COMMAND spinner_test)
 add_executable(panel_fit_test panel_fit_test.cpp)
 target_link_libraries(panel_fit_test PRIVATE loupe_core loupe_window)
 add_test(NAME panel_fit COMMAND panel_fit_test "${sponza}" "${CMAKE_CURRENT_BINARY_DIR}/panel_fit")
