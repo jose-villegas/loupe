@@ -55,6 +55,8 @@ constexpr ImVec2 CONSOLE_SIZE(720, 280);
 constexpr float OUTLINER_SHARE = 0.18F;
 constexpr float INSPECTOR_SHARE = 0.26F;
 constexpr float DEBUGGER_SHARE = 0.16F;
+// The Console's share of the viewport's height, when it opens under it.
+constexpr float CONSOLE_SHARE = 0.35F;
 
 // `options`' run on `scene`, open on the first frame a seek reaches so every
 // control works from the start; null, with `why` set, when it cannot be shown.
@@ -92,7 +94,9 @@ struct Shown {
     // The editor over the scene file; none for a pack, or without the pack tool, `editor_why` saying why.
     std::optional<window::Editor> editor;
     std::string editor_why;
-    bool laid_out = false;
+    // The viewport's dock node, which the Console splits when it opens; none before lay_out().
+    ImGuiID viewport_node = 0;
+    bool console_placed = false;
 
     Shown(window::Gpu& gpu, std::unique_ptr<Frames> opened)
         : frames(std::move(opened)), texture(gpu, frames->frame()),
@@ -145,8 +149,9 @@ apply(Frames& frames, window::Timeline& timeline, window::Observer& observer, co
 }
 
 // Docks the panels into `dock`, `size` large: the outliner left, the
-// inspector right, the frame debugger and the Console below, the viewport in the middle.
-void
+// inspector right, the frame debugger below, the viewport in the middle,
+// whose node it gives back.
+ImGuiID
 lay_out(ImGuiID dock, ImVec2 size) {
     ImGui::DockBuilderRemoveNode(dock);
     ImGui::DockBuilderAddNode(dock, ImGuiDockNodeFlags_DockSpace);
@@ -158,9 +163,25 @@ lay_out(ImGuiID dock, ImVec2 size) {
     ImGui::DockBuilderDockWindow(OUTLINER, left);
     ImGui::DockBuilderDockWindow(INSPECTOR, right);
     ImGui::DockBuilderDockWindow(DEBUGGER, below);
-    ImGui::DockBuilderDockWindow(window::CONSOLE, below);
     ImGui::DockBuilderDockWindow(VIEWPORT, middle);
     ImGui::DockBuilderFinish(dock);
+    return middle;
+}
+
+// Docks the Console below the viewport in `viewport_node`, CONSOLE_SHARE of
+// it; nothing when that node is gone or split, the panels rearranged since,
+// and the Console floats.
+void
+place_console(ImGuiID viewport_node) {
+    const ImGuiDockNode* node = ImGui::DockBuilderGetNode(viewport_node);
+    if (node == nullptr || !node->IsLeafNode()) {
+        return;
+    }
+
+    ImGuiID viewport = viewport_node;
+    const ImGuiID console = ImGui::DockBuilderSplitNode(viewport, ImGuiDir_Down, CONSOLE_SHARE, nullptr, &viewport);
+    ImGui::DockBuilderDockWindow(window::CONSOLE, console);
+    ImGui::DockBuilderFinish(viewport_node);
 }
 
 // The frame debugger: Scenes, the view picker, the observer and the timeline.
@@ -207,9 +228,8 @@ draw_viewport(Shown& shown) {
 bool
 draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
     const ImGuiID dock = ImGui::GetID("panels");
-    if (!shown.laid_out) {
-        lay_out(dock, ImGui::GetContentRegionAvail());
-        shown.laid_out = true;
+    if (shown.viewport_node == 0) {
+        shown.viewport_node = lay_out(dock, ImGui::GetContentRegionAvail());
     }
     ImGui::DockSpace(dock);
     Asked asked;
@@ -283,7 +303,7 @@ class Window {
   private:
     // Closes the open scene, if any, back to the start panel.
     void close();
-    // The Console, when open: docked below once a scene is shown, over the start panel otherwise.
+    // The Console, when open: under the viewport when it opens over a scene, over the start panel otherwise.
     void draw_console();
 
     window::Gpu& gpu_;
@@ -291,7 +311,6 @@ class Window {
     // stdout without -o, and with it the engine's stdout beside the image
     // (out.bmp.console). Both go here: the image unwanted, until autana can
     // close a run without writing one, the engine's stdout read into the log.
-
     Scratch scratch_;
     std::optional<size_t> checkpoint_mb_;
     Folders folders_;
@@ -388,8 +407,17 @@ Window::draw_console() {
     }
     window::pull(console_);
     if (!console_.open) {
+        if (shown_) {
+            shown_->console_placed = false;
+        }
         return;
     }
+    // Each time it opens over a scene, the Console docks under the viewport; moved after, it stays.
+    if (shown_ && shown_->viewport_node != 0 && !shown_->console_placed) {
+        place_console(shown_->viewport_node);
+        shown_->console_placed = true;
+    }
+
     ImGui::SetNextWindowSize(CONSOLE_SIZE, ImGuiCond_FirstUseEver);
     if (ImGui::Begin(window::CONSOLE, &console_.open)) {
         window::draw_console(console_);
