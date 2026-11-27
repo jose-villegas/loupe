@@ -57,15 +57,15 @@ bool draw_view_picker(const std::vector<DebugView>& views, int* view);
 // `text` in the disabled colour, wrapped to the panel.
 void hint(const char* text);
 
-// Field rows, as an inspector lays them out: a label, then its fields. The
-// labels share one column, so every row's fields start at the same x and
-// share the rest of the panel's width.
+// Field rows, as an inspector lays them out: a label, then its values. The
+// labels share one column, so every row's values start at the same x.
 // The column's width for these rows: the widest of `labels`, and a gap.
 float field_column(std::span<const char* const> labels);
-// Draws `label` in the Text face and readies the row's fields: the next item
-// starts `column` along and reaches the panel's right edge. Returns the
-// fields' own label, "##label": hidden, as the row's label is drawn already.
-std::string field_label(const char* label, float column);
+// One row: `label` in the Text face, then `values` in Mono, dragged or typed,
+// each left-aligned in a frame a little shorter than a button's, the frames
+// sharing the rest of the panel's width. Laid out and named as DragFloatN
+// would with the label "##label". True when a value changed.
+bool field_row(const char* label, float column, std::span<float> values, float speed, const char* format);
 
 // Where draw_frame put the frame, in screen pixels.
 struct FrameRect {

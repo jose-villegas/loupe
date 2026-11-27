@@ -1,11 +1,13 @@
 #include "window/panels.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cfloat>
 #include <cstddef>
 #include <string>
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "paths.hpp"
 #include "window/fonts.hpp"
 
@@ -14,6 +16,33 @@ namespace loupe::window {
 namespace {
 
 constexpr const char ABOUT[] = "About";
+// The field rows' frames: this share of the style's vertical padding, so they sit tighter than buttons.
+constexpr float FIELD_PADDING_Y = 0.5F;
+// Room for one value as a field row's format writes it.
+constexpr size_t FIELD_TEXT_SIZE = 32;
+
+// A DragFloat with its value left-aligned: ImGui centres a drag's text, so
+// this draws it unseen and writes the value again from the frame's left. A
+// value being typed is ImGui's own text field, left-aligned already.
+bool
+drag_left(float* value, float speed, const char* format) {
+    const bool typing = ImGui::TempInputIsActive(ImGui::GetID(""));
+    if (!typing) {
+        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 0, 0, 0));
+    }
+    const bool changed = ImGui::DragFloat("", value, speed, 0.0F, 0.0F, format);
+    if (!typing) {
+        ImGui::PopStyleColor();
+        std::array<char, FIELD_TEXT_SIZE> text = {};
+        ImGui::DataTypeFormatString(text.data(), static_cast<int>(text.size()), ImGuiDataType_Float, value, format);
+        const ImVec2 pad = ImGui::GetStyle().FramePadding;
+        const ImVec2 min = ImGui::GetItemRectMin();
+        const ImVec2 max = ImGui::GetItemRectMax();
+        ImGui::RenderTextClipped(ImVec2(min.x + pad.x, min.y), ImVec2(max.x - pad.x, max.y), text.data(), nullptr,
+                                 nullptr, ImVec2(0.0F, 0.5F));
+    }
+    return changed;
+}
 
 // One selectable row per scene under `heading`, labelled by `label`; a click picks it.
 template <typename Label>
@@ -169,8 +198,11 @@ field_column(std::span<const char* const> labels) {
     return widest + ImGui::GetStyle().ItemSpacing.x;
 }
 
-std::string
-field_label(const char* label, float column) {
+bool
+field_row(const char* label, float column, std::span<float> values, float speed, const char* format) {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(style.FramePadding.x, style.FramePadding.y * FIELD_PADDING_Y));
     const float start = ImGui::GetCursorPosX();
     {
         const FontScope text(FontRole::Text);
@@ -178,8 +210,24 @@ field_label(const char* label, float column) {
         ImGui::TextUnformatted(label);
     }
     ImGui::SameLine(start + column);
-    ImGui::SetNextItemWidth(-FLT_MIN);
-    return std::string("##") + label;
+    const FontScope mono(FontRole::Mono);
+    bool changed = false;
+    ImGui::BeginGroup();
+    ImGui::PushID((std::string("##") + label).c_str());
+    ImGui::PushMultiItemsWidths(static_cast<int>(values.size()), ImGui::GetContentRegionAvail().x);
+    for (size_t i = 0; i < values.size(); i++) {
+        ImGui::PushID(static_cast<int>(i));
+        if (i > 0) {
+            ImGui::SameLine(0.0F, style.ItemInnerSpacing.x);
+        }
+        changed |= drag_left(&values[i], speed, format);
+        ImGui::PopID();
+        ImGui::PopItemWidth();
+    }
+    ImGui::PopID();
+    ImGui::EndGroup();
+    ImGui::PopStyleVar();
+    return changed;
 }
 
 void

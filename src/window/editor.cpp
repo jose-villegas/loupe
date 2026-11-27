@@ -125,9 +125,7 @@ placement_rows(Editor& editor, const editor::Object& object) {
     for (size_t i = 0; i < editor::PLACEMENT_FIELDS.size(); i++) {
         const editor::PlacementField& field = editor::PLACEMENT_FIELDS[i];
         editor::Placement placement = shown_placement(editor, object);
-        const std::string id = field_label(field.name, column);
-        const FontScope mono(FontRole::Mono);
-        if (ImGui::DragFloat3(id.c_str(), (placement.*field.values).data(), FIELD_SPEEDS[i], 0.0F, 0.0F, "%.4g")) {
+        if (field_row(field.name, column, placement.*field.values, FIELD_SPEEDS[i], "%.4g")) {
             drag_to(editor, object, placement);
         }
         if (ImGui::IsItemDeactivatedAfterEdit()) {
