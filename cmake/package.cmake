@@ -66,8 +66,8 @@ else()
 endif()
 install(TARGETS loupe RUNTIME DESTINATION "${bin_dir}")
 install(FILES LICENSE DESTINATION "${doc_dir}")
-# The panels' typeface, when built in (LOUPE_UI_FONT), ships with its licence.
-if(NOT LOUPE_UI_FONT STREQUAL "imgui")
+# The panels' typefaces, when built in, ship with their licence.
+if(LOUPE_LATIN_MODERN)
     install(FILES assets/fonts/GUST-FONT-LICENSE.txt DESTINATION "${doc_dir}")
 endif()
 # The start panel lists the samples where this installs them.
