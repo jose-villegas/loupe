@@ -16,8 +16,9 @@ namespace loupe::window {
 namespace {
 
 constexpr const char ABOUT[] = "About";
-// The field rows' frames: this share of the style's vertical padding, so they sit tighter than buttons.
-constexpr float FIELD_PADDING_Y = 0.5F;
+// The field rows' frames: this share of the style's padding, so they sit
+// tighter than buttons and a short panel still fits each value.
+constexpr float FIELD_PADDING = 0.5F;
 // Room for one value as a field row's format writes it.
 constexpr size_t FIELD_TEXT_SIZE = 32;
 
@@ -202,7 +203,7 @@ bool
 field_row(const char* label, float column, std::span<float> values, float speed, const char* format) {
     const ImGuiStyle& style = ImGui::GetStyle();
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
-                        ImVec2(style.FramePadding.x, style.FramePadding.y * FIELD_PADDING_Y));
+                        ImVec2(style.FramePadding.x * FIELD_PADDING, style.FramePadding.y * FIELD_PADDING));
     const float start = ImGui::GetCursorPosX();
     {
         const FontScope text(FontRole::Text);
