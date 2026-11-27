@@ -66,6 +66,10 @@ else()
 endif()
 install(TARGETS loupe RUNTIME DESTINATION "${bin_dir}")
 install(FILES LICENSE DESTINATION "${doc_dir}")
+# The panels' typeface, when built in (LOUPE_UI_FONT), ships with its licence.
+if(NOT LOUPE_UI_FONT STREQUAL "imgui")
+    install(FILES assets/fonts/GUST-FONT-LICENSE.txt DESTINATION "${doc_dir}")
+endif()
 # The start panel lists the samples where this installs them.
 file(RELATIVE_PATH samples_from_exe "/prefix/${bin_dir}" "/prefix/${scenes_dir}")
 set_property(SOURCE src/library.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_SAMPLES_DIR=\"${samples_from_exe}\"")
