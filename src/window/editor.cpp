@@ -12,7 +12,6 @@
 #include "editor/placement.hpp"
 #include "engine/engine_frame.hpp"
 #include "paths.hpp"
-#include "window/fonts.hpp"
 
 namespace loupe::window {
 

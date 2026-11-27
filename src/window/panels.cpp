@@ -4,7 +4,6 @@
 #include <array>
 #include <cfloat>
 #include <cstddef>
-#include <string>
 
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -19,8 +18,8 @@ constexpr const char ABOUT[] = "About";
 // The field rows' frames: this share of the style's padding, so they sit
 // tighter than buttons and a short panel still fits each value.
 constexpr float FIELD_PADDING = 0.5F;
-// Room for one value as a field row's format writes it.
-constexpr size_t FIELD_TEXT_SIZE = 32;
+// Room for one value as a field row's format writes it: DragScalar's own buffer.
+constexpr size_t FIELD_TEXT_SIZE = 64;
 
 // A DragFloat with its value left-aligned: ImGui centres a drag's text, so
 // this draws it unseen and writes the value again from the frame's left. A
@@ -33,6 +32,7 @@ drag_left(float* value, float speed, const char* format) {
     }
     const bool changed = ImGui::DragFloat("", value, speed, 0.0F, 0.0F, format);
     if (!typing) {
+        // Typing may start inside the drag, its text field hidden too: this frame, this text stands in for it.
         ImGui::PopStyleColor();
         std::array<char, FIELD_TEXT_SIZE> text = {};
         ImGui::DataTypeFormatString(text.data(), static_cast<int>(text.size()), ImGuiDataType_Float, value, format);
@@ -215,7 +215,7 @@ field_row(const char* label, float column, std::span<float> values, float speed,
     const FontScope mono(FontRole::Mono);
     bool changed = false;
     ImGui::BeginGroup();
-    ImGui::PushID((std::string("##") + label).c_str());
+    ImGui::PushID(label);
     ImGui::PushMultiItemsWidths(static_cast<int>(values.size()), ImGui::GetContentRegionAvail().x);
     for (size_t i = 0; i < values.size(); i++) {
         ImGui::PushID(static_cast<int>(i));

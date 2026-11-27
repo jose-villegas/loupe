@@ -63,8 +63,8 @@ void hint(const char* text);
 float field_column(std::span<const char* const> labels);
 // One row: `label` in the Text face, then `values` in Mono, dragged or typed,
 // each left-aligned in a frame tighter than a button's, the frames
-// sharing the rest of the panel's width. Laid out and named as DragFloatN
-// would with the label "##label". True when a value changed.
+// sharing the rest of the panel's width. Laid out and named as
+// DragFloatN(label) lays out and names its values. True when a value changed.
 bool field_row(const char* label, float column, std::span<float> values, float speed, const char* format);
 
 // Where draw_frame put the frame, in screen pixels.

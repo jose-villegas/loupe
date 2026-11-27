@@ -19,7 +19,7 @@ its line, and `loupe-storyboard` exits 1.
 - name: The Sponza scene
   loupe.open: ../../../third_party/autana/launcher/demo/sponza/sponza.scene.toml --dt 100
 - loupe.click: //Outliner/tour
-- loupe.input: {ref: "//Inspector/##eye/$$0", value: "500"}
+- loupe.input: {ref: "//Inspector/eye/$$0", value: "500"}
 - loupe.screenshot: {out: key-moved.png, crop: Viewport}
 ```
 
