@@ -16,6 +16,9 @@ option(LOUPE_SAMPLES "Install every autana demo scene's pack as a sample" OFF)
 # test engine drives it (third_party/CMakeLists.txt). Off, as its licence is not
 # the GPL's; the development presets turn it on, the downloads never do.
 option(LOUPE_STORYBOARD "Build loupe-storyboard, with Dear ImGui's test engine" OFF)
+# The panels' typefaces, Latin Modern Sans and Mono (assets/fonts, GUST Font
+# License), built into the binary; off, ImGui's own font draws both roles.
+option(LOUPE_LATIN_MODERN "Draw the panels in Latin Modern Sans and Mono; OFF for ImGui's own font" ON)
 # Where this build's updates come from (src/version.hpp); the release workflow
 # sets it for the downloads, and a local build stays None.
 set(LOUPE_CHANNEL None CACHE STRING "The channel this build is for: None, Releases or Main")
@@ -128,6 +131,7 @@ endif()
 add_library(loupe_window OBJECT
     src/window/editor.cpp
     src/window/files.cpp
+    src/window/fonts.cpp
     src/window/frame_texture.cpp
     src/window/gpu.cpp
     src/window/observer.cpp
@@ -135,12 +139,23 @@ add_library(loupe_window OBJECT
     src/window/path_editor.cpp
     src/window/run_window.cpp)
 target_link_libraries(loupe_window PUBLIC loupe_core imgui imguizmo)
-# The window's icon, the app logo, built into the binary as the bytes of its PNG.
-set(icon_png "${CMAKE_CURRENT_SOURCE_DIR}/assets/loupe.png")
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${icon_png}")
-file(READ "${icon_png}" icon_bytes HEX)
-string(REGEX REPLACE "(..)" "0x\\1," icon_bytes "${icon_bytes}")
-file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/generated/window/icon_png.inc" CONTENT "${icon_bytes}\n")
+# Builds FILE into the binary: generated/INC holds its bytes as "0x..," for an array's braces.
+function(loupe_embed file inc)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${file}")
+    file(READ "${file}" bytes HEX)
+    string(REGEX REPLACE "(..)" "0x\\1," bytes "${bytes}")
+    file(CONFIGURE OUTPUT "${CMAKE_BINARY_DIR}/generated/${inc}" CONTENT "${bytes}\n")
+endfunction()
+# The window's icon, the app logo, as the bytes of its PNG.
+loupe_embed("${CMAKE_CURRENT_SOURCE_DIR}/assets/loupe.png" window/icon_png.inc)
+# The panels' faces (src/window/fonts.cpp).
+if(LOUPE_LATIN_MODERN)
+    loupe_embed("${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/lmsans10-regular.otf" window/lmsans10_regular.inc)
+    loupe_embed("${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/lmmono10-regular.otf" window/lmmono10_regular.inc)
+    set_property(SOURCE src/window/fonts.cpp APPEND PROPERTY COMPILE_DEFINITIONS LOUPE_LATIN_MODERN=1)
+else()
+    set_property(SOURCE src/window/fonts.cpp APPEND PROPERTY COMPILE_DEFINITIONS LOUPE_LATIN_MODERN=0)
+endif()
 target_include_directories(loupe_window PRIVATE "${CMAKE_BINARY_DIR}/generated")
 
 # A camera path's frame, and the A | B compare; PNGs through SDL.

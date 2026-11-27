@@ -20,6 +20,7 @@
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_vulkan.h"
 #include "imgui_internal.h"
+#include "window/fonts.hpp"
 
 namespace loupe::window {
 
@@ -248,6 +249,7 @@ Gpu::State::open_imgui(std::optional<float> content_scale, std::string* why) {
     // The scene's panels dock into one window (run_window.cpp lays them out).
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImGui::StyleColorsDark();
+    load_fonts();
     const float scale = content_scale.value_or(SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay()));
     ImGui::GetStyle().ScaleAllSizes(scale);
     ImGui::GetStyle().FontScaleDpi = scale;
