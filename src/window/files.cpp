@@ -2,12 +2,13 @@
 
 #include <SDL3/SDL.h>
 
-#include <cstdio>
+#include <format>
 #include <mutex>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include "log/log.hpp"
 #include "pack.hpp"
 #include "paths.hpp"
 #include "process.hpp"
@@ -47,7 +48,7 @@ on_picked(void* /*userdata*/, const char* const* files, int /*filter*/) {
     const std::scoped_lock hold(pending.lock);
     pending.showing = false;
     if (files == nullptr) {
-        std::fprintf(stderr, "loupe: no open dialog: %s\n", SDL_GetError());
+        log::error(std::format("no open dialog: {}", SDL_GetError()));
     } else if (files[0] != nullptr) {
         pending.picked = from_utf8(files[0]);
     }

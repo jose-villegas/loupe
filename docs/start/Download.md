@@ -52,5 +52,5 @@ copy's place: a portable copy's files are replaced, the running `loupe` renamed
 aside until the next start; an installed copy runs the new setup silently,
 which asks Windows for permission once. The next start's About says what it was
 updated to. It downloads and unpacks with the system's own `curl` and `tar`,
-nothing ever pops up, and every step is logged to `update.log` in the settings
-folder. Runs with `-o`, `--video` or `--ticks` never update.
+nothing ever pops up, and every step is logged to the Console and `loupe.log` in
+the settings folder. Runs with `-o`, `--video` or `--ticks` never update.

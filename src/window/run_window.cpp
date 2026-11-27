@@ -1,6 +1,5 @@
 #include "window/run_window.hpp"
 
-#include <cstdio>
 #include <filesystem>
 #include <format>
 #include <memory>
@@ -17,12 +16,14 @@
 // After imgui.h, whose types its header uses without including it.
 #include "ImGuizmo.h"
 #include "library.hpp"
+#include "log/log.hpp"
 #include "paths.hpp"
 #include "process.hpp"
 #include "scratch.hpp"
 #include "tools.hpp"
 #include "update/update.hpp"
 #include "version.hpp"
+#include "window/console.hpp"
 #include "window/editor.hpp"
 #include "window/files.hpp"
 #include "window/frame_texture.hpp"
@@ -40,10 +41,21 @@ constexpr const char VIEWPORT[] = "Viewport";
 constexpr const char OUTLINER[] = "Outliner";
 constexpr const char INSPECTOR[] = "Inspector";
 constexpr const char DEBUGGER[] = "Frame debugger";
+// The scratch frame autana's close writes (Window::scratch_), and the suffix
+// of the engine's stdout beside it, which the log reads as ENGINE's lines.
+constexpr const char FRAME_BMP[] = "frame.bmp";
+constexpr const char ENGINE_OUT_SUFFIX[] = ".console";
+constexpr const char ENGINE[] = "autana";
+// Where an unscripted window keeps its log, in the settings folder.
+constexpr const char LOG_FILE[] = "loupe.log";
+// The Console's size when it first opens over the start panel, undocked.
+constexpr ImVec2 CONSOLE_SIZE(720, 280);
 // Each side panel's share of the window: outliner, inspector, frame debugger.
 constexpr float OUTLINER_SHARE = 0.18F;
 constexpr float INSPECTOR_SHARE = 0.26F;
 constexpr float DEBUGGER_SHARE = 0.16F;
+// The Console's share of the viewport's height, when it opens under it.
+constexpr float CONSOLE_SHARE = 0.35F;
 
 // `options`' run on `scene`, open on the first frame a seek reaches so every
 // control works from the start; null, with `why` set, when it cannot be shown.
@@ -81,7 +93,9 @@ struct Shown {
     // The editor over the scene file; none for a pack, or without the pack tool, `editor_why` saying why.
     std::optional<window::Editor> editor;
     std::string editor_why;
-    bool laid_out = false;
+    // The viewport's dock node, which the Console splits when it opens; none before lay_out().
+    ImGuiID viewport_node = 0;
+    bool console_placed = false;
 
     Shown(window::Gpu& gpu, std::unique_ptr<Frames> opened)
         : frames(std::move(opened)), texture(gpu, frames->frame()),
@@ -134,8 +148,9 @@ apply(Frames& frames, window::Timeline& timeline, window::Observer& observer, co
 }
 
 // Docks the panels into `dock`, `size` large: the outliner left, the
-// inspector right, the frame debugger below, the viewport in the middle.
-void
+// inspector right, the frame debugger below, the viewport in the middle,
+// whose node it gives back.
+ImGuiID
 lay_out(ImGuiID dock, ImVec2 size) {
     ImGui::DockBuilderRemoveNode(dock);
     ImGui::DockBuilderAddNode(dock, ImGuiDockNodeFlags_DockSpace);
@@ -149,6 +164,23 @@ lay_out(ImGuiID dock, ImVec2 size) {
     ImGui::DockBuilderDockWindow(DEBUGGER, below);
     ImGui::DockBuilderDockWindow(VIEWPORT, middle);
     ImGui::DockBuilderFinish(dock);
+    return middle;
+}
+
+// Docks the Console below the viewport in `viewport_node`, CONSOLE_SHARE of
+// it; nothing when that node is gone or split, the panels rearranged since,
+// and the Console floats.
+void
+place_console(ImGuiID viewport_node) {
+    const ImGuiDockNode* node = ImGui::DockBuilderGetNode(viewport_node);
+    if (node == nullptr || !node->IsLeafNode()) {
+        return;
+    }
+
+    ImGuiID viewport = viewport_node;
+    const ImGuiID console = ImGui::DockBuilderSplitNode(viewport, ImGuiDir_Down, CONSOLE_SHARE, nullptr, &viewport);
+    ImGui::DockBuilderDockWindow(window::CONSOLE, console);
+    ImGui::DockBuilderFinish(viewport_node);
 }
 
 // The frame debugger: Scenes, the view picker, the observer and the timeline.
@@ -195,9 +227,8 @@ draw_viewport(Shown& shown) {
 bool
 draw_shown(Shown& shown, const window::EditMenu& menu, bool* ok) {
     const ImGuiID dock = ImGui::GetID("panels");
-    if (!shown.laid_out) {
-        lay_out(dock, ImGui::GetContentRegionAvail());
-        shown.laid_out = true;
+    if (shown.viewport_node == 0) {
+        shown.viewport_node = lay_out(dock, ImGui::GetContentRegionAvail());
     }
     ImGui::DockSpace(dock);
     Asked asked;
@@ -271,12 +302,14 @@ class Window {
   private:
     // Closes the open scene, if any, back to the start panel.
     void close();
+    // The Console, when open: under the viewport when it opens over a scene, over the start panel otherwise.
+    void draw_console();
 
     window::Gpu& gpu_;
     // A window run's stand-in for -o: autana's close writes the last frame, to
     // stdout without -o, and with it the engine's stdout beside the image
-    // (out.bmp.console). The window wants neither, so both go here, until
-    // autana can close a run without writing an image.
+    // (out.bmp.console). Both go here: the image unwanted, until autana can
+    // close a run without writing one, the engine's stdout read into the log.
     Scratch scratch_;
     std::optional<size_t> checkpoint_mb_;
     Folders folders_;
@@ -290,6 +323,9 @@ class Window {
     Library library_;
     std::string refusal_;
     std::optional<Shown> shown_;
+    // The open scene's engine output, read into the log each tick.
+    std::optional<log::Tail> engine_out_;
+    window::Console console_;
     bool ok_ = true;
 };
 
@@ -298,6 +334,9 @@ Window::Window(window::Gpu& gpu, const Options& options, bool scripted)
       copy_{.id = build_id(folders_.exe_dir), .exe = exe_path(), .config = folders_.config}, scripted_(scripted),
       updates_(!scripted_ && copy_.id.built_for != Channel::None && !copy_.config.empty()),
       library_(library(folders_)) {
+    if (!scripted_ && !copy_.config.empty() && !log::sink().open_file(copy_.config / LOG_FILE)) {
+        log::warn(std::format("cannot write the log in {}", utf8(copy_.config / LOG_FILE)));
+    }
     about_.version = version_line(copy_.id);
     about_.can_update = updates_;
     if (updates_) {
@@ -324,8 +363,8 @@ Window::tick(std::optional<window::Picture>* picture) {
                 .can_redo = editor.edits.can_redo(),
                 .can_save = !window::dragging(editor)};
     }
-    if (window::draw_menu(about_, menu) && !update::set_follow(copy_, about_.follow)) {
-        std::fprintf(stderr, "loupe: cannot save the update setting in %s\n", utf8(copy_.config).c_str());
+    if (window::draw_menu(about_, menu, &console_.open) && !update::set_follow(copy_, about_.follow)) {
+        log::error(std::format("cannot save the update setting in {}", utf8(copy_.config)));
     }
     window::Start start;
     bool back = false;
@@ -335,11 +374,12 @@ Window::tick(std::optional<window::Picture>* picture) {
         window::draw_start(library_, refusal_, start);
     }
     ImGui::End();
+    draw_console();
     if (picture != nullptr) {
         std::string why;
         *picture = gpu_.end_frame_read_back(&why);
         if (!*picture) {
-            std::fprintf(stderr, "loupe: cannot read the window back: %s\n", why.c_str());
+            log::error(std::format("cannot read the window back: {}", why));
         }
     } else {
         gpu_.end_frame();
@@ -359,6 +399,31 @@ Window::tick(std::optional<window::Picture>* picture) {
     }
 }
 
+void
+Window::draw_console() {
+    if (engine_out_) {
+        engine_out_->poll();
+    }
+    window::pull(console_);
+    if (!console_.open) {
+        if (shown_) {
+            shown_->console_placed = false;
+        }
+        return;
+    }
+    // Each time it opens over a scene, the Console docks under the viewport; moved after, it stays.
+    if (shown_ && shown_->viewport_node != 0 && !shown_->console_placed) {
+        place_console(shown_->viewport_node);
+        shown_->console_placed = true;
+    }
+
+    ImGui::SetNextWindowSize(CONSOLE_SIZE, ImGuiCond_FirstUseEver);
+    if (ImGui::Begin(window::CONSOLE, &console_.open)) {
+        window::draw_console(console_);
+    }
+    ImGui::End();
+}
+
 bool
 Window::finish() {
     close();
@@ -369,9 +434,9 @@ Window::finish() {
     std::string why;
     const update::Follow follow = update::follow(copy_);
     if (updates_ && follow != update::Follow::Off) {
-        update::log(copy_, update::apply_staged(copy_, follow, &why) ? "swapped the staged build in"
-                           : why.empty()                             ? "nothing staged"
-                                                                     : why);
+        update::log(update::apply_staged(copy_, follow, &why) ? "swapped the staged build in"
+                    : why.empty()                             ? "nothing staged"
+                                                              : why);
     }
     return ok_;
 }
@@ -380,6 +445,11 @@ void
 Window::close() {
     if (shown_) {
         ok_ &= shown_->frames->close();
+        if (engine_out_) {
+            engine_out_->poll(true);
+            engine_out_.reset();
+        }
+        log::info(std::format("closed {}", shown_->frames->scene_id()));
         shown_.reset();
         gpu_.set_title(TITLE);
         library_ = library(folders_);
@@ -390,15 +460,18 @@ bool
 Window::open(const Options& options) {
     close();
     Options run = options;
-    run.out_bmp = utf8(scratch_.path() / "frame.bmp");
+    run.out_bmp = utf8(scratch_.path() / FRAME_BMP);
     std::string why = "cannot make a scratch folder for its frames";
     std::unique_ptr<Frames> frames = scratch_.path().empty() ? nullptr : open_scene(run, options.scene, &why);
     if (frames == nullptr) {
         refusal_ = std::format("{}: {}", utf8(options.scene), why);
-        std::fprintf(stderr, "loupe: %s\n", refusal_.c_str());
+        log::error(refusal_);
         return false;
     }
     refusal_.clear();
+    log::info(std::format("opened {} from {}", frames->scene_id(), utf8(options.scene.filename())));
+    engine_out_.emplace(from_utf8(run.out_bmp + ENGINE_OUT_SUFFIX), ENGINE);
+
     if (!scripted_) {
         (void)remember(folders_, options.scene);
     }
@@ -413,9 +486,10 @@ Window::open(const Options& options) {
 bool
 run_window(const Options& options) {
     std::string why;
+    const log::StderrCapture captured;
     const std::unique_ptr<window::Gpu> gpu = window::Gpu::open(TITLE, &why);
     if (gpu == nullptr) {
-        std::fprintf(stderr, "loupe: %s\n", why.c_str());
+        log::error(why);
         return false;
     }
     Window window(*gpu, options, options.ticks.has_value());
@@ -429,11 +503,13 @@ run_window(const Options& options) {
 bool
 run_scripted(float content_scale, Script& script) {
     std::string why;
+    const log::StderrCapture captured;
     const std::unique_ptr<window::Gpu> gpu = window::Gpu::open(TITLE, &why, content_scale);
     if (gpu == nullptr) {
-        std::fprintf(stderr, "loupe: %s\n", why.c_str());
+        log::error(why);
         return false;
     }
+
     Window window(*gpu, Options{}, true);
     script.start();
     for (;;) {

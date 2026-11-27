@@ -12,6 +12,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "log/log.hpp"
 #include "options.hpp"
 #include "paths.hpp"
 #include "process.hpp"
@@ -26,7 +27,8 @@ namespace {
 
 constexpr const char SETTINGS_FILE[] = "settings.txt";
 constexpr const char FOLLOW_KEY[] = "updates=";
-constexpr const char LOG_FILE[] = "update.log";
+// Where its lines come from in Loupe's log.
+constexpr const char LOG_SOURCE[] = "update";
 constexpr const char UPDATE_DIR[] = "update";
 constexpr const char API[] = "https://api.github.com/repos/" LOUPE_REPO;
 constexpr const char JSON_TYPE[] = "application/vnd.github+json";
@@ -534,9 +536,8 @@ check_in_background(const Copy& copy, Follow follow) {
     if (copy.id.built_for == Channel::None || follow == Follow::Off || copy.config.empty()) {
         return {};
     }
-    return std::jthread([copy, follow](const std::stop_token& stop) {
-        log(copy, check(copy, follow, curl(files_of(copy).tool_log, stop)));
-    });
+    return std::jthread(
+        [copy, follow](const std::stop_token& stop) { log(check(copy, follow, curl(files_of(copy).tool_log, stop))); });
 }
 
 bool
@@ -606,7 +607,7 @@ settle(const Copy& copy) {
     } else if (journal) {
         undo(journal->first);
         fs::remove(files.applied, error);
-        log(copy, "a swap that did not finish was undone");
+        log("a swap that did not finish was undone");
     }
     fs::remove(files.journal, error);
     if (!copy.exe.empty()) {
@@ -620,24 +621,17 @@ settle(const Copy& copy) {
     fs::remove(files.applied, error);
     fs::remove_all(files.staged, error);
     if (applied[0] == copy.id.commit) {
-        log(copy, "the staged build did not take this copy's place");
+        log("the staged build did not take this copy's place");
         return std::nullopt;
     }
     std::string updated = std::format("Updated to {} ({})", copy.id.version, copy.id.commit);
-    log(copy, updated);
+    log(updated);
     return updated;
 }
 
 void
-log(const Copy& copy, const std::string& line) {
-    if (copy.config.empty()) {
-        return;
-    }
-    std::error_code error;
-    fs::create_directories(copy.config, error);
-    std::ofstream out(copy.config / LOG_FILE, std::ios::binary | std::ios::app);
-    out << std::format("{:%FT%TZ} ", std::chrono::floor<std::chrono::seconds>(std::chrono::system_clock::now())) << line
-        << '\n';
+log(const std::string& line) {
+    loupe::log::sink().write(loupe::log::Level::Info, LOG_SOURCE, line);
 }
 
 } // namespace loupe::update

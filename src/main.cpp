@@ -5,6 +5,7 @@
 #include <string>
 
 #include "engine/frames.hpp"
+#include "log/log.hpp"
 #include "options.hpp"
 #include "path/path.hpp"
 #include "process.hpp"
@@ -13,10 +14,12 @@
 
 int
 main(int argc, char** argv) {
+    loupe::log::attach_terminal();
     loupe::Options options;
     std::string why;
     if (!loupe::parse_options(argc, argv, &options, &why)) {
-        std::fprintf(stderr, "loupe: %s\n%s", why.c_str(), loupe::usage());
+        loupe::log::error(why);
+        std::fputs(loupe::usage(), stderr);
         return 2;
     }
     if (options.version) {
@@ -30,7 +33,7 @@ main(int argc, char** argv) {
         return loupe::run_path(options);
     }
     if (!loupe::render(options, &why)) {
-        std::fprintf(stderr, "loupe: %s\n", why.c_str());
+        loupe::log::error(why);
         return 1;
     }
     return 0;
