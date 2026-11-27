@@ -357,12 +357,16 @@ Runner::run_steps(ImGuiTestContext* ctx) {
     const std::string recipe = utf8(self.recipe_.path);
     for (const Item& item : self.recipe_.steps) {
         std::string why;
+        const auto began = std::chrono::steady_clock::now();
         if (!self.step(ctx, item, &why) || ctx->IsError()) {
             std::fprintf(stderr, "loupe-storyboard: %s:%d: %s: %s\n", recipe.c_str(), item.line, item.label().c_str(),
                          why.empty() ? "failed, as the test engine says above" : why.c_str());
             self.ok_ = false;
             return;
         }
+        const std::chrono::duration<double> took = std::chrono::steady_clock::now() - began;
+        std::printf("loupe-storyboard: %s:%d: %s: %.3f s\n", recipe.c_str(), item.line, item.label().c_str(),
+                    took.count());
     }
 }
 

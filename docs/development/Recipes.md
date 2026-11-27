@@ -16,8 +16,8 @@ A recipe is a YAML list of steps. Each step is a map of one `loupe.` key,
 its value the step's arguments, an optional `name` and an optional `check`;
 any other map is refused at its line before the run starts. A step that fails
 stops the run at its line, saying what the window showed, and
-`loupe-storyboard` exits 1. `${NAME}` in a step takes the value of
-`--set NAME=VALUE`.
+`loupe-storyboard` exits 1. A step that passes prints its line, its name and
+how long it took. `${NAME}` in a step takes the value of `--set NAME=VALUE`.
 
 ```yaml
 - name: The Sponza scene
