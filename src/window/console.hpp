@@ -32,7 +32,9 @@ struct Console {
     std::string rows_filter;
 };
 
-// Takes the lines the sink holds after `console.seen`.
+// Takes the lines the sink holds after `console.seen`; when the sink let go of
+// some before they were taken, the Console starts again from the ones it has,
+// so its lines' seqs run on without a gap.
 void pull(Console& console, const log::Sink& from = log::sink());
 // `line` as the panel shows it and copies it: its time of day, level, source and text.
 std::string shown_line(const log::Line& line, bool times);

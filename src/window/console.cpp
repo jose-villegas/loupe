@@ -119,7 +119,13 @@ draw_lines(const Console& console) {
 
 void
 pull(Console& console, const log::Sink& from) {
-    console.seen = from.read_since(console.seen, [&console](const log::Line& line) { console.lines.push(line); });
+    console.seen = from.read_since(console.seen, [&console](const log::Line& line) {
+        if (console.lines.size() > 0 && line.seq != console.lines[console.lines.size() - 1].seq + 1) {
+            console.lines.clear();
+            console.rows.clear();
+        }
+        console.lines.push(line);
+    });
 }
 
 std::string

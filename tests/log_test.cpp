@@ -111,8 +111,9 @@ echoes_loupe_and_stderr(const fs::path& out) {
         sink.write(Level::Info, "build_pack", "a program's");
         ok &= check(sink.echo() == fileno(file.get()), "echoing to the descriptor given");
     }
-    return check(loupe::test::read_file(echoed) == "loupe: mine\nthe engine's\n",
-                 "Loupe's lines echoed as loupe: ..., stderr's as they were, a program's not");
+    ok &= check(loupe::test::read_file(echoed) == "loupe: mine\nthe engine's\n",
+                "Loupe's lines echoed as loupe: ..., stderr's as they were, a program's not");
+    return ok;
 }
 
 bool
@@ -188,6 +189,18 @@ console_shows_the_sinks_lines() {
     loupe::window::pull(console, sink);
     bool ok = check(console.lines.size() == 1 && console.lines[0].text == "two",
                     "a cleared Console takes only the lines after it");
+    Sink small(2);
+    loupe::window::Console behind;
+    for (const char* text : {"a", "b", "c"}) {
+        small.write(Level::Info, "tool", text);
+    }
+    loupe::window::pull(behind, small);
+    for (const char* text : {"d", "e", "f"}) {
+        small.write(Level::Info, "tool", text);
+    }
+    loupe::window::pull(behind, small);
+    ok &= check(behind.lines.size() == 2 && behind.lines[0].text == "e" && behind.lines[1].text == "f",
+                "a Console that missed lines starts again from the sink's");
     ok &= check(loupe::window::shown_line(console.lines[0], false) == "warning [bake_list] two",
                 "a line shown with its level and source");
     const std::string timed = loupe::window::shown_line(console.lines[0], true);
