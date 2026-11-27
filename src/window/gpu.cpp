@@ -37,6 +37,15 @@ constexpr int MINIMIZED_WAIT_MS = 10;
 constexpr unsigned char ICON_PNG[] = {
 #include "window/icon_png.inc"
 };
+#if LOUPE_UI_FONT
+// The panels' typeface, LOUPE_UI_FONT's OTF as CMake built it in.
+constexpr unsigned char UI_FONT_OTF[] = {
+#include "window/ui_font.inc"
+};
+// Its size in pixels at a scale of 1: Latin Modern's x-height is small, so
+// this is above ImGui's own 13 to keep the text as tall.
+constexpr float UI_FONT_PIXELS = 17.0F;
+#endif
 
 // Gives `window` the app logo; a window without it still works.
 void
@@ -248,6 +257,13 @@ Gpu::State::open_imgui(std::optional<float> content_scale, std::string* why) {
     // The scene's panels dock into one window (run_window.cpp lays them out).
     ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
     ImGui::StyleColorsDark();
+#if LOUPE_UI_FONT
+    ImFontConfig font;
+    font.FontDataOwnedByAtlas = false;
+    // ImGui only reads the bytes; it takes them as writable.
+    ImGui::GetIO().Fonts->AddFontFromMemoryTTF(const_cast<unsigned char*>(UI_FONT_OTF), sizeof UI_FONT_OTF,
+                                               UI_FONT_PIXELS, &font);
+#endif
     const float scale = content_scale.value_or(SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay()));
     ImGui::GetStyle().ScaleAllSizes(scale);
     ImGui::GetStyle().FontScaleDpi = scale;
