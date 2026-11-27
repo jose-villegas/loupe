@@ -204,13 +204,14 @@ field_row(const char* label, float column, std::span<float> values, float speed,
     const ImGuiStyle& style = ImGui::GetStyle();
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
                         ImVec2(style.FramePadding.x * FIELD_PADDING, style.FramePadding.y * FIELD_PADDING));
-    const float start = ImGui::GetCursorPosX();
+    float width = 0.0F;
     {
         const FontScope text(FontRole::Text);
         ImGui::AlignTextToFramePadding();
         ImGui::TextUnformatted(label);
+        width = ImGui::CalcTextSize(label).x;
     }
-    ImGui::SameLine(start + column);
+    ImGui::SameLine(0.0F, column - width);
     const FontScope mono(FontRole::Mono);
     bool changed = false;
     ImGui::BeginGroup();

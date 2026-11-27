@@ -1,7 +1,6 @@
 #include "window/path_editor.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstddef>
 #include <format>
@@ -169,22 +168,20 @@ point_handle(Editor& editor, const KeyPick& pick, const std::vector<CameraKey>& 
 
 // The picked key's time and points as fields, and which point the handle moves. A change drags; letting go ends it.
 void
-key_fields(Editor& editor, const KeyPick& pick, const std::vector<CameraKey>& keys) {
+key_fields(Editor& editor, const KeyPick& pick, const std::vector<CameraKey>& keys, float column) {
     CameraKey key = keys[pick.index];
     bool changed = false;
     bool ended = false;
-    const std::array<const char*, 3> labels = {"t (s)", "eye", "look_at"};
-    const float column = field_column(labels);
     ImGui::BeginDisabled(pick.index == 0);
-    if (field_row(labels[0], column, std::span(&key.t, 1), TIME_SPEED, "%.3f")) {
+    if (field_row(KEY_FIELD_LABELS[0], column, std::span(&key.t, 1), TIME_SPEED, "%.3f")) {
         key.t = editor::clamp_time(keys, pick.index, key.t);
         changed = true;
     }
     ended = ImGui::IsItemDeactivatedAfterEdit();
     ImGui::EndDisabled();
-    changed |= field_row(labels[1], column, key.eye, POINT_SPEED, "%.4g");
+    changed |= field_row(KEY_FIELD_LABELS[1], column, key.eye, POINT_SPEED, "%.4g");
     ended |= ImGui::IsItemDeactivatedAfterEdit();
-    changed |= field_row(labels[2], column, key.look_at, POINT_SPEED, "%.4g");
+    changed |= field_row(KEY_FIELD_LABELS[2], column, key.look_at, POINT_SPEED, "%.4g");
     ended |= ImGui::IsItemDeactivatedAfterEdit();
     if (changed) {
         drag_keys(editor, pick.camera, editor::with_key(keys, pick.index, key));
@@ -511,7 +508,7 @@ key_rows(Editor& editor, const std::vector<CameraKey>& keys, const std::optional
 } // namespace
 
 void
-draw_path_rows(Editor& editor) {
+draw_path_rows(Editor& editor, float column) {
     const editor::Object* object = editor.docs.scene.find(editor.selected);
     if (object == nullptr || !object->path_source) {
         return;
@@ -534,7 +531,7 @@ draw_path_rows(Editor& editor) {
     const std::optional<KeyPick> pick = pick_on(editor, editor.selected, keys.size());
     key_rows(editor, keys, pick);
     if (pick) {
-        key_fields(editor, *pick, keys);
+        key_fields(editor, *pick, keys, column);
     }
     const float at = editor::clip_seconds(keys, editor.path.shown_ms);
     if (ImGui::Button(std::format("Add key at {:.2f} s", at).c_str())) {

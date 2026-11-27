@@ -6,6 +6,7 @@
 // path the pack was built with again.
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -113,10 +114,13 @@ struct PathHandles {
 // `projection` are the handles' (editor::view_matrix, projection_matrix).
 PathHandles draw_path(Editor& editor, const Frames& frames, const FrameRect& frame, const mat4f_t& view,
                       const mat4f_t& projection);
-// The selected camera's path rows: the keys, the picked key's time and points,
-// Add key and Delete key; a .glb path says it is read-only, and a path a bake
-// reads asks before the first edit.
-void draw_path_rows(Editor& editor);
+// The picked key's field rows' labels: its time and its two points.
+constexpr std::array<const char*, 3> KEY_FIELD_LABELS = {"t (s)", "eye", "look_at"};
+// The selected camera's path rows: the keys, the picked key's time and points
+// as field rows starting `column` along (field_column), Add key and Delete
+// key; a .glb path says it is read-only, and a path a bake reads asks before
+// the first edit.
+void draw_path_rows(Editor& editor, float column);
 // A scrub bar over the selected camera's path that sets `seek_to` to the frame at the time picked.
 void draw_path_scrub(Editor& editor, const Frames& frames, std::optional<int>* seek_to);
 // The free view's checkbox: on, the active camera flies by hand (the
