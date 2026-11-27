@@ -155,7 +155,7 @@ item_ref(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
         *why = "the step needs an item, such as //Outliner/tour";
         return "";
     }
-    const std::string ref = value.get<std::string>();
+    std::string ref = value.get<std::string>();
     if ((ctx->ItemInfo(ref.c_str()).ItemFlags & ImGuiItemFlags_Disabled) != 0) {
         *why = std::format("{} is disabled", ref);
         return "";
