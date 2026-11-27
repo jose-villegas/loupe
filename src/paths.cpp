@@ -12,10 +12,9 @@ namespace loupe {
 
 namespace {
 
-// How long write_lines retries replacing its file. On Windows another
-// process (a virus scanner, the search indexer) can hold a file just written
-// for a moment, and replacing it then fails with access denied; Node's
-// graceful-fs retries such renames the same way.
+// How long write_lines retries replacing its file. On Windows, replacing a
+// file written moments before now and then fails with access denied, and
+// succeeds when tried again; Node's graceful-fs retries such renames too.
 constexpr auto REPLACE_RETRY_FOR = std::chrono::seconds(1);
 constexpr auto REPLACE_RETRY_EVERY = std::chrono::milliseconds(10);
 
