@@ -1,10 +1,12 @@
 #include "window/panels.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cfloat>
 #include <cstddef>
 
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "paths.hpp"
 #include "window/fonts.hpp"
 
@@ -15,6 +17,36 @@ namespace {
 constexpr const char ABOUT[] = "About";
 // Shows or hides the Console, as in Unity.
 constexpr ImGuiKeyChord CONSOLE_KEYS = ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_C;
+
+// The field rows' frames: this share of the style's padding, so they sit
+// tighter than buttons and a short panel still fits each value.
+constexpr float FIELD_PADDING = 0.5F;
+// Room for one value as a field row's format writes it: DragScalar's own buffer.
+constexpr size_t FIELD_TEXT_SIZE = 64;
+
+// A DragFloat with its value left-aligned: ImGui centres a drag's text, so
+// this draws it unseen and writes the value again from the frame's left. A
+// value being typed is ImGui's own text field, left-aligned already.
+bool
+drag_left(float* value, float speed, const char* format) {
+    const bool typing = ImGui::TempInputIsActive(ImGui::GetID(""));
+    if (!typing) {
+        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(0, 0, 0, 0));
+    }
+    const bool changed = ImGui::DragFloat("", value, speed, 0.0F, 0.0F, format);
+    if (!typing) {
+        // Typing may start inside the drag, its text field hidden too: this frame, this text stands in for it.
+        ImGui::PopStyleColor();
+        std::array<char, FIELD_TEXT_SIZE> text = {};
+        ImGui::DataTypeFormatString(text.data(), static_cast<int>(text.size()), ImGuiDataType_Float, value, format);
+        const ImVec2 pad = ImGui::GetStyle().FramePadding;
+        const ImVec2 min = ImGui::GetItemRectMin();
+        const ImVec2 max = ImGui::GetItemRectMax();
+        ImGui::RenderTextClipped(ImVec2(min.x + pad.x, min.y), ImVec2(max.x - pad.x, max.y), text.data(), nullptr,
+                                 nullptr, ImVec2(0.0F, 0.5F));
+    }
+    return changed;
+}
 
 // One selectable row per scene under `heading`, labelled by `label`; a click picks it.
 template <typename Label>
@@ -165,6 +197,49 @@ draw_frame(const FrameTexture& texture) {
     ImGui::Image(texture.ref(), size);
     list->AddCallback(ImGui::GetPlatformIO().DrawCallback_SetSamplerLinear, nullptr);
     return {.min = ImGui::GetItemRectMin(), .max = ImGui::GetItemRectMax()};
+}
+
+float
+field_column(std::span<const char* const> labels) {
+    const FontScope text(FontRole::Text);
+    float widest = 0.0F;
+    for (const char* label : labels) {
+        widest = std::max(widest, ImGui::CalcTextSize(label).x);
+    }
+    return widest + ImGui::GetStyle().ItemSpacing.x;
+}
+
+bool
+field_row(const char* label, float column, std::span<float> values, float speed, const char* format) {
+    const ImGuiStyle& style = ImGui::GetStyle();
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(style.FramePadding.x * FIELD_PADDING, style.FramePadding.y * FIELD_PADDING));
+    float width = 0.0F;
+    {
+        const FontScope text(FontRole::Text);
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(label);
+        width = ImGui::CalcTextSize(label).x;
+    }
+    ImGui::SameLine(0.0F, column - width);
+    const FontScope mono(FontRole::Mono);
+    bool changed = false;
+    ImGui::BeginGroup();
+    ImGui::PushID(label);
+    ImGui::PushMultiItemsWidths(static_cast<int>(values.size()), ImGui::GetContentRegionAvail().x);
+    for (size_t i = 0; i < values.size(); i++) {
+        ImGui::PushID(static_cast<int>(i));
+        if (i > 0) {
+            ImGui::SameLine(0.0F, style.ItemInnerSpacing.x);
+        }
+        changed |= drag_left(&values[i], speed, format);
+        ImGui::PopID();
+        ImGui::PopItemWidth();
+    }
+    ImGui::PopID();
+    ImGui::EndGroup();
+    ImGui::PopStyleVar();
+    return changed;
 }
 
 void

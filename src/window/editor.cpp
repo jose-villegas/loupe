@@ -4,6 +4,7 @@
 #include <array>
 #include <chrono>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -11,7 +12,6 @@
 #include "engine/engine_frame.hpp"
 #include "log/log.hpp"
 #include "paths.hpp"
-#include "window/fonts.hpp"
 
 namespace loupe::window {
 
@@ -113,14 +113,14 @@ pick(Editor& editor, const Frames& frames, const mat4f_t& clip_from_world, const
     }
 }
 
-// One inspector row per placement field, dragged or typed. A change moves the drag; letting go ends it.
+// One inspector row per placement field, its values `column` along, dragged or typed. A change moves the drag;
+// letting go ends it.
 void
-placement_rows(Editor& editor, const editor::Object& object) {
-    const FontScope mono(FontRole::Mono);
+placement_rows(Editor& editor, const editor::Object& object, float column) {
     for (size_t i = 0; i < editor::PLACEMENT_FIELDS.size(); i++) {
         const editor::PlacementField& field = editor::PLACEMENT_FIELDS[i];
         editor::Placement placement = shown_placement(editor, object);
-        if (ImGui::DragFloat3(field.name, (placement.*field.values).data(), FIELD_SPEEDS[i], 0.0F, 0.0F, "%.4g")) {
+        if (field_row(field.name, column, placement.*field.values, FIELD_SPEEDS[i], "%.4g")) {
             drag_to(editor, object, placement);
         }
         if (ImGui::IsItemDeactivatedAfterEdit()) {
@@ -346,10 +346,17 @@ draw_inspector(Editor& editor) {
         } else if (!editor::placeable(*object)) {
             hint(object->locked.c_str());
         }
+        // One label column for every field row the inspector shows, so all their values start at one x.
+        std::array<const char*, editor::PLACEMENT_FIELDS.size() + KEY_FIELD_LABELS.size()> labels = {};
+        for (size_t i = 0; i < editor::PLACEMENT_FIELDS.size(); i++) {
+            labels[i] = editor::PLACEMENT_FIELDS[i].name;
+        }
+        std::ranges::copy(KEY_FIELD_LABELS, labels.begin() + editor::PLACEMENT_FIELDS.size());
+        const float column = field_column(labels);
         ImGui::BeginDisabled(!editor::placeable(*object));
-        placement_rows(editor, *object);
+        placement_rows(editor, *object, column);
         ImGui::EndDisabled();
-        draw_path_rows(editor);
+        draw_path_rows(editor, column);
     }
     ImGui::Separator();
     hint(unsaved(editor) ? "Unsaved changes (Ctrl+S saves)" : "No unsaved changes");

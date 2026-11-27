@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -57,6 +58,16 @@ void draw_timeline(const Frames& frames, Timeline& timeline);
 bool draw_view_picker(const std::vector<DebugView>& views, int* view);
 // `text` in the disabled colour, wrapped to the panel.
 void hint(const char* text);
+
+// Field rows, as an inspector lays them out: a label, then its values. The
+// labels share one column, so every row's values start at the same x.
+// The column's width for these rows: the widest of `labels`, and a gap.
+float field_column(std::span<const char* const> labels);
+// One row: `label` in the Text face, then `values` in Mono, dragged or typed,
+// each left-aligned in a frame tighter than a button's, the frames
+// sharing the rest of the panel's width. Laid out and named as
+// DragFloatN(label) lays out and names its values. True when a value changed.
+bool field_row(const char* label, float column, std::span<float> values, float speed, const char* format);
 
 // Where draw_frame put the frame, in screen pixels.
 struct FrameRect {
