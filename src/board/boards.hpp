@@ -42,8 +42,9 @@ BoardList list_boards(const std::filesystem::path& log);
 // lists boards only seen here before, or named by a lapsed lock, with none.
 bool plugged_here(const Board& board);
 // Whether `board` can be recorded from here: plugged in here (autana record
-// reads its USB port) and not held by a command.
-bool recordable(const Board& board);
+// reads its USB port) and not held by a command, unless `in_its_hold`: the
+// window runs inside that command's hold, with its token.
+bool recordable(const Board& board, bool in_its_hold = false);
 // The token in `autana lock hand`'s output `output`: the line that is a lock
 // token alone. Empty when there is none.
 std::string token_in(const std::string& output);

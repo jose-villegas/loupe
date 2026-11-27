@@ -172,7 +172,7 @@ draw_attach(Attach& attach) {
     const BoardRows rows = board_rows(attach.list);
     for (const Board* board : rows.here) {
         ImGui::PushID(board->id.c_str());
-        ImGui::BeginDisabled(!recordable(*board) || reserving);
+        ImGui::BeginDisabled(!recordable(*board, !attach.lock_token.empty()) || reserving);
         if (ImGui::Button("View")) {
             attach.view = board->id;
         }

@@ -9,23 +9,29 @@
 #include <array>
 #include <cctype>
 #include <cfloat>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <format>
+#include <future>
 #include <memory>
+#include <regex>
 #include <string_view>
 #include <system_error>
 #include <utility>
 #include <variant>
 
+#include "board/boards.hpp"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_te_context.h"
 #include "imgui_te_coroutine.h"
 #include "imgui_te_engine.h"
 #include "paths.hpp"
+#include "process.hpp"
+#include "storyboard/check.hpp"
 
 namespace loupe::storyboard {
 
@@ -33,6 +39,12 @@ namespace {
 
 constexpr const char OPEN[] = "loupe.open";
 constexpr const char SCREENSHOT[] = "loupe.screenshot";
+constexpr const char WAIT[] = "loupe.wait";
+constexpr const char AUTANA[] = "loupe.autana";
+// How long loupe.autana tries again for its `until` when the step gives no timeout_s.
+constexpr int AUTANA_UNTIL_S = 60;
+// How long loupe.autana waits between tries.
+constexpr auto AUTANA_AGAIN = std::chrono::seconds(1);
 // Where a picture is taken with the mouse: off the window, so no item shows hovered.
 constexpr ImVec2 OFF_WINDOW(-FLT_MAX, -FLT_MAX);
 
@@ -135,17 +147,6 @@ struct InputStep {
     bool (*run)(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why);
 };
 
-bool
-wait(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
-    const std::optional<int> ticks = count(value, 1);
-    if (!ticks) {
-        *why = "loupe.wait needs a number of ticks";
-        return false;
-    }
-    ctx->Yield(*ticks);
-    return true;
-}
-
 // The item a click, check or uncheck names; empty, with `why` set, for none.
 std::string
 item_ref(const nlohmann::json& value, std::string* why) {
@@ -156,13 +157,19 @@ item_ref(const nlohmann::json& value, std::string* why) {
     return value.get<std::string>();
 }
 
+// A click on a disabled item fails: a person's click there does nothing either.
 bool
 click(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
     const std::string ref = item_ref(value, why);
-    if (!ref.empty()) {
-        ctx->ItemClick(ref.c_str());
+    if (ref.empty()) {
+        return false;
     }
-    return !ref.empty();
+    if ((ctx->ItemInfo(ref.c_str()).ItemFlags & ImGuiItemFlags_Disabled) != 0) {
+        *why = std::format("{} is disabled", ref);
+        return false;
+    }
+    ctx->ItemClick(ref.c_str());
+    return true;
 }
 
 bool
@@ -229,16 +236,37 @@ hold(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
 }
 
 constexpr std::array INPUT_STEPS = {
-    InputStep{.key = "loupe.wait", .run = wait},   InputStep{.key = "loupe.click", .run = click},
-    InputStep{.key = "loupe.check", .run = check}, InputStep{.key = "loupe.uncheck", .run = uncheck},
-    InputStep{.key = "loupe.input", .run = input}, InputStep{.key = "loupe.key", .run = key},
-    InputStep{.key = "loupe.hold", .run = hold},
+    InputStep{.key = "loupe.click", .run = click},     InputStep{.key = "loupe.check", .run = check},
+    InputStep{.key = "loupe.uncheck", .run = uncheck}, InputStep{.key = "loupe.input", .run = input},
+    InputStep{.key = "loupe.key", .run = key},         InputStep{.key = "loupe.hold", .run = hold},
 };
+
+// Ticks for `span` by the wall clock.
+void
+ticking_for(ImGuiTestContext* ctx, std::chrono::steady_clock::duration span) {
+    const auto end = std::chrono::steady_clock::now() + span;
+    while (std::chrono::steady_clock::now() < end) {
+        ctx->Yield();
+    }
+}
+
+// Runs `command` with its output in `log` while the window ticks on; whether
+// it exited 0.
+bool
+ticking_through(ImGuiTestContext* ctx, const std::vector<std::string>& command, const std::filesystem::path& log) {
+    std::future<bool> run = std::async(std::launch::async, [&command, &log] { return run_logged(command, log); });
+    while (run.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+        ctx->Yield();
+    }
+    return run.get();
+}
 
 } // namespace
 
-Runner::Runner(Recipe recipe, std::filesystem::path out_dir)
-    : recipe_(std::move(recipe)), out_dir_(std::move(out_dir)) {}
+Runner::Runner(Recipe recipe, std::filesystem::path out_dir, std::map<std::string, std::string> names,
+               std::string lock_token)
+    : recipe_(std::move(recipe)), out_dir_(std::move(out_dir)), names_(std::move(names)),
+      lock_token_(std::move(lock_token)) {}
 
 // After ImGui's own context is gone (run_scripted's window), as the engine asks.
 Runner::~Runner() {
@@ -294,6 +322,7 @@ Runner::before_tick() {
 void
 Runner::after_tick(const Ask& asked, Outcome outcome) {
     ImGuiTestEngine_PostSwap(engine_);
+    observed_ = std::move(outcome.observed);
     if (asked.open) {
         pending_why_ = outcome.opened ? "" : "the scene did not open, as said above";
         pending_.reset();
@@ -339,19 +368,129 @@ Runner::run_steps(ImGuiTestContext* ctx) {
 
 bool
 Runner::step(ImGuiTestContext* ctx, const Item& item, std::string* why) {
-    const nlohmann::json& value = item.raw[item.key];
-    if (item.key == OPEN) {
-        return open(ctx, value, why);
-    }
-    if (item.key == SCREENSHOT) {
-        return screenshot(ctx, value, why);
-    }
-    const auto* found = std::ranges::find(INPUT_STEPS, item.key, &InputStep::key);
-    if (found == INPUT_STEPS.end()) {
-        *why = std::format("no step {}", item.key);
+    const std::optional<nlohmann::json> raw = substituted(item.raw, names_, why);
+    if (!raw) {
         return false;
     }
-    return found->run(ctx, value, why);
+    const nlohmann::json& value = (*raw)[item.key];
+    bool ran = false;
+    if (item.key == OPEN) {
+        ran = open(ctx, value, why);
+    } else if (item.key == SCREENSHOT) {
+        ran = screenshot(ctx, value, why);
+    } else if (item.key == WAIT) {
+        ran = wait(ctx, value, why);
+    } else if (item.key == AUTANA) {
+        ran = autana(ctx, value, why);
+    } else if (const auto* found = std::ranges::find(INPUT_STEPS, item.key, &InputStep::key);
+               found != INPUT_STEPS.end()) {
+        ran = found->run(ctx, value, why);
+    } else {
+        *why = std::format("no step {}", item.key);
+    }
+    if (ran && raw->contains(CHECK_KEY)) {
+        // The window has drawn what the step did.
+        ctx->Yield();
+        ran = checks_hold(observed_, (*raw)[CHECK_KEY], why);
+        if (!ran) {
+            *why += "; seen " + observed_fields(observed_).dump();
+        }
+    }
+    return ran;
+}
+
+// N ticks; {until: CHECKS, timeout_s: S}, the checks holding within S s; or
+// {while: CHECKS, for_s: S}, the checks holding on every tick for S s.
+bool
+Runner::wait(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
+    if (!value.is_object()) {
+        const std::optional<int> ticks = count(value, 1);
+        if (!ticks) {
+            *why = "loupe.wait needs a number of ticks, {until: CHECKS, timeout_s: S} or {while: CHECKS, for_s: S}";
+            return false;
+        }
+        ctx->Yield(*ticks);
+        return true;
+    }
+    const bool until = value.contains("until");
+    const char* checks_key = until ? "until" : "while";
+    const char* seconds_key = until ? "timeout_s" : "for_s";
+    const std::optional<int> seconds = count(value.value(seconds_key, nlohmann::json()), 1);
+    if (!value.contains(checks_key) || !seconds) {
+        *why = std::format("loupe.wait {{{}: CHECKS}} needs {}: S, whole seconds", checks_key, seconds_key);
+        return false;
+    }
+    return watch(ctx, value[checks_key], until, *seconds, why);
+}
+
+bool
+Runner::watch(ImGuiTestContext* ctx, const nlohmann::json& checks, bool until, int seconds, std::string* why) {
+    const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
+    for (;;) {
+        ctx->Yield();
+        std::string failed;
+        const bool hold = checks_hold(observed_, checks, &failed);
+        if (hold == until) {
+            if (!until) {
+                *why = std::format("stopped holding before {} s: {}; seen {}", seconds, failed,
+                                   observed_fields(observed_).dump());
+            }
+            return until;
+        }
+        if (std::chrono::steady_clock::now() >= end) {
+            if (until) {
+                *why = std::format("not within {} s: {}; seen {}", seconds, failed, observed_fields(observed_).dump());
+            }
+            return !until;
+        }
+        if (ctx->IsError()) {
+            *why = "the run stopped first";
+            return false;
+        }
+    }
+}
+
+// ARGS, split at white space, or a list of words; or {args: ARGS, until:
+// REGEX, timeout_s: S}, run again each AUTANA_AGAIN until what it printed
+// matches. Each run's output goes to autana-N.log under -o; a run that does
+// not exit 0 fails the step.
+bool
+Runner::autana(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
+    const nlohmann::json args = value.is_object() ? value.value("args", nlohmann::json()) : value;
+    std::vector<std::string> words = open_words(args);
+    if (words.empty()) {
+        *why = "loupe.autana needs autana's arguments, or {args: ARGS, until: REGEX, timeout_s: S}";
+        return false;
+    }
+    if (!lock_token_.empty()) {
+        words.insert(words.begin(), {"--lock-token", lock_token_});
+    }
+    const std::vector<std::string> command = autana_command(words);
+    const std::string until = member(value, "until");
+    const std::optional<int> timeout =
+        value.is_object() && value.contains("timeout_s") ? count(value["timeout_s"], 1) : AUTANA_UNTIL_S;
+    if (!timeout) {
+        *why = "loupe.autana's timeout_s is whole seconds";
+        return false;
+    }
+    const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(*timeout);
+    std::error_code error;
+    std::filesystem::create_directories(out_dir_, error);
+    for (;;) {
+        const std::filesystem::path log = out_dir_ / std::format("autana-{:02}.log", ++autana_runs_);
+        if (!ticking_through(ctx, command, log)) {
+            *why = std::format("autana {} did not exit 0; its output is in {}", args.dump(), utf8(log));
+            return false;
+        }
+        if (until.empty() || std::regex_search(read_text(log), std::regex(until))) {
+            return true;
+        }
+        if (std::chrono::steady_clock::now() >= end) {
+            *why = std::format("autana {} never printed {}; its last output is in {}", args.dump(), until, utf8(log));
+            return false;
+        }
+        ticking_for(ctx, AUTANA_AGAIN);
+    }
 }
 
 bool

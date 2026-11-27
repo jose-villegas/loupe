@@ -8,6 +8,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include "paths.hpp"
+#include "storyboard/check.hpp"
 
 namespace loupe::storyboard {
 
@@ -74,14 +75,21 @@ parse_recipe(const std::string& text, const std::filesystem::path& path, std::st
         Item item{.raw = to_json(step), .key = "", .line = line};
         size_t keys = 0;
         for (const auto& [key, value] : item.raw.items()) {
-            if (key != NAME) {
+            if (key != NAME && key != CHECK_KEY) {
                 item.key = key;
                 keys++;
             }
         }
         if (keys != 1 || !item.key.starts_with(LOUPE_KEY_PREFIX)) {
-            *why = std::format("{}:{}: a step is one {}* key, and a name if it has one", name, line, LOUPE_KEY_PREFIX);
+            *why = std::format("{}:{}: a step is one {}* key, and a name and a check if it has them", name, line,
+                               LOUPE_KEY_PREFIX);
             return std::nullopt;
+        }
+        if (item.raw.contains(CHECK_KEY)) {
+            if (const std::optional<std::string> refused = check_refused(item.raw[CHECK_KEY])) {
+                *why = std::format("{}:{}: {}", name, line, *refused);
+                return std::nullopt;
+            }
         }
         items.push_back(std::move(item));
     }

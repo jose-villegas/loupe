@@ -102,8 +102,8 @@ plugged_here(const Board& board) {
 }
 
 bool
-recordable(const Board& board) {
-    return board.holder != Holder::Command && plugged_here(board);
+recordable(const Board& board, bool in_its_hold) {
+    return (in_its_hold || board.holder != Holder::Command) && plugged_here(board);
 }
 
 std::string

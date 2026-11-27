@@ -62,6 +62,9 @@ struct Attach {
     std::optional<std::string> view;
     std::future<Reserved> reserving; // valid while the reservation is taken and the packs are built
     std::string packs_autana;        // the autana commit the board's packs are built from
+    // The token of the hold the window runs inside (loupe-storyboard
+    // --lock-token): View records inside it; empty for a person's window.
+    std::string lock_token;
 };
 
 // A live board's controls: what was asked this tick. `paused` is the

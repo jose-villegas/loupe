@@ -175,7 +175,7 @@ target_link_libraries(loupe PRIVATE loupe_core loupe_path loupe_window)
 # loupe-storyboard: a recipe's loupe.* steps, run on the real window through
 # the test engine (src/storyboard/).
 if(LOUPE_STORYBOARD)
-    add_library(loupe_recipe OBJECT src/storyboard/recipe.cpp)
+    add_library(loupe_recipe OBJECT src/storyboard/recipe.cpp src/storyboard/check.cpp)
     target_link_libraries(loupe_recipe PUBLIC nlohmann_json::nlohmann_json PRIVATE yaml-cpp::yaml-cpp)
     target_include_directories(loupe_recipe PUBLIC src)
     add_executable(loupe-storyboard src/storyboard/main.cpp src/storyboard/runner.cpp)

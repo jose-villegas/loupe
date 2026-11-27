@@ -1,5 +1,6 @@
 #include "window/run_window.hpp"
 
+#include <array>
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -104,8 +105,9 @@ open_recording(const Options& options, const std::filesystem::path& packs, std::
 // What View readies for `board`, off the frame loop: the reservation when a
 // person holds it (`held`), logged to `log`, then autana `commit`'s firmware
 // packs, which an install keeps in `shipped` (firmware_packs(), pack.hpp).
+// With `lock_token`, the window's own hold, it records inside that instead.
 struct ReadyJob {
-    std::string board;
+    std::string board, lock_token;
     std::optional<Board> held;
     std::string commit;
     std::filesystem::path shipped, log;
@@ -114,8 +116,8 @@ struct ReadyJob {
 // No packs, with `why` set, when either step of `job` failed.
 window::Reserved
 ready_recording(const ReadyJob& job) {
-    window::Reserved reserved{.board = job.board, .token = "", .why = "", .packs = {}};
-    if (job.held) {
+    window::Reserved reserved{.board = job.board, .token = job.lock_token, .why = "", .packs = {}};
+    if (job.lock_token.empty() && job.held) {
         reserved.token = reservation_token(*job.held, job.log, &reserved.why);
         if (reserved.token.empty()) {
             return reserved;
@@ -166,6 +168,9 @@ struct Shown {
     // The frame debugger's docked height as last fitted to its rows; none
     // once the person sized it, so it is theirs from then on.
     std::optional<float> debugger_fitted = 0.0F;
+    // A live stream's frames when they last grew, and when that was.
+    int seen_frames = 0;
+    std::chrono::steady_clock::time_point frame_came = std::chrono::steady_clock::now();
 
     Shown(window::Gpu& gpu, std::unique_ptr<Frames> opened)
         : frames(std::move(opened)), texture(gpu, frames->frame()),
@@ -466,8 +471,11 @@ end_frame(window::Gpu& gpu, std::optional<window::Picture>* picture) {
 // The window's state between ticks: the open scene, or the start panel's.
 class Window {
   public:
-    // A `scripted` window (--ticks, a recipe) neither updates nor remembers what it opened.
-    Window(window::Gpu& gpu, const Options& options, bool scripted);
+    // A `scripted` window (--ticks, a recipe) neither updates nor remembers
+    // what it opened; its settings and recordings go in `config` when given,
+    // and View records inside the hold `lock_token` names when given.
+    Window(window::Gpu& gpu, const Options& options, bool scripted, const std::filesystem::path& config = {},
+           const std::string& lock_token = "");
     // Opens `options`' scene or recording in place of the open one; false,
     // said on the start panel, when it did not open.
     bool open(const Options& options);
@@ -480,6 +488,8 @@ class Window {
     void tick(std::optional<window::Picture>* picture = nullptr);
     // Closes the open scene; false when a run failed along the way.
     bool finish();
+    // What the last tick left on screen.
+    Observed observe() const;
 
   private:
     // Closes the open scene, if any, back to the start panel.
@@ -492,6 +502,8 @@ class Window {
     // Shows the board View was pressed for, live. A person's reservation is
     // first taken off this thread, so the link runs inside it.
     void view_asked();
+    // Notes when the live board's stream last brought a frame.
+    void count_frames();
 
     window::Gpu& gpu_;
     // A window run's stand-in for -o: autana's close writes the last frame, to
@@ -516,17 +528,40 @@ class Window {
     bool ok_ = true;
 };
 
-Window::Window(window::Gpu& gpu, const Options& options, bool scripted)
-    : gpu_(gpu), checkpoint_mb_(options.checkpoint_mb), folders_(window::folders()),
+// The folders a window keeps its files in, its settings in `config` when given.
+Folders
+folders_in(const std::filesystem::path& config) {
+    Folders found = window::folders();
+    if (!config.empty()) {
+        found.config = config;
+    }
+    return found;
+}
+
+Window::Window(window::Gpu& gpu, const Options& options, bool scripted, const std::filesystem::path& config,
+               const std::string& lock_token)
+    : gpu_(gpu), checkpoint_mb_(options.checkpoint_mb), folders_(folders_in(config)),
       copy_{.id = build_id(folders_.exe_dir), .exe = exe_path(), .config = folders_.config}, scripted_(scripted),
       updates_(!scripted_ && copy_.id.built_for != Channel::None && !copy_.config.empty()),
       library_(library(folders_)) {
+    attach_.lock_token = lock_token;
     about_.version = version_line(copy_.id);
     about_.can_update = updates_;
     if (updates_) {
         about_.updated = update::settle(copy_).value_or("");
         about_.follow = update::follow(copy_);
         checker_ = update::check_in_background(copy_, about_.follow);
+    }
+}
+
+void
+Window::count_frames() {
+    if (!shown_ || !shown_->link) {
+        return;
+    }
+    if (const int frames = shown_->frames->count(); frames > shown_->seen_frames) {
+        shown_->seen_frames = frames;
+        shown_->frame_came = std::chrono::steady_clock::now();
     }
 }
 
@@ -569,6 +604,7 @@ Window::tick(std::optional<window::Picture>* picture) {
     }
     list_boards();
     view_asked();
+    count_frames();
     if (start.browse) {
         window::browse(gpu_.sdl_window());
     }
@@ -579,6 +615,39 @@ Window::tick(std::optional<window::Picture>* picture) {
         picked.checkpoint_mb = checkpoint_mb_;
         (void)open(picked);
     }
+}
+
+// Waiting's names, in its order, for a test to read.
+constexpr std::array<const char*, 7> WAITING_NAMES = {"Starting", "Autana", "Linked", "Reading",
+                                                      "Shown",    "Ended",  "Refused"};
+
+Observed
+Window::observe() const {
+    Observed seen;
+    seen.screen = !shown_ ? "start" : shown_->link ? "live" : "scene";
+    seen.refusal = refusal_;
+    for (const Board& board : attach_.list.boards) {
+        seen.boards.push_back(board.id);
+    }
+    if (!shown_ || !shown_->link) {
+        return seen;
+    }
+    if (shown_->waited) {
+        seen.phase = WAITING_NAMES.at(static_cast<size_t>(*shown_->waited));
+    }
+    seen.frames = shown_->seen_frames;
+    seen.frame_age_s = std::chrono::duration<double>(std::chrono::steady_clock::now() - shown_->frame_came).count();
+    switch (shown_->saver.state()) {
+        case StreamSaver::State::Off: seen.saving = "off"; break;
+        case StreamSaver::State::Waiting: seen.saving = "waiting"; break;
+        case StreamSaver::State::Saving: seen.saving = "saving"; break;
+    }
+    seen.saved_frames = shown_->saver.frames();
+    seen.recording = shown_->saver.file();
+    std::error_code error;
+    const uintmax_t bytes = seen.recording.empty() ? 0 : std::filesystem::file_size(seen.recording, error);
+    seen.recording_bytes = error ? 0 : bytes;
+    return seen;
 }
 
 bool
@@ -635,6 +704,7 @@ Window::view_asked() {
                      held ? "its reservation (autana lock hand), then " : "", attach_.packs_autana.c_str());
         attach_.reserving = std::async(std::launch::async, ready_recording,
                                        ReadyJob{.board = *attach_.view,
+                                                .lock_token = attach_.lock_token,
                                                 .held = held,
                                                 .commit = copy_.id.autana_commit,
                                                 .shipped = firmware_dir(folders_),
@@ -754,7 +824,8 @@ Window::attach(const window::Reserved& reserved) {
 bool
 run_window(const Options& options) {
     std::string why;
-    const std::unique_ptr<window::Gpu> gpu = window::Gpu::open(TITLE, &why);
+    // A run of --ticks is a test's: it never shows on the desktop.
+    const std::unique_ptr<window::Gpu> gpu = window::Gpu::open(TITLE, &why, std::nullopt, options.ticks.has_value());
     if (gpu == nullptr) {
         std::fprintf(stderr, "loupe: %s\n", why.c_str());
         return false;
@@ -768,14 +839,14 @@ run_window(const Options& options) {
 }
 
 bool
-run_scripted(float content_scale, Script& script) {
+run_scripted(float content_scale, Script& script, const std::filesystem::path& config, const std::string& lock_token) {
     std::string why;
-    const std::unique_ptr<window::Gpu> gpu = window::Gpu::open(TITLE, &why, content_scale);
+    const std::unique_ptr<window::Gpu> gpu = window::Gpu::open(TITLE, &why, content_scale, true);
     if (gpu == nullptr) {
         std::fprintf(stderr, "loupe: %s\n", why.c_str());
         return false;
     }
-    Window window(*gpu, Options{}, true);
+    Window window(*gpu, Options{}, true, config, lock_token);
     script.start();
     for (;;) {
         Script::Ask ask = script.before_tick();
@@ -790,6 +861,7 @@ run_scripted(float content_scale, Script& script) {
             break;
         }
         window.tick(ask.picture ? &outcome.picture : nullptr);
+        outcome.observed = window.observe();
         script.after_tick(ask, std::move(outcome));
     }
     script.stop();

@@ -1,5 +1,6 @@
 // A recipe: the YAML list of steps loupe-storyboard runs, each a map of one
-// "loupe." key, its value the step's arguments, and an optional name.
+// "loupe." key, its value the step's arguments, an optional name, and an
+// optional check of what the window shows after it (check.hpp).
 #pragma once
 
 #include <filesystem>
@@ -31,7 +32,8 @@ struct Recipe {
 };
 
 // The recipe at `path`; none, with `why` set, when it does not read, is not a
-// list of maps, or a map is not one "loupe.*" key and a name.
+// list of maps, a map is not one "loupe.*" key with an optional name and
+// check, or a check is refused (check_refused()).
 std::optional<Recipe> load_recipe(const std::filesystem::path& path, std::string* why);
 // The steps of YAML text; `path` only names it in `why`.
 std::optional<std::vector<Item>> parse_recipe(const std::string& text, const std::filesystem::path& path,

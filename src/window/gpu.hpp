@@ -23,8 +23,9 @@ class Gpu {
   public:
     // A window titled `title`, its panels drawn at `content_scale`, or at the
     // display's when none; null with `why` set when SDL or Vulkan cannot open one.
+    // A `hidden` window never shows on the desktop: a run a test drives.
     static std::unique_ptr<Gpu> open(const char* title, std::string* why,
-                                     std::optional<float> content_scale = std::nullopt);
+                                     std::optional<float> content_scale = std::nullopt, bool hidden = false);
     ~Gpu();
     Gpu(const Gpu&) = delete;
     Gpu& operator=(const Gpu&) = delete;

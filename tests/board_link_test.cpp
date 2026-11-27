@@ -74,6 +74,8 @@ boards_parse() {
     ok &= expect(boards[1].port.empty() && !loupe::recordable(boards[1]), "a board on another host has no port");
     ok &= expect(boards[2].holder == Holder::Command && !loupe::recordable(boards[2]),
                  "a board a command holds does not record");
+    ok &= expect(loupe::recordable(boards[2], true) && !loupe::recordable(boards[1], true),
+                 "inside that command's hold it records, still only plugged in here");
     ok &= expect(boards[3].holder == Holder::Person && boards[3].note == "checking the panel"
                      && loupe::recordable(boards[3]),
                  "a person's reserved board records inside the reservation, its note kept");
@@ -175,7 +177,7 @@ serial_names_a_log(const fs::path& fake, const fs::path& folder) {
     const std::string stem = loupe::board_file_stem(SERIAL);
     bool ok = expect(stem == SERIAL_STEM, "a serial's file stem drops its colons");
     std::string why;
-    std::unique_ptr<loupe::window::BoardLink> link = loupe::window::BoardLink::start(
+    const std::unique_ptr<loupe::window::BoardLink> link = loupe::window::BoardLink::start(
         {loupe::utf8(fake), loupe::utf8(folder / "payload.bin")}, folder / (stem + ".log"), &why, HUNG_BOUND);
     ok &= expect(link != nullptr, "a link logs to its board's file stem");
     if (link == nullptr) {
