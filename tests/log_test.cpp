@@ -27,6 +27,14 @@ namespace {
 constexpr const char TEST[] = "log_test";
 constexpr loupe::test::Checks check{TEST};
 
+// A line of `text` alone.
+Line
+text_line(const std::string& text) {
+    Line line;
+    line.text = text;
+    return line;
+}
+
 // The texts of every line `sink` keeps after `seq`.
 std::vector<std::string>
 texts(const Sink& sink, uint64_t seq = 0) {
@@ -45,12 +53,12 @@ ring_keeps_the_latest() {
     constexpr size_t CAPACITY = 3;
     loupe::log::Ring ring(CAPACITY);
     for (const char* text : {"a", "b", "c", "d", "e"}) {
-        ring.push(Line{.text = text});
+        ring.push(text_line(text));
     }
     bool ok = check(ring.size() == CAPACITY && ring[0].text == "c" && ring[1].text == "d" && ring[2].text == "e",
                     "the ring keeps the latest three, oldest first");
     ring.clear();
-    ring.push(Line{.text = "f"});
+    ring.push(text_line("f"));
     ok &= check(ring.size() == 1 && ring[0].text == "f", "a cleared ring starts again");
     return ok;
 }

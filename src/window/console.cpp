@@ -117,7 +117,8 @@ draw_console(Console& console) {
     ImGui::Checkbox("Time", &console.times);
     ImGui::SameLine();
     constexpr const char FILTER[] = "Filter";
-    console.filter.Draw(FILTER, -(ImGui::CalcTextSize(FILTER).x + ImGui::GetStyle().ItemInnerSpacing.x));
+    ImGui::SetNextItemWidth(-(ImGui::CalcTextSize(FILTER).x + ImGui::GetStyle().ItemInnerSpacing.x));
+    console.filter.Draw(FILTER);
     const std::vector<int> rows = passed(console);
     if (copy) {
         std::string text;
