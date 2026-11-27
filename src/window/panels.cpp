@@ -12,6 +12,7 @@
 #include "imgui.h"
 #include "paths.hpp"
 #include "window/flow.hpp"
+#include "window/fonts.hpp"
 
 namespace loupe::window {
 
@@ -112,9 +113,13 @@ draw_menu(About& about, EditMenu& edit) {
     }
     bool changed = false;
     if (ImGui::BeginPopupModal(ABOUT, nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted(about.version.c_str());
-        if (!about.updated.empty()) {
-            ImGui::TextUnformatted(about.updated.c_str());
+        {
+            // Both lines carry a commit's hash.
+            const FontScope mono(FontRole::Mono);
+            ImGui::TextUnformatted(about.version.c_str());
+            if (!about.updated.empty()) {
+                ImGui::TextUnformatted(about.updated.c_str());
+            }
         }
         ImGui::SeparatorText("Updates");
         if (about.can_update) {

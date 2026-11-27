@@ -13,6 +13,7 @@
 #include "engine/engine_frame.hpp"
 #include "window/editor.hpp"
 #include "window/flow.hpp"
+#include "window/fonts.hpp"
 
 namespace loupe::window {
 
@@ -169,17 +170,21 @@ void
 key_fields(Editor& editor, const KeyPick& pick, const std::vector<CameraKey>& keys) {
     CameraKey key = keys[pick.index];
     bool changed = false;
-    ImGui::BeginDisabled(pick.index == 0);
-    if (ImGui::DragFloat("t (s)", &key.t, TIME_SPEED, 0.0F, 0.0F, "%.3f")) {
-        key.t = editor::clamp_time(keys, pick.index, key.t);
-        changed = true;
+    bool ended = false;
+    {
+        const FontScope mono(FontRole::Mono);
+        ImGui::BeginDisabled(pick.index == 0);
+        if (ImGui::DragFloat("t (s)", &key.t, TIME_SPEED, 0.0F, 0.0F, "%.3f")) {
+            key.t = editor::clamp_time(keys, pick.index, key.t);
+            changed = true;
+        }
+        ended = ImGui::IsItemDeactivatedAfterEdit();
+        ImGui::EndDisabled();
+        changed |= ImGui::DragFloat3("eye", key.eye.data(), POINT_SPEED, 0.0F, 0.0F, "%.4g");
+        ended |= ImGui::IsItemDeactivatedAfterEdit();
+        changed |= ImGui::DragFloat3("look_at", key.look_at.data(), POINT_SPEED, 0.0F, 0.0F, "%.4g");
+        ended |= ImGui::IsItemDeactivatedAfterEdit();
     }
-    bool ended = ImGui::IsItemDeactivatedAfterEdit();
-    ImGui::EndDisabled();
-    changed |= ImGui::DragFloat3("eye", key.eye.data(), POINT_SPEED, 0.0F, 0.0F, "%.4g");
-    ended |= ImGui::IsItemDeactivatedAfterEdit();
-    changed |= ImGui::DragFloat3("look_at", key.look_at.data(), POINT_SPEED, 0.0F, 0.0F, "%.4g");
-    ended |= ImGui::IsItemDeactivatedAfterEdit();
     if (changed) {
         drag_keys(editor, pick.camera, editor::with_key(keys, pick.index, key));
     }
@@ -492,6 +497,7 @@ bake_warning(Editor& editor) {
 // The row's id is its index alone, so it stays one row while its time changes.
 void
 key_rows(Editor& editor, const std::vector<CameraKey>& keys, const std::optional<KeyPick>& pick) {
+    const FontScope mono(FontRole::Mono);
     for (size_t i = 0; i < keys.size(); i++) {
         const std::string label = std::format("key {}: t = {:.3f} s###key{}", i, keys[i].t, i);
         if (ImGui::Selectable(label.c_str(), pick && pick->index == i)) {
@@ -556,6 +562,7 @@ draw_path_scrub(Editor& editor, const Frames& frames, std::optional<int>* seek_t
     const std::vector<CameraKey>& keys = shown_keys(editor, editor.selected);
     float seconds = editor::clip_seconds(keys, editor.path.shown_ms);
     ImGui::SetNextItemWidth(-1.0F);
+    const FontScope mono(FontRole::Mono);
     if (ImGui::SliderFloat("##path", &seconds, 0.0F, editor::path_end(keys), "path %.2f s")) {
         *seek_to = frame_at(keys, seconds, {.shown_ms = editor.path.shown_ms, .dt_ms = frames.dt_ms()});
     }

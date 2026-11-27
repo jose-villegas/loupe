@@ -14,6 +14,7 @@
 #include "engine/engine_frame.hpp"
 #include "paths.hpp"
 #include "window/flow.hpp"
+#include "window/fonts.hpp"
 
 namespace loupe::window {
 
@@ -125,6 +126,7 @@ pick(Editor& editor, const Frames& frames, const mat4f_t& clip_from_world, const
 // One inspector row per placement field, dragged or typed. A change moves the drag; letting go ends it.
 void
 placement_rows(Editor& editor, const editor::Object& object) {
+    const FontScope mono(FontRole::Mono);
     for (size_t i = 0; i < editor::PLACEMENT_FIELDS.size(); i++) {
         const editor::PlacementField& field = editor::PLACEMENT_FIELDS[i];
         editor::Placement placement = shown_placement(editor, object);
