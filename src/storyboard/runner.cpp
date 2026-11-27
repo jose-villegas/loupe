@@ -147,47 +147,54 @@ struct InputStep {
     bool (*run)(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why);
 };
 
-// The item a click, check or uncheck names; empty, with `why` set, for none.
+// The item a click, check or uncheck names; empty, with `why` set, for none
+// or a disabled one: a person's click there does nothing either.
 std::string
-item_ref(const nlohmann::json& value, std::string* why) {
+item_ref(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
     if (!value.is_string() || value.get<std::string>().empty()) {
         *why = "the step needs an item, such as //Outliner/tour";
         return "";
     }
-    return value.get<std::string>();
+    const std::string ref = value.get<std::string>();
+    if ((ctx->ItemInfo(ref.c_str()).ItemFlags & ImGuiItemFlags_Disabled) != 0) {
+        *why = std::format("{} is disabled", ref);
+        return "";
+    }
+    return ref;
 }
 
-// A click on a disabled item fails: a person's click there does nothing either.
 bool
 click(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
-    const std::string ref = item_ref(value, why);
+    const std::string ref = item_ref(ctx, value, why);
+    if (!ref.empty()) {
+        ctx->ItemClick(ref.c_str());
+    }
+    return !ref.empty();
+}
+
+// Ticks the checkbox `value` names, or clears it when `on` is false.
+bool
+tick_box(ImGuiTestContext* ctx, const nlohmann::json& value, bool on, std::string* why) {
+    const std::string ref = item_ref(ctx, value, why);
     if (ref.empty()) {
         return false;
     }
-    if ((ctx->ItemInfo(ref.c_str()).ItemFlags & ImGuiItemFlags_Disabled) != 0) {
-        *why = std::format("{} is disabled", ref);
-        return false;
+    if (on) {
+        ctx->ItemCheck(ref.c_str());
+    } else {
+        ctx->ItemUncheck(ref.c_str());
     }
-    ctx->ItemClick(ref.c_str());
     return true;
 }
 
 bool
 check(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
-    const std::string ref = item_ref(value, why);
-    if (!ref.empty()) {
-        ctx->ItemCheck(ref.c_str());
-    }
-    return !ref.empty();
+    return tick_box(ctx, value, true, why);
 }
 
 bool
 uncheck(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why) {
-    const std::string ref = item_ref(value, why);
-    if (!ref.empty()) {
-        ctx->ItemUncheck(ref.c_str());
-    }
-    return !ref.empty();
+    return tick_box(ctx, value, false, why);
 }
 
 bool
