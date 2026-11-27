@@ -229,7 +229,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
             width=4.445];
         c_window [fixedsize=true,
             height=2.5,
-            label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3108 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
+            label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3203 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
             likec4_id="loupe.loupe.c_window",
             likec4_level=1,
             margin="0.223,0.223",
@@ -382,7 +382,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
             width=4.445];
         c_window [fixedsize=true,
             height=2.5,
-            label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3108 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
+            label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3203 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
             likec4_id="loupe.loupe.c_window",
             likec4_level=1,
             margin="0.223,0.223",
@@ -618,7 +618,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
     }
     c_window [fixedsize=true,
         height=2.5,
-        label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3108 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
+        label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3203 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
         likec4_id="loupe.loupe.c_window",
         likec4_level=0,
         margin="0.223,0.223",
@@ -828,7 +828,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
         style=solid];
     c_window [fixedsize=true,
         height=2.5,
-        label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3108 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
+        label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3203 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
         likec4_id="loupe.loupe.c_window",
         likec4_level=0,
         margin="0.223,0.223",
@@ -1174,7 +1174,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
         style=solid];
     c_window [fixedsize=true,
         height=2.5,
-        label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3108 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
+        label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3203 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
         likec4_id="loupe.loupe.c_window",
         likec4_level=0,
         margin="0.223,0.223",
@@ -1345,7 +1345,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
         weight=2];
     c_window [fixedsize=true,
         height=2.5,
-        label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3108 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
+        label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3203 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
         likec4_id="loupe.loupe.c_window",
         likec4_level=0,
         margin="0.223,0.223",
@@ -1528,7 +1528,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
     }
     c_window [fixedsize=true,
         height=2.5,
-        label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3108 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
+        label=<<TABLE BORDER="0" CELLPADDING="0" CELLSPACING="4"><TR><TD><FONT POINT-SIZE="20">window</FONT></TD></TR><TR><TD><FONT POINT-SIZE="13" COLOR="#bfdbfe">18 files · 3203 lines</FONT></TD></TR><TR><TD><FONT POINT-SIZE="15" COLOR="#bfdbfe">The window: a scene's frame, a t</FONT></TD></TR></TABLE>>,
         likec4_id="loupe.loupe.c_window",
         likec4_level=0,
         margin="0.223,0.223",
@@ -2004,7 +2004,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
 <title>c_window</title>
 <polygon fill="#3b82f6" stroke="#2563eb" stroke-width="0" points="838.02,-528 517.98,-528 517.98,-348 838.02,-348 838.02,-528"/>
 <text xml:space="preserve" text-anchor="start" x="644.65" y="-450.8" font-family="Arial" font-size="20.00" fill="#eff6ff">window</text>
-<text xml:space="preserve" text-anchor="start" x="620.55" y="-429.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3108 lines</text>
+<text xml:space="preserve" text-anchor="start" x="620.55" y="-429.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3203 lines</text>
 <text xml:space="preserve" text-anchor="start" x="568.6" y="-408.2" font-family="Arial" font-size="15.00" fill="#bfdbfe">The window: a scene&#39;s frame, a t</text>
 </g>
 <!-- c_editor -->
@@ -2139,7 +2139,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
 <title>c_window</title>
 <polygon fill="#3b82f6" stroke="#2563eb" stroke-width="0" points="919.02,-528 598.98,-528 598.98,-348 919.02,-348 919.02,-528"/>
 <text xml:space="preserve" text-anchor="start" x="725.65" y="-450.8" font-family="Arial" font-size="20.00" fill="#eff6ff">window</text>
-<text xml:space="preserve" text-anchor="start" x="701.55" y="-429.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3108 lines</text>
+<text xml:space="preserve" text-anchor="start" x="701.55" y="-429.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3203 lines</text>
 <text xml:space="preserve" text-anchor="start" x="649.6" y="-408.2" font-family="Arial" font-size="15.00" fill="#bfdbfe">The window: a scene&#39;s frame, a t</text>
 </g>
 <!-- c_editor -->
@@ -2356,7 +2356,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
 <title>c_window</title>
 <polygon fill="#3b82f6" stroke="#2563eb" stroke-width="0" points="480.02,-1680 159.98,-1680 159.98,-1500 480.02,-1500 480.02,-1680"/>
 <text xml:space="preserve" text-anchor="start" x="286.65" y="-1602.8" font-family="Arial" font-size="20.00" fill="#eff6ff">window</text>
-<text xml:space="preserve" text-anchor="start" x="262.55" y="-1581.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3108 lines</text>
+<text xml:space="preserve" text-anchor="start" x="262.55" y="-1581.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3203 lines</text>
 <text xml:space="preserve" text-anchor="start" x="210.6" y="-1560.2" font-family="Arial" font-size="15.00" fill="#bfdbfe">The window: a scene&#39;s frame, a t</text>
 </g>
 <!-- c_src -->
@@ -2498,7 +2498,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
 <title>c_window</title>
 <polygon fill="#3b82f6" stroke="#2563eb" stroke-width="0" points="1610.04,-828 1290,-828 1290,-648 1610.04,-648 1610.04,-828"/>
 <text xml:space="preserve" text-anchor="start" x="1416.67" y="-750.8" font-family="Arial" font-size="20.00" fill="#eff6ff">window</text>
-<text xml:space="preserve" text-anchor="start" x="1392.57" y="-729.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3108 lines</text>
+<text xml:space="preserve" text-anchor="start" x="1392.57" y="-729.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3203 lines</text>
 <text xml:space="preserve" text-anchor="start" x="1340.62" y="-708.2" font-family="Arial" font-size="15.00" fill="#bfdbfe">The window: a scene&#39;s frame, a t</text>
 </g>
 <!-- m_frames&#45;&gt;m_pose -->
@@ -2759,7 +2759,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
 <title>c_window</title>
 <polygon fill="#3b82f6" stroke="#2563eb" stroke-width="0" points="1395.04,-1728 1075,-1728 1075,-1548 1395.04,-1548 1395.04,-1728"/>
 <text xml:space="preserve" text-anchor="start" x="1201.67" y="-1650.8" font-family="Arial" font-size="20.00" fill="#eff6ff">window</text>
-<text xml:space="preserve" text-anchor="start" x="1177.57" y="-1629.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3108 lines</text>
+<text xml:space="preserve" text-anchor="start" x="1177.57" y="-1629.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3203 lines</text>
 <text xml:space="preserve" text-anchor="start" x="1125.62" y="-1608.2" font-family="Arial" font-size="15.00" fill="#bfdbfe">The window: a scene&#39;s frame, a t</text>
 </g>
 <!-- m_main&#45;&gt;c_path -->
@@ -2929,7 +2929,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
 <title>c_window</title>
 <polygon fill="#3b82f6" stroke="#2563eb" stroke-width="0" points="1198.02,-480 877.98,-480 877.98,-300 1198.02,-300 1198.02,-480"/>
 <text xml:space="preserve" text-anchor="start" x="1004.65" y="-402.8" font-family="Arial" font-size="20.00" fill="#eff6ff">window</text>
-<text xml:space="preserve" text-anchor="start" x="980.55" y="-381.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3108 lines</text>
+<text xml:space="preserve" text-anchor="start" x="980.55" y="-381.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3203 lines</text>
 <text xml:space="preserve" text-anchor="start" x="928.6" y="-360.2" font-family="Arial" font-size="15.00" fill="#bfdbfe">The window: a scene&#39;s frame, a t</text>
 </g>
 <!-- c_src -->
@@ -3035,7 +3035,7 @@ var e=e=>{switch(e){case`index`:return`digraph {
 <title>c_window</title>
 <polygon fill="#3b82f6" stroke="#2563eb" stroke-width="0" points="368.02,-780 47.98,-780 47.98,-600 368.02,-600 368.02,-780"/>
 <text xml:space="preserve" text-anchor="start" x="174.65" y="-702.8" font-family="Arial" font-size="20.00" fill="#eff6ff">window</text>
-<text xml:space="preserve" text-anchor="start" x="150.55" y="-681.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3108 lines</text>
+<text xml:space="preserve" text-anchor="start" x="150.55" y="-681.8" font-family="Arial" font-size="13.00" fill="#bfdbfe">18 files · 3203 lines</text>
 <text xml:space="preserve" text-anchor="start" x="98.6" y="-660.2" font-family="Arial" font-size="15.00" fill="#bfdbfe">The window: a scene&#39;s frame, a t</text>
 </g>
 <!-- c_src -->

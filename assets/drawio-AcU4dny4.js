@@ -1,1 +1,0 @@
-import{t as e}from"./main-ztBeZ7N2.js";var t={"Loupe architecture":async()=>await e(()=>import(`./drawio-7Qxz3WTa.js`),[])};async function n(e){let n=t[e];if(!n){let n=Object.keys(t);throw console.error(`Unknown projectId: `+e+` (available: `+n+`)`),Error(`Project does not enable drawio export: `+e)}return await n()}export{n as loadDrawioSources};
