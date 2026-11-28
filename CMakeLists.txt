@@ -170,7 +170,11 @@ function(loupe_embed file inc)
 endfunction()
 # The window's icon, the app logo, as the bytes of its PNG.
 loupe_embed("${CMAKE_CURRENT_SOURCE_DIR}/assets/loupe.png" window/icon_png.inc)
-# The panels' faces (src/window/fonts.cpp).
+# The panels' faces (src/window/fonts.cpp), and DejaVu Sans's braille patterns
+# merged into each (assets/fonts/dejavusans-braille.ttf, DejaVu's licence),
+# cut from DejaVu Sans 2.35 by `python -m fontTools.subset DejaVuSans.ttf
+# --unicodes=U+2800-28FF --name-IDs='*' --no-hinting --layout-features=''`.
+loupe_embed("${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/dejavusans-braille.ttf" window/dejavusans_braille.inc)
 if(LOUPE_LATIN_MODERN)
     loupe_embed("${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/lmsans10-regular.otf" window/lmsans10_regular.inc)
     loupe_embed("${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/lmmono10-regular.otf" window/lmmono10_regular.inc)

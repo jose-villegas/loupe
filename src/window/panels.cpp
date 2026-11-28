@@ -201,10 +201,10 @@ draw_attach(Attach& attach) {
     attach.refresh = ImGui::Button(attach.listed ? "List again" : "List boards");
     ImGui::EndDisabled();
     if (listing) {
-        const std::string asking = std::format("{} ({} s)", attach.listed ? "refreshing" : "asking the board pool",
-                                               seconds_since(attach.listing_since));
-        flow(spinner_text_width(asking.c_str()));
-        spinner_text(asking.c_str(), true);
+        const std::string asking = spinning(std::format(
+            "{} ({} s)", attach.listed ? "refreshing" : "asking the board pool", seconds_since(attach.listing_since)));
+        flow(text_width(asking.c_str()));
+        hint(asking.c_str());
     }
     if (!attach.list.why.empty()) {
         ImGui::TextWrapped("%s", attach.list.why.c_str());
@@ -237,7 +237,7 @@ draw_attach(Attach& attach) {
         ImGui::TreePop();
     }
     if (reserving) {
-        spinner_text(std::format("readying the live view ({} s)", seconds_since(attach.reserving_since)).c_str(), true);
+        hint(spinning(std::format("readying the live view ({} s)", seconds_since(attach.reserving_since))).c_str());
     }
 }
 
@@ -427,16 +427,12 @@ void
 draw_waiting(const WaitLine& line) {
     // A step still under way turns; an end or a refusal stands still.
     const bool going = line.phase != Waiting::Ended && line.phase != Waiting::Refused;
+    const std::string text = going ? spinning(line.text) : line.text;
     const ImVec2 room = ImGui::GetContentRegionAvail();
     const ImVec2 at = ImGui::GetCursorPos();
-    const float label_x = going ? spinner_layout_here().label_x : 0.0F;
-    const ImVec2 size = ImGui::CalcTextSize(line.text.c_str(), nullptr, false, room.x - label_x);
+    const ImVec2 size = ImGui::CalcTextSize(text.c_str(), nullptr, false, room.x);
     ImGui::SetCursorPos(ImVec2(at.x, at.y + std::max(0.0F, (room.y - size.y) / 2)));
-    if (going) {
-        spinner_text(line.text.c_str(), false);
-    } else {
-        ImGui::TextWrapped("%s", line.text.c_str());
-    }
+    ImGui::TextWrapped("%s", text.c_str());
 }
 
 FrameRect

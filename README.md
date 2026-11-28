@@ -59,4 +59,6 @@ preset is, links [Dear ImGui Test Engine](https://github.com/ocornut/imgui_test_
 under its own licence, into every program it builds, `loupe` too; the downloads
 are built without it (the `release` preset).
 The panels' typefaces, Latin Modern Sans and Mono, are under the
-[GUST Font License](assets/fonts/GUST-FONT-LICENSE.txt).
+[GUST Font License](assets/fonts/GUST-FONT-LICENSE.txt). The braille patterns
+the wait spinner draws are DejaVu Sans's, cut down to U+2800-28FF, under
+[DejaVu's licence](assets/fonts/DEJAVU-LICENSE.txt).
