@@ -429,7 +429,7 @@ draw_waiting(const WaitLine& line) {
     const bool going = line.phase != Waiting::Ended && line.phase != Waiting::Refused;
     const ImVec2 room = ImGui::GetContentRegionAvail();
     const ImVec2 at = ImGui::GetCursorPos();
-    const float label_x = going ? spinner_layout(ImGui::GetTextLineHeight()).label_x : 0.0F;
+    const float label_x = going ? spinner_layout_here().label_x : 0.0F;
     const ImVec2 size = ImGui::CalcTextSize(line.text.c_str(), nullptr, false, room.x - label_x);
     ImGui::SetCursorPos(ImVec2(at.x, at.y + std::max(0.0F, (room.y - size.y) / 2)));
     if (going) {

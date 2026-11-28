@@ -18,15 +18,20 @@ constexpr int64_t SPINNER_FRAME_MS = 80;
 // The cell showing `ms` milliseconds into any clock.
 uint8_t spinner_cell(int64_t ms);
 
-// Where a spinner's dots go and where its label starts, for text `size`
-// pixels high, from the slot's top left; the same for every cell.
+// Where a spinner's dots go and where its label starts, from the line's top
+// left; the same for every cell. The cell spans the label's capitals: its
+// top dots' tops at `cap_top` and its bottom dots' bottoms on `baseline`,
+// both down from the line's top, in a slot as wide as braille's shape takes.
 struct SpinnerLayout {
     float slot = 0, label_x = 0, radius = 0;
     std::array<float, 2> columns{};
     std::array<float, 4> rows{};
 };
 
-SpinnerLayout spinner_layout(float size);
+SpinnerLayout spinner_layout(float cap_top, float baseline);
+
+// The layout for the current font at its current size, from its "H".
+SpinnerLayout spinner_layout_here();
 
 // Dot `dot`'s (0 to 7, braille's dots 1 to 8) column and row in the cell.
 struct DotPlace {
