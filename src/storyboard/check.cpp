@@ -131,7 +131,8 @@ check_refused(const nlohmann::json& checks) {
         if (found.field.empty()) {
             return std::format("a check is one loupe.FIELD and one of eq ne lt le gt ge match: {}", check.dump());
         }
-        if (found.op == "match") {
+        // A pattern with a ${NAME} compiles once the run has put its value in.
+        if (found.op == "match" && text_of(found.value).find("${") == std::string::npos) {
             try {
                 (void)std::regex(text_of(found.value));
             } catch (const std::regex_error& error) {

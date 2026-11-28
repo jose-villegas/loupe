@@ -111,6 +111,9 @@ substitutes() {
     bool ok = check(step && (*step)["loupe.click"] == "//loupe/90:70/View", "a ${NAME} takes its value");
     ok &= check(!substituted(R"(["${PORT}"])"_json, names, &why) && (why.find("PORT") != std::string::npos),
                 "a ${NAME} not given fails, naming it");
+    const std::string named = "- loupe.wait: 4\n  check: [{loupe.busy: ~, match: \"${BOARD} held by [^ ]\"}]\n";
+    ok &= check(parse_recipe(named, "r.yaml", &why).has_value(),
+                "a pattern with a ${NAME} waits for its value to compile");
     return ok;
 }
 
