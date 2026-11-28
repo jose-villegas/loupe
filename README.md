@@ -5,7 +5,8 @@ Loupe is a frame debugger and scene editor for the
 drawing code on a desktop, so the frame it shows is the frame the device draws.
 It opens a scene in a window with a timeline and a debug-view picker, moves the
 scene's objects and saves them back, or renders it to an image or a video from
-the command line. A scene is an asset pack (`.apak`), or a `.scene.toml` Loupe
+the command line. It also shows a board's frames live, drawn again from the
+render input the board streams, and records them for later. A scene is an asset pack (`.apak`), or a `.scene.toml` Loupe
 builds the pack of first.
 
 ![Loupe editing the capybara scene: the Outliner, the Viewport with the
@@ -47,6 +48,7 @@ build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml
 |---|---|
 | [Getting started](docs/start/README.md) | the downloads, updates, and building from source |
 | [The editor](docs/editor/README.md) | opening a scene, moving its objects, editing camera paths |
+| [A board](docs/board/README.md) | the live view of a board, recording its frames, replaying a recording |
 | [Rendering from the command line](docs/render/README.md) | frames, videos, every flag, A \| B compares |
 | [Developing Loupe](docs/development/README.md) | the architecture, the tests, recipes, the standards, releases |
 
@@ -57,4 +59,6 @@ preset is, links [Dear ImGui Test Engine](https://github.com/ocornut/imgui_test_
 under its own licence, into every program it builds, `loupe` too; the downloads
 are built without it (the `release` preset).
 The panels' typefaces, Latin Modern Sans and Mono, are under the
-[GUST Font License](assets/fonts/GUST-FONT-LICENSE.txt).
+[GUST Font License](assets/fonts/GUST-FONT-LICENSE.txt). The braille patterns
+the wait spinner draws are DejaVu Sans's, cut down to U+2800-28FF, under
+[DejaVu's licence](assets/fonts/DEJAVU-LICENSE.txt).

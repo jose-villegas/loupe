@@ -16,6 +16,7 @@
 #include "log/log.hpp"
 #include "pack.hpp"
 #include "paths.hpp"
+#include "process.hpp"
 
 namespace loupe {
 
@@ -39,6 +40,9 @@ struct Frames::State {
     int64_t drawn = 0; // engine frames, replays included
     // Objects the editor placed, by name: set on the scene before every frame is drawn.
     std::map<std::string, transformf_t> placed;
+    // A stream (open_stream): every frame is drawn from its keyframe, so held
+    // and the checkpoints stay empty, and an observer is redrawn as a seek.
+    bool stream = false, live = false, observing = false;
     // Cameras flown instead of their clips, by name, and the first frame drawn flying.
     std::map<std::string, Frames::PoseAt> flown;
     int flown_from = INT_MAX;
@@ -131,13 +135,17 @@ provider_args(const std::string& id, const Options& options) {
     add("--dt", options.dt_ms ? std::to_string(*options.dt_ms) : "");
     add("-o", options.out_bmp);
     add("--video", options.out_video);
+    add("--record", options.record);
     return args;
 }
+
+// The provider of the open run: one Frames is open at a time.
+const frame_provider_t* provider = &scene_provider;
 
 // The render context the provider draws through; null for one that draws without.
 render_context_t*
 context() {
-    return scene_provider.render_context != nullptr ? scene_provider.render_context() : nullptr;
+    return provider->render_context != nullptr ? provider->render_context() : nullptr;
 }
 
 // Restores `checkpoint`. It holds the view it was saved with; the view picked now stays.
@@ -184,18 +192,50 @@ Frames::open(const Options& options, std::string* why) {
     auto state = std::make_unique<State>();
     state->id = pack->id;
     state->args = provider_args(pack->id, options);
-    for (std::string& arg : state->args) {
-        state->argv.push_back(arg.data());
-    }
-    state->argv.push_back(nullptr);
+    state->argv = argv_of(state->args);
     int exit_code = 0;
     reset_tunables();
+    provider = &scene_provider;
     if (!render_host_open(&scene_provider, static_cast<int>(state->args.size()), state->argv.data(), &exit_code)) {
         *why = "the scene did not open; autana said why above";
         return nullptr;
     }
     state->open = true;
     state->dt_ms = render_host_frame()->dt_ms;
+    return std::unique_ptr<Frames>(new Frames(std::move(state)));
+}
+
+std::unique_ptr<Frames>
+Frames::open_stream(const Options& options, const std::filesystem::path& packs, std::string id, std::string* why) {
+    if (!set_asset_dir(packs)) {
+        *why = "cannot set " ASSET_STORE_DIR_ENV;
+        return nullptr;
+    }
+    auto state = std::make_unique<State>();
+    state->id = std::move(id);
+    state->stream = true;
+    state->live = options.scene.empty();
+    state->args = {"loupe"};
+    if (state->live) {
+        // No frame yet: the host refuses a run of none, and the stream's own count is read live.
+        stream_forget();
+        state->args.insert(state->args.end(), {"--frames", "1"});
+    } else {
+        state->args.insert(state->args.end(), {"--stream", utf8(options.scene)});
+    }
+    if (!options.out_bmp.empty()) {
+        state->args.insert(state->args.end(), {"-o", options.out_bmp});
+    }
+    state->argv = argv_of(state->args);
+    int exit_code = 0;
+    reset_tunables();
+    provider = &stream_provider;
+    if (!render_host_open(&stream_provider, static_cast<int>(state->args.size()), state->argv.data(), &exit_code)) {
+        const stream_status_t status = stream_status();
+        *why = status.refused ? status.why : "the stream did not open; autana said why above";
+        return nullptr;
+    }
+    state->open = true;
     return std::unique_ptr<Frames>(new Frames(std::move(state)));
 }
 
@@ -208,12 +248,12 @@ Frames::scene_id() const {
 
 int
 Frames::count() const {
-    return render_host_frame()->count;
+    return state_->stream ? stream_status().frames : render_host_frame()->count;
 }
 
 uint32_t
 Frames::dt_ms() const {
-    return state_->dt_ms;
+    return state_->stream ? stream_frame_info(state_->index).dt_ms : state_->dt_ms;
 }
 
 void
@@ -240,7 +280,8 @@ Frames::has_views() const {
 
 int
 Frames::view() const {
-    return has_views() ? context()->debug_view : RENDER_DEBUG_VIEW_SHADED;
+    const render_context_t* drawing = context();
+    return drawing != nullptr ? drawing->debug_view : RENDER_DEBUG_VIEW_SHADED;
 }
 
 bool
@@ -253,7 +294,7 @@ Frames::set_view(int view) {
         return false;
     }
     // Held (observing or placing), the checkpoint redraws the shown frame in one step; restoring keeps the view set here.
-    return state_->held != nullptr ? redraw_unheld() : redraw_shown();
+    return state_->held != nullptr || state_->observing ? redraw_unheld() : redraw_shown();
 }
 
 bool
@@ -263,8 +304,24 @@ Frames::step(uint32_t dt_ms) {
 }
 
 bool
+Frames::advance_stream() {
+    State& s = *state_;
+    if (s.index >= count() || (stream_next() != s.index && !stream_seek(s.index))) {
+        return false;
+    }
+    const input_t input = {};
+    render_host_step(stream_frame_info(s.index).dt_ms, &input);
+    s.drawn++;
+    s.index++;
+    return true;
+}
+
+bool
 Frames::advance(uint32_t dt_ms) {
     State& s = *state_;
+    if (s.stream) {
+        return advance_stream();
+    }
     if (s.drawn_at(s.index) && s.dt_at(s.index) != dt_ms) {
         s.forget_after(s.index);
     }
@@ -314,6 +371,14 @@ Frames::fly_cameras(uint32_t dt_ms) {
 
 bool
 Frames::seek(int index) {
+    if (state_->stream) {
+        if (index < 0 || index >= count()) {
+            return false;
+        }
+        release_hold();
+        state_->index = index;
+        return advance(0);
+    }
     if (index < 0 || !redraw_unheld() || (index < state_->index - 1 && !restore_before(index))) {
         return false;
     }
@@ -347,6 +412,10 @@ Frames::step_to(int index) {
 bool
 Frames::redraw_shown() {
     const int shown = state_->index - 1;
+    if (state_->stream) {
+        state_->index = std::max(shown, 0);
+        return shown < 0 || advance(0);
+    }
     // Nothing drawn yet, or no checkpoint before the shown frame: the next step draws under the view.
     if (shown < 0 || state_->checkpoints.upper_bound(shown) == state_->checkpoints.begin()) {
         return true;
@@ -384,6 +453,11 @@ Frames::redraw_held() {
     if (shown < 0) {
         return true;
     }
+    if (s.stream) {
+        s.observing = true;
+        s.index = shown;
+        return advance(0);
+    }
     if (s.held == nullptr) {
         // Once: back to just before the shown frame, and hold that state.
         if (!restore_before(shown)) {
@@ -407,6 +481,14 @@ Frames::redraw_held() {
 bool
 Frames::redraw_unheld() {
     State& s = *state_;
+    if (s.stream) {
+        if (!s.observing) {
+            return true;
+        }
+        release_hold();
+        s.index--;
+        return advance(0);
+    }
     if (s.held == nullptr) {
         return true;
     }
@@ -557,12 +639,20 @@ Frames::drawn() const {
 void
 Frames::release_hold() {
     State& s = *state_;
-    if (s.held == nullptr) {
+    if (s.held == nullptr && !s.observing) {
         return;
     }
     render_context_set_observer(context(), nullptr);
-    render_host_checkpoint_free(s.held);
+    if (s.held != nullptr) {
+        render_host_checkpoint_free(s.held);
+    }
     s.held = nullptr;
+    s.observing = false;
+}
+
+int
+Frames::first_seekable() const {
+    return state_->stream ? 0 : FIRST_SEEKABLE;
 }
 
 int
@@ -592,10 +682,44 @@ debug_views() {
 
 std::optional<uint32_t>
 Frames::path_ms() const {
-    if (scene_provider.path_ms == nullptr) {
+    if (provider->path_ms == nullptr) {
         return std::nullopt;
     }
-    return scene_provider.path_ms();
+    return provider->path_ms();
+}
+
+bool
+Frames::live() const {
+    return state_->live;
+}
+
+bool
+Frames::feed(std::span<const uint8_t> bytes) {
+    return state_->live && stream_feed(bytes.data(), bytes.size());
+}
+
+std::optional<Frames::StreamState>
+Frames::stream_state() const {
+    if (!state_->stream) {
+        return std::nullopt;
+    }
+    const stream_status_t status = stream_status();
+    return StreamState{
+        .frames = status.frames, .dropped = status.dropped, .refused = status.refused, .why = status.why};
+}
+
+Frames::Check
+Frames::check(int index) const {
+    if (!state_->stream) {
+        return Check::None;
+    }
+    switch (stream_frame_info(index).check) {
+        case STREAM_CHECK_SAME: return Check::Same;
+        case STREAM_CHECK_DIFFERS: return Check::Differs;
+        case STREAM_CHECK_OTHER_SIZE: return Check::OtherSize;
+        case STREAM_CHECK_NONE: break;
+    }
+    return Check::None;
 }
 
 int

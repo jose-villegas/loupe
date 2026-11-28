@@ -21,8 +21,11 @@ fi
 
 loupe=$(find "$root" -type f \( -name loupe -o -name loupe.exe \))
 [ -n "$loupe" ] || { echo "package_smoke: no loupe in $1" >&2; exit 1; }
-samples=$(find "$root" -type f -name '*.apak' | sort)
+samples=$(find "$root" -type f -path '*/scenes/*.apak' | sort)
 [ -n "$samples" ] || { echo "package_smoke: no sample in $1" >&2; exit 1; }
+# The firmware's own packs, beside the samples, so a board's stream waits for none.
+[ -n "$(find "$root" -type f -path '*/firmware/built-for')" ] ||
+    { echo "package_smoke: no firmware packs in $1" >&2; exit 1; }
 
 # On Linux, the C library is the only shared library loupe links; SDL loads
 # the display's own at run time.

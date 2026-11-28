@@ -42,6 +42,8 @@ fly_motion_steer_t observer_steer();
 // fly_motion_update() on observer_steer(). True when the pose changed.
 bool drive_observer(Observer& observer, float dt_seconds);
 
+// The observer checkbox's label, for a caller placing it beside other items.
+constexpr const char OBSERVER[] = "observer";
 // The observer's checkbox, shown only when the view can observe; turning it on
 // starts a flight at Frames::observer_pose() and the scene's speed.
 void draw_observer_toggle(const Frames& frames, Observer& observer);

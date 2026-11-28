@@ -14,6 +14,7 @@
 #include "editor/scene_tool.hpp"
 #include "engine/engine_frame.hpp"
 #include "window/editor.hpp"
+#include "window/flow.hpp"
 #include "window/fonts.hpp"
 
 namespace loupe::window {

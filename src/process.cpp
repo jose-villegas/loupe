@@ -1,8 +1,11 @@
 #include "process.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <cstdlib>
+#include <format>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <system_error>
 
@@ -14,7 +17,6 @@
 // After windows.h, which it needs.
 #include <shellapi.h>
 #else
-#include <chrono>
 #include <csignal>
 #include <thread>
 
@@ -87,8 +89,22 @@ start(const std::vector<std::string>& args, STARTUPINFOA& startup) {
 #else
 // How often a waiting run_logged() looks for a stop request and reads its program's output into the log.
 constexpr auto STOP_POLL = std::chrono::milliseconds(50);
+#endif
 
-// `args` as the null-ended argv posix_spawn takes; pointers into `args`.
+// Says in Loupe's log how long `args` took and how it ended, so a slow call shows in the Console.
+bool
+timed(const std::vector<std::string>& args, std::chrono::steady_clock::time_point began, bool ok) {
+    const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - began).count();
+    std::string line;
+    for (const std::string& arg : args) {
+        line += (line.empty() ? "" : " ") + arg;
+    }
+    log::info(std::format("{:.2f} s, {}: {}", seconds, ok ? "done" : "failed", line));
+    return ok;
+}
+
+} // namespace
+
 std::vector<char*>
 argv_of(const std::vector<std::string>& args) {
     std::vector<char*> argv;
@@ -99,12 +115,10 @@ argv_of(const std::vector<std::string>& args) {
     argv.push_back(nullptr);
     return argv;
 }
-#endif
-
-} // namespace
 
 bool
 run_logged(const std::vector<std::string>& args, const fs::path& log, const std::stop_token& stop) {
+    const auto began = std::chrono::steady_clock::now();
 #if defined(_WIN32)
     SECURITY_ATTRIBUTES inherit = {sizeof inherit, nullptr, TRUE};
     const HANDLE file = CreateFileA(utf8(log).c_str(), GENERIC_WRITE, FILE_SHARE_READ, &inherit, CREATE_ALWAYS,
@@ -131,7 +145,7 @@ run_logged(const std::vector<std::string>& args, const fs::path& log, const std:
     }
     CloseHandle(file);
     output.poll(true);
-    return status == 0;
+    return timed(args, began, status == 0);
 #else
     std::vector<char*> argv = argv_of(args);
     posix_spawn_file_actions_t actions;
@@ -143,7 +157,7 @@ run_logged(const std::vector<std::string>& args, const fs::path& log, const std:
     const bool started = posix_spawn(&pid, args[0].c_str(), &actions, nullptr, argv.data(), environ) == 0;
     posix_spawn_file_actions_destroy(&actions);
     if (!started) {
-        return false;
+        return timed(args, began, false);
     }
     // Polled, not killed from the stopping thread: a pid already waited for may be another process's.
     log::Tail output(log, utf8(log.stem()));
@@ -158,7 +172,7 @@ run_logged(const std::vector<std::string>& args, const fs::path& log, const std:
         std::this_thread::sleep_for(STOP_POLL);
     }
     output.poll(true);
-    return waited == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    return timed(args, began, waited == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0);
 #endif
 }
 
@@ -230,6 +244,66 @@ start_unwaited(const fs::path& program, const std::vector<std::string>& args) {
     pid_t pid = 0;
     return posix_spawn(&pid, line[0].c_str(), nullptr, nullptr, argv.data(), environ) == 0;
 #endif
+}
+
+namespace {
+
+// A handle on process `pid`, from which its exit code can be read once it
+// ends; none where there is no such handle.
+void*
+open_child(int64_t pid) {
+#if defined(_WIN32)
+    return OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, static_cast<DWORD>(pid));
+#else
+    (void)pid;
+    return nullptr;
+#endif
+}
+
+void
+close_child(void* handle) {
+#if defined(_WIN32)
+    CloseHandle(handle);
+#else
+    (void)handle;
+#endif
+}
+
+// The exit code `handle`'s process gave; none while it runs or when it cannot be read.
+std::optional<int>
+child_code(void* handle) {
+#if defined(_WIN32)
+    DWORD code = 0;
+    if (!GetExitCodeProcess(handle, &code) || code == STILL_ACTIVE) {
+        return std::nullopt;
+    }
+    return static_cast<int>(code);
+#else
+    (void)handle;
+    return std::nullopt;
+#endif
+}
+
+} // namespace
+
+void
+leave_console() {
+#if defined(_WIN32)
+    FreeConsole();
+#endif
+}
+
+ExitCode::ExitCode(int64_t pid) : handle_(open_child(pid)) {}
+
+ExitCode::~ExitCode() {
+    if (handle_ != nullptr) {
+        close_child(handle_);
+    }
+}
+
+int
+ExitCode::of(int reported) const {
+    return handle_ == nullptr ? reported : child_code(handle_).value_or(reported);
 }
 
 } // namespace loupe

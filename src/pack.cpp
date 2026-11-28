@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <system_error>
 
@@ -15,6 +16,19 @@ namespace fs = std::filesystem;
 namespace loupe {
 
 namespace {
+
+// The file in a firmware_packs() folder naming the commit it was built for.
+constexpr const char FIRMWARE_STAMP[] = "built-for";
+// Where Loupe's build put its pin's firmware packs; empty when it built none.
+constexpr const char FIRMWARE_BUILT[] = LOUPE_FIRMWARE_BUILT;
+
+// True when `folder` holds the firmware packs of `commit`.
+bool
+built_for(const fs::path& folder, const std::string& commit) {
+    std::error_code error;
+    return !folder.empty() && fs::is_regular_file(folder / FIRMWARE_STAMP, error)
+           && read_text(folder / FIRMWARE_STAMP) == commit;
+}
 
 // One cache folder per scene file, wherever two scenes share a name.
 uint64_t
@@ -83,6 +97,35 @@ resolve_scene(const fs::path& path, std::string* why) {
         return std::nullopt;
     }
     return built_pack(path, id, why);
+}
+
+std::optional<fs::path>
+firmware_packs(const std::string& commit, const fs::path& shipped, std::string* why) {
+    for (const fs::path& made : {shipped, fs::path(FIRMWARE_BUILT)}) {
+        if (built_for(made, commit)) {
+            return made;
+        }
+    }
+    if (!builds_packs()) {
+        *why = "this loupe carries no packs for autana " + commit
+               + " and was built without the pack tool that builds them";
+        return std::nullopt;
+    }
+    fs::path folder = pack_cache() / ("firmware-" + commit);
+    if (built_for(folder, commit)) {
+        return folder;
+    }
+    std::error_code error;
+    if (fs::create_directories(folder, error), error) {
+        *why = "cannot make " + utf8(folder) + ": " + error.message();
+        return std::nullopt;
+    }
+    // No scene named: build_pack.py builds every pack the firmware carries.
+    if (!autana_tool(fs::path("r3d") / "build_pack.py", {"-o", utf8(folder)}, folder / "build_pack.log", why)) {
+        return std::nullopt;
+    }
+    std::ofstream(folder / FIRMWARE_STAMP, std::ios::binary) << commit;
+    return folder;
 }
 
 } // namespace loupe

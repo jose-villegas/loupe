@@ -6,9 +6,10 @@ build/default/loupe third_party/autana/launcher/demo/sponza/sponza.scene.toml
 
 Run without a scene, the window opens on a start panel: the sample packs beside
 `loupe` (`scenes/`, or `../share/loupe/scenes/` when installed), the last 10
-scenes opened, and Open... for any other. A scene picked there opens in this
-window with the scene's own defaults. Scenes, in a
-scene's window, closes the scene and goes back to the panel. The recent list is `recent.txt` in
+scenes or recordings opened, and Open... for any other. A scene picked there
+opens in this window with the scene's own defaults. Scenes, in a scene's window,
+closes the scene and goes back to the panel, ending a live board first
+([View a board](../board/View-a-Board.md)). The recent list is `recent.txt` in
 `%APPDATA%\autana\loupe` on Windows and `~/.local/share/autana/loupe` on Linux.
 
 The window shows the engine's frame at the largest whole zoom that fits. Play

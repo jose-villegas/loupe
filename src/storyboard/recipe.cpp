@@ -8,6 +8,7 @@
 #include <yaml-cpp/yaml.h>
 
 #include "paths.hpp"
+#include "storyboard/check.hpp"
 
 namespace loupe::storyboard {
 
@@ -50,6 +51,41 @@ Item::label() const {
     return key;
 }
 
+namespace {
+
+// One step of the recipe `name`; none, with `why` set at its line, for one
+// that is not a map of one loupe.* key, a name and a check that can be checked.
+std::optional<Item>
+parse_step(const YAML::Node& step, const std::string& name, std::string* why) {
+    const int line = step.Mark().line + 1;
+    if (!step.IsMap()) {
+        *why = std::format("{}:{}: a step is a map, such as {{loupe.wait: 4}}", name, line);
+        return std::nullopt;
+    }
+    Item item{.raw = to_json(step), .key = "", .line = line};
+    size_t keys = 0;
+    for (const auto& [key, value] : item.raw.items()) {
+        if (key != NAME && key != CHECK_KEY) {
+            item.key = key;
+            keys++;
+        }
+    }
+    if (keys != 1 || !item.key.starts_with(LOUPE_KEY_PREFIX)) {
+        *why = std::format("{}:{}: a step is one {}* key, and a name and a check if it has them", name, line,
+                           LOUPE_KEY_PREFIX);
+        return std::nullopt;
+    }
+    const std::optional<std::string> refused =
+        item.raw.contains(CHECK_KEY) ? check_refused(item.raw[CHECK_KEY]) : std::nullopt;
+    if (refused) {
+        *why = std::format("{}:{}: {}", name, line, *refused);
+        return std::nullopt;
+    }
+    return item;
+}
+
+} // namespace
+
 std::optional<std::vector<Item>>
 parse_recipe(const std::string& text, const std::filesystem::path& path, std::string* why) {
     const std::string name = utf8(path);
@@ -66,24 +102,11 @@ parse_recipe(const std::string& text, const std::filesystem::path& path, std::st
     }
     std::vector<Item> items;
     for (const YAML::Node& step : root) {
-        const int line = step.Mark().line + 1;
-        if (!step.IsMap()) {
-            *why = std::format("{}:{}: a step is a map, such as {{loupe.wait: 4}}", name, line);
+        std::optional<Item> item = parse_step(step, name, why);
+        if (!item) {
             return std::nullopt;
         }
-        Item item{.raw = to_json(step), .key = "", .line = line};
-        size_t keys = 0;
-        for (const auto& [key, value] : item.raw.items()) {
-            if (key != NAME) {
-                item.key = key;
-                keys++;
-            }
-        }
-        if (keys != 1 || !item.key.starts_with(LOUPE_KEY_PREFIX)) {
-            *why = std::format("{}:{}: a step is one {}* key, and a name if it has one", name, line, LOUPE_KEY_PREFIX);
-            return std::nullopt;
-        }
-        items.push_back(std::move(item));
+        items.push_back(std::move(*item));
     }
     return items;
 }

@@ -430,7 +430,7 @@ Gpu::State::present() {
 }
 
 std::unique_ptr<Gpu>
-Gpu::open(const char* title, std::string* why, std::optional<float> content_scale) {
+Gpu::open(const char* title, std::string* why, std::optional<float> content_scale, bool hidden) {
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         *why = std::format("no video: {}", SDL_GetError());
         return nullptr;
@@ -439,7 +439,8 @@ Gpu::open(const char* title, std::string* why, std::optional<float> content_scal
     std::unique_ptr<Gpu> gpu(new Gpu(std::move(state)));
     State& s = *gpu->state_;
     s.window = SDL_CreateWindow(title, WINDOW_WIDTH, WINDOW_HEIGHT,
-                                SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+                                SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY
+                                    | (hidden ? SDL_WINDOW_HIDDEN : 0));
     if (s.window == nullptr) {
         *why = std::format("no window: {}", SDL_GetError());
         return nullptr;

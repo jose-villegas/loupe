@@ -12,6 +12,8 @@ namespace loupe {
 // The two scene files loupe opens: autana's asset pack, and the scene it is built from.
 inline constexpr std::string_view PACK_SUFFIX = ".apak";
 inline constexpr std::string_view SCENE_SUFFIX = ".scene.toml";
+// A frame record stream: a board's recording, or a host run's --record.
+inline constexpr std::string_view RECORDING_SUFFIX = ".framerec";
 
 // What a run opens: <folder>/<id>.apak, the asset dir and scene id autana loads.
 struct ScenePack {
@@ -29,5 +31,14 @@ std::string scene_id(const std::filesystem::path& file);
 // on every call, where builds_packs() (tools.hpp); elsewhere it is refused. None, with
 // `why` set, for a scene that cannot open.
 std::optional<ScenePack> resolve_scene(const std::filesystem::path& path, std::string* why);
+
+// Every pack a development firmware of autana `commit` carries: the packs a
+// board's recording names. Loupe's build makes them for its pin
+// (cmake/firmware_packs.cmake), so they are found in `shipped`, where an
+// install puts them, or in the build tree; otherwise the pack tool builds them
+// into the pack cache, once per commit. None, with `why` set, when neither
+// holds them and they cannot be built.
+std::optional<std::filesystem::path> firmware_packs(const std::string& commit, const std::filesystem::path& shipped,
+                                                    std::string* why);
 
 } // namespace loupe

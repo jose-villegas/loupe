@@ -64,6 +64,7 @@ autana_cpp_checks()
 # poses cross into the window. Objects, not an archive: an archive would keep
 # render_host.c's weak stand-ins and drop the scene manager's real definitions.
 add_library(loupe_core OBJECT
+    src/board/boards.cpp
     src/editor/camera_path.cpp
     src/editor/doc.cpp
     src/editor/placement.cpp
@@ -77,6 +78,7 @@ add_library(loupe_core OBJECT
     src/pack.cpp
     src/paths.cpp
     src/process.cpp
+    src/record/stream_saver.cpp
     src/scratch.cpp
     src/tools.cpp
     src/update/sha256.cpp
@@ -106,7 +108,8 @@ if(WIN32)
     enable_language(RC)
     target_sources(loupe_core PRIVATE src/windows/utf8.rc)
 endif()
-target_link_libraries(loupe_core PRIVATE autana::scene_provider)
+# Scenes draw through the scene provider, recordings through the stream provider.
+target_link_libraries(loupe_core PRIVATE autana::scene_provider autana::stream_provider)
 foreach(package math kinematics)
     if(NOT TARGET ${package})
         message(FATAL_ERROR "autana at ${AUTANA_DIR} has no ${package} package target")
@@ -126,6 +129,20 @@ if(LOUPE_PACK_TOOL)
 else()
     set_property(SOURCE src/tools.cpp APPEND PROPERTY COMPILE_DEFINITIONS LOUPE_PACK_TOOL=0)
 endif()
+# Every pack the pinned autana's firmware carries, which a board's recording
+# names, built with Loupe rather than when Record is pressed
+# (cmake/firmware_packs.cmake) and installed beside the samples
+# (cmake/package.cmake). Built wherever Python is, so a release carries them.
+set(firmware_packs "")
+if((LOUPE_PACK_TOOL OR LOUPE_SAMPLES) AND GIT_EXECUTABLE)
+    set(firmware_packs "${CMAKE_BINARY_DIR}/firmware")
+    add_custom_target(firmware_packs ALL
+        COMMAND "${CMAKE_COMMAND}" "-DGIT=${GIT_EXECUTABLE}" "-DAUTANA_DIR=${AUTANA_DIR}"
+                "-DPYTHON=${Python3_EXECUTABLE}" "-DOUT=${firmware_packs}"
+                -P "${PROJECT_SOURCE_DIR}/cmake/firmware_packs.cmake"
+        VERBATIM)
+endif()
+set_property(SOURCE src/pack.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_FIRMWARE_BUILT=\"${firmware_packs}\"")
 
 # The window: SDL3, Vulkan through volk, Dear ImGui (third_party/CMakeLists.txt).
 # Only runs that write no file open it, so those need no GPU.
@@ -133,12 +150,15 @@ add_library(loupe_window OBJECT
     src/window/console.cpp
     src/window/editor.cpp
     src/window/files.cpp
+    src/window/flow.cpp
     src/window/fonts.cpp
     src/window/frame_texture.cpp
     src/window/gpu.cpp
     src/window/observer.cpp
     src/window/panels.cpp
     src/window/path_editor.cpp
+    src/window/spinner.cpp
+    src/window/board_link.cpp
     src/window/run_window.cpp)
 target_link_libraries(loupe_window PUBLIC loupe_core imgui imguizmo)
 # Builds FILE into the binary: generated/INC holds its bytes as "0x..," for an array's braces.
@@ -150,7 +170,11 @@ function(loupe_embed file inc)
 endfunction()
 # The window's icon, the app logo, as the bytes of its PNG.
 loupe_embed("${CMAKE_CURRENT_SOURCE_DIR}/assets/loupe.png" window/icon_png.inc)
-# The panels' faces (src/window/fonts.cpp).
+# The panels' faces (src/window/fonts.cpp), and DejaVu Sans's braille patterns
+# merged into each (assets/fonts/dejavusans-braille.ttf, DejaVu's licence),
+# cut from DejaVu Sans 2.35 by `python -m fontTools.subset DejaVuSans.ttf
+# --unicodes=U+2800-28FF --name-IDs='*' --no-hinting --layout-features=''`.
+loupe_embed("${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/dejavusans-braille.ttf" window/dejavusans_braille.inc)
 if(LOUPE_LATIN_MODERN)
     loupe_embed("${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/lmsans10-regular.otf" window/lmsans10_regular.inc)
     loupe_embed("${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts/lmmono10-regular.otf" window/lmmono10_regular.inc)
@@ -165,6 +189,9 @@ add_library(loupe_path OBJECT src/path/path.cpp)
 target_link_libraries(loupe_path PUBLIC loupe_core SDL3::SDL3-static)
 
 add_executable(loupe src/main.cpp)
+if(TARGET firmware_packs)
+    add_dependencies(loupe firmware_packs)
+endif()
 target_link_libraries(loupe PRIVATE loupe_core loupe_path loupe_window)
 # A GUI program on Windows, so no console window opens beside it; started from
 # a terminal, it writes there (log::attach_terminal). loupe-storyboard and the
@@ -174,7 +201,7 @@ set_target_properties(loupe PROPERTIES WIN32_EXECUTABLE ON)
 # loupe-storyboard: a recipe's loupe.* steps, run on the real window through
 # the test engine (src/storyboard/).
 if(LOUPE_STORYBOARD)
-    add_library(loupe_recipe OBJECT src/storyboard/recipe.cpp)
+    add_library(loupe_recipe OBJECT src/storyboard/recipe.cpp src/storyboard/check.cpp)
     target_link_libraries(loupe_recipe PUBLIC nlohmann_json::nlohmann_json PRIVATE yaml-cpp::yaml-cpp)
     target_include_directories(loupe_recipe PUBLIC src)
     add_executable(loupe-storyboard src/storyboard/main.cpp src/storyboard/runner.cpp)

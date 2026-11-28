@@ -5,6 +5,7 @@
 #pragma once
 
 #include <filesystem>
+#include <map>
 #include <optional>
 #include <string>
 #include <variant>
@@ -27,8 +28,11 @@ constexpr int SETTLE_TICKS = 4;
 
 class Runner final : public Script {
   public:
-    // `recipe`'s steps, its pictures written under `out_dir`.
-    Runner(Recipe recipe, std::filesystem::path out_dir);
+    // `recipe`'s steps, each ${NAME} in them one of `names`, its pictures and
+    // autana's output written under `out_dir`; loupe.autana runs inside the
+    // lock `lock_token` names when it is not empty.
+    Runner(Recipe recipe, std::filesystem::path out_dir, std::map<std::string, std::string> names = {},
+           std::string lock_token = "");
     Runner(const Runner&) = delete;
     Runner& operator=(const Runner&) = delete;
     Runner(Runner&&) = delete;
@@ -55,6 +59,12 @@ class Runner final : public Script {
     bool step(ImGuiTestContext* ctx, const Item& item, std::string* why);
     bool open(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why);
     bool screenshot(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why);
+    // N ticks; or, by the wall clock, until checks hold or as long as they do.
+    bool wait(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why);
+    // Ticks until `checks` hold (`until`) or as long as they do, for `seconds`.
+    bool watch(ImGuiTestContext* ctx, const nlohmann::json& checks, bool until, int seconds, std::string* why);
+    // Runs Loupe's autana, again until its output matches when asked to.
+    bool autana(ImGuiTestContext* ctx, const nlohmann::json& value, std::string* why);
     // Asks the window for `request` and yields ticks until it is done; why it
     // failed, or empty when it was done.
     std::string request(ImGuiTestContext* ctx, std::variant<Options, Shot> request);
@@ -65,6 +75,11 @@ class Runner final : public Script {
     // Asked by a step, done by the window between ticks, and why it failed.
     std::optional<std::variant<Options, Shot>> pending_;
     std::string pending_why_;
+    std::map<std::string, std::string> names_;
+    std::string lock_token_;
+    // What the last tick left on screen.
+    Observed observed_;
+    int autana_runs_ = 0;
     bool ok_ = true;
 };
 

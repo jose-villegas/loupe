@@ -10,6 +10,7 @@ set(CPACK_PACKAGE_VENDOR "jose-villegas")
 if(WIN32)
     set(bin_dir .)
     set(scenes_dir scenes)
+    set(firmware_dir firmware)
     set(doc_dir .)
     # loupe.exe's icon, for Explorer, its shortcuts and its .apak files.
     target_sources(loupe PRIVATE assets/loupe.rc)
@@ -56,6 +57,7 @@ else()
     include(GNUInstallDirs)
     set(bin_dir "${CMAKE_INSTALL_BINDIR}")
     set(scenes_dir "${CMAKE_INSTALL_DATADIR}/loupe/scenes")
+    set(firmware_dir "${CMAKE_INSTALL_DATADIR}/loupe/firmware")
     set(doc_dir "${CMAKE_INSTALL_DOCDIR}")
     install(FILES assets/loupe.desktop DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")
     install(FILES assets/loupe.png DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps")
@@ -72,7 +74,13 @@ if(LOUPE_LATIN_MODERN)
 endif()
 # The start panel lists the samples where this installs them.
 file(RELATIVE_PATH samples_from_exe "/prefix/${bin_dir}" "/prefix/${scenes_dir}")
-set_property(SOURCE src/library.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_SAMPLES_DIR=\"${samples_from_exe}\"")
+# A live board's stream finds the firmware's packs where this installs them, stamped with their commit.
+file(RELATIVE_PATH firmware_from_exe "/prefix/${bin_dir}" "/prefix/${firmware_dir}")
+set_property(SOURCE src/library.cpp APPEND PROPERTY COMPILE_DEFINITIONS "LOUPE_SAMPLES_DIR=\"${samples_from_exe}\""
+             "LOUPE_FIRMWARE_DIR=\"${firmware_from_exe}\"")
+if(firmware_packs)
+    install(DIRECTORY "${firmware_packs}/" DESTINATION "${firmware_dir}" FILES_MATCHING PATTERN "*.apak" PATTERN built-for)
+endif()
 
 if(LOUPE_SAMPLES)
     # By glob, so a scene autana adds ships without a change here.

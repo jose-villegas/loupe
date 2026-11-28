@@ -2,10 +2,13 @@
 // start panel while no scene is open.
 #pragma once
 
+#include <filesystem>
 #include <optional>
+#include <string>
 
 #include "options.hpp"
 #include "window/gpu.hpp"
+#include "window/observed.hpp"
 
 namespace loupe {
 
@@ -26,10 +29,12 @@ class Script {
         bool done = false;
     };
 
-    // The tick asked for: whether its scene opened, and the picture when one was asked for and read.
+    // The tick asked for: whether its scene opened, and the picture when one
+    // was asked for and read; and what the tick left on screen.
     struct Outcome {
         bool opened = true;
         std::optional<window::Picture> picture;
+        Observed observed;
     };
 
     Script() = default;
@@ -44,8 +49,11 @@ class Script {
     virtual void stop() = 0;
 };
 
-// Runs the window, its panels at `content_scale`, as `script` asks until it is
-// done or the window closes; false when no window opened or a run failed.
-bool run_scripted(float content_scale, Script& script);
+// Runs the window, hidden, its panels at `content_scale`, as `script` asks
+// until it is done or the window closes; its settings and recordings in
+// `config`, and View recording inside the hold `lock_token` names when it is
+// not empty. False when no window opened or a run failed.
+bool run_scripted(float content_scale, Script& script, const std::filesystem::path& config,
+                  const std::string& lock_token);
 
 } // namespace loupe

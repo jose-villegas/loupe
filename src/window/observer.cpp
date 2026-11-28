@@ -53,7 +53,7 @@ draw_observer_toggle(const Frames& frames, Observer& observer) {
         return;
     }
     const bool was = observer.on;
-    ImGui::Checkbox("observer", &observer.on);
+    ImGui::Checkbox(OBSERVER, &observer.on);
     if (observer.on && !was) {
         observer.fly = fly_motion_start(frames.observer_pose().value_or(observer.fly.pose),
                                         observer_start_speed(frames.scene_box()), OBSERVER_TUNING);
