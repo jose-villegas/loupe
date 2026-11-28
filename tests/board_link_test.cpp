@@ -5,6 +5,7 @@
 // child gets no console window of its own, and its exit code comes back.
 // parse_boards reads `autana devices --json`'s shape, naming who holds a board
 // a command holds; a listing is one autana call, and the last one kept reads back.
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <cstdio>
@@ -119,9 +120,14 @@ one_call_a_listing(const fs::path& folder) {
     bool ok = expect(calls == 1 && list.boards.size() == BOARDS, "four boards come from one autana call");
     ok &= expect(ran.size() >= 4 && ran[ran.size() - 2] == "devices" && ran.back() == "--json",
                  "the call is autana devices --json");
-    // The pinned checkout's CLI on an absolute Python: no autana from PATH.
-    const fs::path cli = loupe::autana_dir() / "scripts" / "autana" / "autana.py";
-    ok &= expect(ran.size() >= 2 && fs::path(ran[0]).is_absolute() && fs::path(ran[1]) == cli && fs::exists(cli),
+    // The pinned checkout's own launcher, by its whole path: no autana from PATH.
+#if defined(_WIN32)
+    const fs::path cli = loupe::autana_dir() / "tools" / "autana.cmd";
+#else
+    const fs::path cli = loupe::autana_dir() / "tools" / "autana";
+#endif
+    ok &= expect(!ran.empty() && fs::path(ran[0]).is_absolute() && std::ranges::find(ran, loupe::utf8(cli)) != ran.end()
+                     && fs::exists(cli),
                  "it runs the pinned autana's CLI, never one on PATH");
     const fs::path kept = folder / "kept" / "boards.json";
     std::error_code error;

@@ -23,10 +23,10 @@ struct PackBuild {
 bool builds_packs();
 // The autana checkout loupe is built against.
 std::filesystem::path autana_dir();
-// The command line that runs that autana's CLI with `args`: its
-// scripts/autana/autana.py on the pack tool's Python, never an autana on
-// PATH, so the boards, their packs and Record share one version. Empty in a
-// build without the pack tool.
+// The command line that runs that autana's CLI with `args`: its own
+// launcher, tools/autana (autana.cmd on Windows), never an autana on PATH,
+// so the boards, their packs and Record share one version. Empty in a build
+// without the pack tool.
 std::vector<std::string> autana_cli(const std::vector<std::string>& args);
 // Where packs built from a .scene.toml are kept, one folder per scene file.
 std::filesystem::path pack_cache();

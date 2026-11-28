@@ -69,7 +69,15 @@ autana_cli(const std::vector<std::string>& args) {
     if (!builds_packs()) {
         return {};
     }
-    std::vector<std::string> line = {PYTHON, utf8(autana_dir() / "scripts" / "autana" / "autana.py")};
+    // autana's own launcher picks its Python: one with pyserial answers a
+    // board query in its own process, any other starts a second Python.
+#if defined(_WIN32)
+    // A .cmd runs under cmd.exe, which takes the line as written.
+    std::vector<std::string> line = {utf8(system_program("cmd")), "/d", "/c",
+                                     utf8(autana_dir() / "tools" / "autana.cmd")};
+#else
+    std::vector<std::string> line = {utf8(autana_dir() / "tools" / "autana")};
+#endif
     line.insert(line.end(), args.begin(), args.end());
     return line;
 }
